@@ -77,10 +77,14 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   ngAfterViewInit(): void {
     // Initialize map after view is ready
     setTimeout(() => {
-      console.log('Initializing map...');
-      this.map = this.mapService.initializeMap('map');
-      console.log('Map initialized:', this.map);
-    }, 100);
+      console.log('MapComponent: Initializing map...');
+      try {
+        this.map = this.mapService.initializeMap('map');
+        console.log('MapComponent: Map initialized successfully:', this.map);
+      } catch (error) {
+        console.error('MapComponent: Error initializing map:', error);
+      }
+    }, 300);
   }
 
   ngOnDestroy(): void {

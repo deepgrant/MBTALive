@@ -1,5 +1,8 @@
 /* You can add global styles to this file, and also import other style files */
 
+// Import Leaflet CSS
+@import '~leaflet/dist/leaflet.css';
+
 // Define MBTA color palette
 $mbta-blue: #003DA5;
 $mbta-orange: #ED8B00;

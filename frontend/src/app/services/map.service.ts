@@ -17,30 +17,48 @@ export class MapService {
   constructor() { }
 
   initializeMap(containerId: string): L.Map {
+    console.log('MapService: Initializing map with container:', containerId);
+    
     // Clear any existing map
     if (this.map) {
+      console.log('MapService: Removing existing map');
       this.map.remove();
     }
 
+    // Check if container exists
+    const container = document.getElementById(containerId);
+    if (!container) {
+      console.error('MapService: Container not found:', containerId);
+      throw new Error(`Map container with id '${containerId}' not found`);
+    }
+
+    console.log('MapService: Creating new map instance');
     this.map = L.map(containerId, {
       center: [42.3601, -71.0589], // Boston coordinates
       zoom: 10,
-      zoomControl: true
+      zoomControl: true,
+      preferCanvas: false
     });
 
+    console.log('MapService: Adding tile layer');
     // Add OpenStreetMap tiles with proper configuration
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
       maxZoom: 19,
-      subdomains: ['a', 'b', 'c']
+      subdomains: ['a', 'b', 'c'],
+      tileSize: 256,
+      zoomOffset: 0
     }).addTo(this.map);
 
+    console.log('MapService: Map initialized successfully');
+    
     // Force a resize after a short delay to ensure proper rendering
     setTimeout(() => {
       if (this.map) {
+        console.log('MapService: Invalidating map size');
         this.map.invalidateSize();
       }
-    }, 100);
+    }, 200);
 
     return this.map;
   }
@@ -101,26 +119,41 @@ export class MapService {
   }
 
   addRouteLayer(route: Route, shapes: Shape[]): void {
-    if (!this.map) return;
+    if (!this.map) {
+      console.error('MapService: Cannot add route layer - map not initialized');
+      return;
+    }
 
+    console.log('MapService: Adding route layer for route:', route.id, 'with', shapes.length, 'shapes');
     const routeId = route.id;
     
     // Remove existing route if it exists
     if (this.routeLayers.has(routeId)) {
+      console.log('MapService: Removing existing route layer');
       this.map.removeLayer(this.routeLayers.get(routeId)!);
     }
 
     // Decode polylines and create route layer
-    shapes.forEach(shape => {
+    shapes.forEach((shape, index) => {
+      console.log(`MapService: Processing shape ${index + 1}/${shapes.length}:`, shape.id);
       const coordinates = this.decodePolyline(shape.polyline);
-      const polyline = L.polyline(coordinates, {
-        color: `#${route.color}`,
-        weight: 4,
-        opacity: 0.8
-      }).addTo(this.map!);
+      console.log('MapService: Decoded coordinates:', coordinates.length, 'points');
+      
+      if (coordinates.length > 0) {
+        const polyline = L.polyline(coordinates, {
+          color: `#${route.color}`,
+          weight: 4,
+          opacity: 0.8
+        }).addTo(this.map!);
 
-      this.routeLayers.set(`${routeId}-${shape.id}`, polyline);
+        this.routeLayers.set(`${routeId}-${shape.id}`, polyline);
+        console.log('MapService: Added polyline to map');
+      } else {
+        console.warn('MapService: No coordinates decoded for shape:', shape.id);
+      }
     });
+    
+    console.log('MapService: Route layer added successfully');
   }
 
   clearRouteLayers(): void {
@@ -271,10 +304,14 @@ export class MapService {
 
   private decodePolyline(encoded: string): L.LatLngExpression[] {
     try {
+      console.log('MapService: Decoding polyline, length:', encoded.length);
       const coordinates = polyline.decode(encoded);
-      return coordinates.map((coord: [number, number]) => [coord[0], coord[1]] as L.LatLngExpression);
+      console.log('MapService: Decoded', coordinates.length, 'coordinates');
+      const result = coordinates.map((coord: [number, number]) => [coord[0], coord[1]] as L.LatLngExpression);
+      console.log('MapService: First few coordinates:', result.slice(0, 3));
+      return result;
     } catch (error) {
-      console.error('Error decoding polyline:', error);
+      console.error('MapService: Error decoding polyline:', error);
       return [];
     }
   }
