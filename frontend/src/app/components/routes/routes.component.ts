@@ -29,14 +29,29 @@ export class RoutesComponent implements OnInit, OnDestroy {
   constructor(private vehicleService: VehicleService) { }
 
   ngOnInit(): void {
+    console.log('RoutesComponent: Initializing...');
+    
     // Subscribe to routes
-    const routesSub = this.vehicleService.routes$.subscribe(routes => {
-      this.routes = routes;
+    const routesSub = this.vehicleService.routes$.subscribe({
+      next: (routes) => {
+        console.log('RoutesComponent: Routes received:', routes);
+        console.log('RoutesComponent: Routes length:', routes.length);
+        this.routes = routes;
+      },
+      error: (error) => {
+        console.error('RoutesComponent: Error receiving routes:', error);
+      }
     });
 
     // Subscribe to selected route
-    const selectedRouteSub = this.vehicleService.selectedRoute$.subscribe(route => {
-      this.selectedRoute = route;
+    const selectedRouteSub = this.vehicleService.selectedRoute$.subscribe({
+      next: (route) => {
+        console.log('RoutesComponent: Selected route changed:', route);
+        this.selectedRoute = route;
+      },
+      error: (error) => {
+        console.error('RoutesComponent: Error receiving selected route:', error);
+      }
     });
 
     this.subscriptions.push(routesSub, selectedRouteSub);

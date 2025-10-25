@@ -2,6 +2,8 @@ import { Component, OnInit, OnDestroy, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { Vehicle } from '../../models/vehicle.model';
+import { Route, Shape } from '../../models/route.model';
+import { Station } from '../../models/station.model';
 import { VehicleService } from '../../services/vehicle.service';
 import { MapService } from '../../services/map.service';
 
@@ -15,6 +17,7 @@ import { MapService } from '../../services/map.service';
 export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   private subscriptions: Subscription[] = [];
   private map: any;
+  private currentRoute: Route | null = null;
 
   constructor(
     private vehicleService: VehicleService,
@@ -22,18 +25,61 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   ) { }
 
   ngOnInit(): void {
+    console.log('MapComponent: Initializing...');
+    
     // Subscribe to vehicle updates
-    const vehicleSub = this.vehicleService.filteredVehicles$.subscribe(vehicles => {
-      this.updateMapWithVehicles(vehicles);
+    const vehicleSub = this.vehicleService.filteredVehicles$.subscribe({
+      next: (vehicles) => {
+        console.log('MapComponent: Vehicles received:', vehicles);
+        this.updateMapWithVehicles(vehicles);
+      },
+      error: (error) => {
+        console.error('MapComponent: Error receiving vehicles:', error);
+      }
     });
 
-    this.subscriptions.push(vehicleSub);
+    // Subscribe to selected route changes
+    const selectedRouteSub = this.vehicleService.selectedRoute$.subscribe({
+      next: (routeId) => {
+        console.log('MapComponent: Selected route changed:', routeId);
+        this.handleRouteSelection(routeId);
+      },
+      error: (error) => {
+        console.error('MapComponent: Error receiving selected route:', error);
+      }
+    });
+
+    // Subscribe to route stations
+    const stationsSub = this.vehicleService.selectedRouteStations$.subscribe({
+      next: (stations) => {
+        console.log('MapComponent: Stations received:', stations);
+        this.updateMapWithStations(stations);
+      },
+      error: (error) => {
+        console.error('MapComponent: Error receiving stations:', error);
+      }
+    });
+
+    // Subscribe to route shapes
+    const shapesSub = this.vehicleService.selectedRouteShapes$.subscribe({
+      next: (shapes) => {
+        console.log('MapComponent: Shapes received:', shapes);
+        this.updateMapWithShapes(shapes);
+      },
+      error: (error) => {
+        console.error('MapComponent: Error receiving shapes:', error);
+      }
+    });
+
+    this.subscriptions.push(vehicleSub, selectedRouteSub, stationsSub, shapesSub);
   }
 
   ngAfterViewInit(): void {
     // Initialize map after view is ready
     setTimeout(() => {
+      console.log('Initializing map...');
       this.map = this.mapService.initializeMap('map');
+      console.log('Map initialized:', this.map);
     }, 100);
   }
 
@@ -45,6 +91,48 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
     if (vehicles.length > 0) {
       this.mapService.updateVehicleMarkers(vehicles);
       this.mapService.fitBoundsToVehicles(vehicles);
+    }
+  }
+
+  private handleRouteSelection(routeId: string | null): void {
+    if (!routeId) {
+      // Clear route and station layers when no route is selected
+      this.mapService.clearRouteLayers();
+      this.mapService.clearStationMarkers();
+      this.currentRoute = null;
+      return;
+    }
+
+    // Get route information
+    this.vehicleService.getRouteById(routeId).subscribe(route => {
+      if (route) {
+        this.currentRoute = route;
+      }
+    });
+  }
+
+  private updateMapWithStations(stations: Station[]): void {
+    if (stations.length > 0) {
+      this.mapService.updateStationMarkers(stations);
+      this.fitBoundsToRouteAndStations();
+    }
+  }
+
+  private updateMapWithShapes(shapes: Shape[]): void {
+    if (shapes.length > 0 && this.currentRoute) {
+      this.mapService.addRouteLayer(this.currentRoute, shapes);
+      this.fitBoundsToRouteAndStations();
+    }
+  }
+
+  private fitBoundsToRouteAndStations(): void {
+    // This method will be called after both stations and shapes are loaded
+    // The map service will handle fitting bounds to the displayed content
+    if (this.map) {
+      // Force a small delay to ensure all layers are rendered
+      setTimeout(() => {
+        this.map.invalidateSize();
+      }, 100);
     }
   }
 }

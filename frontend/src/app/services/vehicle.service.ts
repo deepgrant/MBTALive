@@ -1,8 +1,9 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, combineLatest } from 'rxjs';
-import { map, distinctUntilChanged } from 'rxjs/operators';
+import { BehaviorSubject, Observable, combineLatest, EMPTY } from 'rxjs';
+import { map, distinctUntilChanged, switchMap, catchError } from 'rxjs/operators';
 import { Vehicle } from '../models/vehicle.model';
-import { Route } from '../models/route.model';
+import { Route, Shape } from '../models/route.model';
+import { Station } from '../models/station.model';
 import { ApiService } from './api.service';
 
 @Injectable({
@@ -18,20 +19,49 @@ export class VehicleService {
   public selectedRoute$ = this.selectedRouteSubject.asObservable();
 
   public filteredVehicles$: Observable<Vehicle[]>;
+  public selectedRouteStations$: Observable<Station[]>;
+  public selectedRouteShapes$: Observable<Shape[]>;
 
   constructor(private apiService: ApiService) {
     // Set up filtered vehicles based on selected route
-    this.filteredVehicles$ = combineLatest([
-      this.vehicles$,
-      this.selectedRoute$
-    ]).pipe(
-      map(([vehicles, selectedRoute]) => {
+    this.filteredVehicles$ = this.selectedRoute$.pipe(
+      switchMap(selectedRoute => {
         if (!selectedRoute) {
-          return vehicles;
+          return new Observable<Vehicle[]>(observer => {
+            observer.next([]);
+            observer.complete();
+          });
         }
-        return vehicles.filter(vehicle => vehicle.routeId === selectedRoute);
+        return this.apiService.getVehiclesByRoute(selectedRoute);
       }),
       distinctUntilChanged()
+    );
+
+    // Set up observables for selected route data
+    this.selectedRouteStations$ = this.selectedRoute$.pipe(
+      switchMap(routeId => {
+        if (!routeId) {
+          return EMPTY;
+        }
+        return this.apiService.getRouteStops(routeId);
+      }),
+      catchError(error => {
+        console.error('Error fetching route stations:', error);
+        return EMPTY;
+      })
+    );
+
+    this.selectedRouteShapes$ = this.selectedRoute$.pipe(
+      switchMap(routeId => {
+        if (!routeId) {
+          return EMPTY;
+        }
+        return this.apiService.getRouteShapes(routeId);
+      }),
+      catchError(error => {
+        console.error('Error fetching route shapes:', error);
+        return EMPTY;
+      })
     );
 
     // Start polling for data
@@ -39,14 +69,15 @@ export class VehicleService {
   }
 
   private startDataPolling(): void {
-    // Poll vehicles every 5 seconds
-    this.apiService.getRealTimeVehicles(5000).subscribe(vehicles => {
-      this.vehiclesSubject.next(vehicles);
-    });
-
     // Poll routes every 30 seconds
-    this.apiService.getRealTimeRoutes(30000).subscribe(routes => {
-      this.routesSubject.next(routes);
+    this.apiService.getRealTimeRoutes(30000).subscribe({
+      next: (routes) => {
+        console.log('VehicleService: Routes received:', routes);
+        this.routesSubject.next(routes);
+      },
+      error: (error) => {
+        console.error('VehicleService: Error fetching routes:', error);
+      }
     });
   }
 

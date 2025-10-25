@@ -1,7 +1,9 @@
 import { Injectable } from '@angular/core';
 import * as L from 'leaflet';
+import * as polyline from '@mapbox/polyline';
 import { Vehicle } from '../models/vehicle.model';
-import { Route } from '../models/route.model';
+import { Route, Shape } from '../models/route.model';
+import { Station } from '../models/station.model';
 
 @Injectable({
   providedIn: 'root'
@@ -10,16 +12,35 @@ export class MapService {
   private map: L.Map | null = null;
   private vehicleMarkers: Map<string, L.Marker> = new Map();
   private routeLayers: Map<string, L.Polyline> = new Map();
+  private stationMarkers: Map<string, L.Marker> = new Map();
 
   constructor() { }
 
   initializeMap(containerId: string): L.Map {
-    this.map = L.map(containerId).setView([42.3601, -71.0589], 10); // Boston coordinates
+    // Clear any existing map
+    if (this.map) {
+      this.map.remove();
+    }
 
-    // Add OpenStreetMap tiles
+    this.map = L.map(containerId, {
+      center: [42.3601, -71.0589], // Boston coordinates
+      zoom: 10,
+      zoomControl: true
+    });
+
+    // Add OpenStreetMap tiles with proper configuration
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19,
+      subdomains: ['a', 'b', 'c']
     }).addTo(this.map);
+
+    // Force a resize after a short delay to ensure proper rendering
+    setTimeout(() => {
+      if (this.map) {
+        this.map.invalidateSize();
+      }
+    }, 100);
 
     return this.map;
   }
@@ -79,7 +100,7 @@ export class MapService {
     });
   }
 
-  addRouteLayer(route: Route, coordinates: L.LatLngExpression[]): void {
+  addRouteLayer(route: Route, shapes: Shape[]): void {
     if (!this.map) return;
 
     const routeId = route.id;
@@ -89,13 +110,17 @@ export class MapService {
       this.map.removeLayer(this.routeLayers.get(routeId)!);
     }
 
-    const polyline = L.polyline(coordinates, {
-      color: `#${route.color}`,
-      weight: 4,
-      opacity: 0.8
-    }).addTo(this.map);
+    // Decode polylines and create route layer
+    shapes.forEach(shape => {
+      const coordinates = this.decodePolyline(shape.polyline);
+      const polyline = L.polyline(coordinates, {
+        color: `#${route.color}`,
+        weight: 4,
+        opacity: 0.8
+      }).addTo(this.map!);
 
-    this.routeLayers.set(routeId, polyline);
+      this.routeLayers.set(`${routeId}-${shape.id}`, polyline);
+    });
   }
 
   clearRouteLayers(): void {
@@ -103,6 +128,59 @@ export class MapService {
     
     this.routeLayers.forEach(polyline => this.map!.removeLayer(polyline));
     this.routeLayers.clear();
+  }
+
+  addStationMarker(station: Station): void {
+    if (!this.map) return;
+
+    const markerId = station.id;
+    
+    // Remove existing marker if it exists
+    if (this.stationMarkers.has(markerId)) {
+      this.map.removeLayer(this.stationMarkers.get(markerId)!);
+    }
+
+    // Create custom icon for station with label
+    const stationIcon = L.divIcon({
+      className: 'station-marker',
+      html: this.createStationMarkerHtml(station),
+      iconSize: [24, 24],
+      iconAnchor: [12, 24]
+    });
+
+    const marker = L.marker([station.latitude, station.longitude], {
+      icon: stationIcon
+    }).addTo(this.map);
+
+    // Add popup with station information
+    marker.bindPopup(`
+      <div>
+        <strong>${station.name}</strong><br>
+        Station ID: ${station.id}
+      </div>
+    `);
+
+    this.stationMarkers.set(markerId, marker);
+  }
+
+  updateStationMarkers(stations: Station[]): void {
+    if (!this.map) return;
+
+    // Clear existing markers
+    this.stationMarkers.forEach(marker => this.map!.removeLayer(marker));
+    this.stationMarkers.clear();
+
+    // Add new markers
+    stations.forEach(station => {
+      this.addStationMarker(station);
+    });
+  }
+
+  clearStationMarkers(): void {
+    if (!this.map) return;
+    
+    this.stationMarkers.forEach(marker => this.map!.removeLayer(marker));
+    this.stationMarkers.clear();
   }
 
   fitBoundsToVehicles(vehicles: Vehicle[]): void {
@@ -155,5 +233,49 @@ export class MapService {
         ">${speed.toFixed(0)}</div>
       </div>
     `;
+  }
+
+  private createStationMarkerHtml(station: Station): string {
+    return `
+      <div style="
+        width: 24px;
+        height: 24px;
+        background: #1E88E5;
+        border: 2px solid white;
+        border-radius: 50%;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      ">
+        <div style="
+          position: absolute;
+          bottom: -8px;
+          left: 50%;
+          transform: translateX(-50%);
+          font-size: 8px;
+          color: #1E88E5;
+          font-weight: bold;
+          background: white;
+          padding: 1px 2px;
+          border-radius: 2px;
+          white-space: nowrap;
+          max-width: 60px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        ">${station.name}</div>
+      </div>
+    `;
+  }
+
+  private decodePolyline(encoded: string): L.LatLngExpression[] {
+    try {
+      const coordinates = polyline.decode(encoded);
+      return coordinates.map((coord: [number, number]) => [coord[0], coord[1]] as L.LatLngExpression);
+    } catch (error) {
+      console.error('Error decoding polyline:', error);
+      return [];
+    }
   }
 }

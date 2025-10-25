@@ -204,10 +204,12 @@ class MBTAService extends Actor with ActorLogging {
   object JsonProtocol extends DefaultJsonProtocol {
     case class RouteInfo(id: String, long_name: String, short_name: String, color: String, text_color: String, route_type: Int)
     case class StopInfo(id: String, name: String, latitude: Double, longitude: Double)
+    case class ShapeInfo(id: String, polyline: String)
     case class VehicleIds(vehicleIds: Vector[String])
     
     implicit val routeInfoFormat: RootJsonFormat[RouteInfo] = jsonFormat6(RouteInfo.apply)
     implicit val stopInfoFormat: RootJsonFormat[StopInfo] = jsonFormat4(StopInfo.apply)
+    implicit val shapeInfoFormat: RootJsonFormat[ShapeInfo] = jsonFormat2(ShapeInfo.apply)
     implicit val vehicleIdsFormat: RootJsonFormat[VehicleIds] = jsonFormat1(VehicleIds.apply)
     implicit val vehicleDataFormat: RootJsonFormat[RequestFlow.VehicleData] = jsonFormat18(RequestFlow.VehicleData.apply)
     
@@ -230,6 +232,11 @@ class MBTAService extends Actor with ActorLogging {
     implicit def vehicleDataListMarshaller: Marshaller[Vector[RequestFlow.VehicleData], HttpEntity.Strict] = 
       Marshaller.withFixedContentType(ContentTypes.`application/json`) { vehicleDatas =>
         HttpEntity(ContentTypes.`application/json`, vehicleDatas.toJson.compactPrint)
+      }
+      
+    implicit def shapeInfoListMarshaller: Marshaller[Vector[ShapeInfo], HttpEntity.Strict] = 
+      Marshaller.withFixedContentType(ContentTypes.`application/json`) { shapeInfos =>
+        HttpEntity(ContentTypes.`application/json`, shapeInfos.toJson.compactPrint)
       }
       
     // Custom unmarshaller for VehicleIds
@@ -272,6 +279,13 @@ class MBTAService extends Actor with ActorLogging {
             get {
               onSuccess(RequestFlow.fetchVehicleIdsForRoute(routeId)) { vehicleIds =>
                 complete(vehicleIds)
+              }
+            }
+          },
+          path("route" / Segment / "shapes") { routeId =>
+            get {
+              onSuccess(RequestFlow.fetchShapes(routeId)) { shapes =>
+                complete(shapes)
               }
             }
           },
@@ -583,6 +597,29 @@ class MBTAService extends Actor with ActorLogging {
         .collect { case Some(vd) => vd }
         .runWith(Sink.seq)
         .map(_.toVector)
+    }
+
+    def fetchShapes(routeId: String): Future[Vector[JsonProtocol.ShapeInfo]] = {
+      MBTAaccess.queueRequest(
+        HttpRequest(uri = MBTAaccess.mbtaUri(
+          path = "/shapes",
+          query = MBTAaccess.mbtaQuery(Map("filter[route]" -> routeId))
+        ))
+      ).flatMap {
+        case HttpResponse(StatusCodes.OK, _, entity, _) =>
+          MBTAaccess.parseMbtaResponse(entity).map { response =>
+            response.getObjectList("data").asScala.toVector.map { shape =>
+              val s = shape.toConfig
+              JsonProtocol.ShapeInfo(
+                id = s.getString("id"),
+                polyline = s.getString("attributes.polyline")
+              )
+            }
+          }
+        case HttpResponse(code, _, entity, _) =>
+          entity.discardBytes()
+          Future.successful(Vector.empty)
+      }
     }
   }
 
