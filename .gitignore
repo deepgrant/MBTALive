@@ -1,0 +1,10 @@
+*.class
+*.log
+*~
+build/
+.gradle/
+.#*
+*#
+.bloop/
+.vscode/
+.metals/

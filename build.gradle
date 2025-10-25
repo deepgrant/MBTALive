@@ -1,0 +1,92 @@
+
+plugins {
+  id 'scala'
+  id "com.palantir.docker" version "0.36.0"
+  id 'io.github.cosmicsilence.scalafix' version '0.2.4'
+}
+
+configurations {
+  all*.exclude group: 'org.bytedeco', module: 'javacpp-presets'
+}
+
+apply from: "$projectDir/gradle/dependencies.gradle"
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  implementation(
+    [ libs.scala
+    , libs.scalaReflect
+    , libs.scalaParser
+    , libs.scalaXML
+    , libs.scalaCollectionsCompat
+    , libs.pekko_actor
+    , libs.pekko_cluster
+    , libs.pekko_http
+    , libs.pekko_http_xml
+    , libs.pekko_slf4j
+    , libs.pekko_stream
+    , libs.pekko_stream_json
+    , libs.pekko_connectors_s3
+    , libs.slf4j
+    , libs.logback_classic
+    , libs.logback_core
+    , libs.pprint
+    , libs.apache_commons_io
+    , libs.awsSdkServicesSts
+    , libs.sprayJSON
+    ]
+  )
+  scalafix "org.scala-lang:scala-rewrites_2.13:+"
+}
+
+tasks.withType(ScalaCompile) {
+}
+
+sourceSets {
+  main {
+    scala.srcDir "source/scala"
+    compileClasspath += files("source/scala", "build/classes/macros")
+    resources.srcDirs = files("source/resources")
+  }
+}
+
+compileScala {
+}
+
+tasks.withType(ScalaCompile).configureEach {
+  scalaCompileOptions.additionalParameters = ['-Wunused']
+}
+
+jar {
+  manifest {
+    attributes(
+      [ "Implementation-Title"   : "mbtalive"
+      , "Implementation-Version" : "2.0"
+      , "Implementation-Vendor"  : "github://Deepgrant"
+      ]
+    )
+  }
+}
+
+task printClasspath {
+  doLast {
+    configurations.runtimeClasspath.each { println it }
+  }
+}
+
+task run(type: JavaExec, dependsOn: classes) {
+  main = 'mbta.actor.MBTAMain'
+  classpath sourceSets.main.runtimeClasspath
+  classpath configurations.runtimeClasspath
+}
+
+docker {
+  name "mbtalive:2.0"
+  dockerfile file('Dockerfile')
+  files tasks.jar, 'docker-run.sh'
+  copySpec.from(configurations.runtimeClasspath)
+  pull true
+}

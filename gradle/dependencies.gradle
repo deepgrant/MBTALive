@@ -1,0 +1,53 @@
+import org.apache.tools.ant.taskdefs.condition.Os
+
+ext {
+  versions = [:]
+  libs = [:]
+}
+
+versions +=
+  [ scala: "2.13"
+  , scalaMinor: "16"
+  , scalaCollectionsCompat: "2.11.0"
+  , scalaParser: "2.1.1"
+  , scalaTest: "3.2.16"
+  , scalaXml: "2.1.0"
+  , sprayJSON: "1.3.6"
+  , pekko: "1.1.1"
+  , pekkoHttp: "1.1.0"
+  , pekko_connectors_csv: "1.0.2"
+  , pekkoStreamJson: "1.0.0"
+  , pekkoConnectorsS3: "1.0.2"
+  , apacheCommonsIo: "2.18.0"
+  , slf4j: "2.0.3"
+  , logback: "1.4.14"
+  , pprint: "0.8.1"
+  , awsSdkServicesSts: "2.29.23"
+  , sprayJSON: "1.3.6"
+  ]
+
+libs +=
+  [ scala: "org.scala-lang:scala-library:${versions.scala}.${versions.scalaMinor}"
+  , scalaCompiler: "org.scala-lang:scala-compiler:${versions.scala}.${versions.scalaMinor}"
+  , scalaReflect: "org.scala-lang:scala-reflect:${versions.scala}.${versions.scalaMinor}"
+  , scalaXML: "org.scala-lang.modules:scala-xml_${versions.scala}:${versions.scalaXml}"
+  , scalaCollectionsCompat: "org.scala-lang.modules:scala-collection-compat_${versions.scala}:${versions.scalaCollectionsCompat}"
+  , scalaTest: "org.scalatest:scalatest_${versions.scala}:${versions.scalaTest}"
+  , scalaParser: "org.scala-lang.modules:scala-parser-combinators_${versions.scala}:${versions.scalaParser}"
+  , sprayJSON: "io.spray:spray-json_${versions.scala}:${versions.sprayJSON}"
+  , awsSdkServicesSts: "software.amazon.awssdk:sts:${versions.awsSdkServicesSts}"
+  , pekko_actor: "org.apache.pekko:pekko-actor_${versions.scala}:${versions.pekko}"
+  , pekko_cluster: "org.apache.pekko:pekko-cluster_${versions.scala}:${versions.pekko}"
+  , pekko_http: "org.apache.pekko:pekko-http_${versions.scala}:${versions.pekkoHttp}"
+  , pekko_http_xml: "org.apache.pekko:pekko-http-xml_${versions.scala}:${versions.pekkoHttp}"
+  , pekko_slf4j: "org.apache.pekko:pekko-slf4j_${versions.scala}:${versions.pekko}"
+  , pekko_stream: "org.apache.pekko:pekko-stream_${versions.scala}:${versions.pekko}"
+  , pekko_stream_json: "org.mdedetrich:pekko-stream-json_${versions.scala}:${versions.pekkoStreamJson}"
+  , pekko_connectors_s3: "org.apache.pekko:pekko-connectors-s3_${versions.scala}:${versions.pekkoConnectorsS3}"
+  , slf4j: "org.slf4j:slf4j-api:${versions.slf4j}"
+  , logback_classic: "ch.qos.logback:logback-classic:${versions.logback}"
+  , logback_core: "ch.qos.logback:logback-core:${versions.logback}"
+  , pprint: "com.lihaoyi:pprint_${versions.scala}:${versions.pprint}"
+  , apache_commons_io: "commons-io:commons-io:${versions.apacheCommonsIo}"
+  , sprayJSON: "io.spray:spray-json_${versions.scala}:${versions.sprayJSON}"
+  ]
