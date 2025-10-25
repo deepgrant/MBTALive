@@ -1,0 +1,17 @@
+<mat-list>
+  <mat-list-item *ngFor="let route of routes" 
+                 (click)="selectRoute(route.id)"
+                 [class.selected]="selectedRoute === route.id"
+                 class="route-item">
+    <div class="route-info">
+      <div class="route-header">
+        <span class="route-short-name" 
+              [style.background-color]="getRouteColor(route)"
+              [style.color]="getTextColor(route)">
+          {{route.short_name}}
+        </span>
+        <span class="route-long-name">{{route.long_name}}</span>
+      </div>
+    </div>
+  </mat-list-item>
+</mat-list>

@@ -23,9 +23,14 @@ import pekko.http.scaladsl.model.{
   HttpRequest,
   HttpResponse,
   HttpEntity,
-  StatusCodes
+  StatusCodes,
+  ContentTypes
 }
 import pekko.http.scaladsl.model.Uri
+import pekko.http.scaladsl.server.Directives._
+import pekko.http.scaladsl.server.Route
+import pekko.http.scaladsl.model.headers._
+import pekko.http.scaladsl.model.HttpMethods
 import pekko.NotUsed
 import pekko.util.{
   ByteString,
@@ -41,7 +46,6 @@ import pekko.stream.scaladsl.{
 }
 import pekko.http.scaladsl.settings.ConnectionPoolSettings
 import org.apache.pekko.event.LoggingAdapter
-import org.apache.pekko.stream.connectors.s3.S3Settings
 
 object MBTAMain extends App {
 
@@ -49,9 +53,6 @@ object MBTAMain extends App {
   implicit val system  : pekko.actor.ActorSystem                            = ActorSystem()
   implicit val executionContext : scala.concurrent.ExecutionContextExecutor = system.dispatcher
   implicit val scheduler : pekko.actor.Scheduler                            = system.scheduler
-
-  val logFactory: Class[_] => LoggingAdapter = Logging(system, _ : Class[_ <: Any])
-  val log: LoggingAdapter = logFactory(this.getClass)
 
   val mbtaService: ActorRef = system.actorOf(Props[MBTAService](), name="mbtaService")
 }
@@ -62,6 +63,10 @@ class MBTAService extends Actor with ActorLogging {
   implicit val system  : pekko.actor.ActorSystem    = ActorSystem()
   implicit val logger  : pekko.event.LoggingAdapter = log
   implicit val timeout : Timeout                    = 30.seconds
+
+  // In-memory cache for API data
+  private var cachedRoutes: Vector[Config] = Vector.empty
+  private var cachedVehicles: Vector[RequestFlow.VehicleData] = Vector.empty
 
   object Config {
     lazy val config: Try[Config] = Try {
@@ -93,104 +98,6 @@ class MBTAService extends Actor with ActorLogging {
       }
     }
 
-    def AccessKey : Try[String] = {
-      config.flatMap {
-        config => {
-          Try {
-            config.getString("mbta.aws.credentials.accessKey")
-          }.recoverWith {
-            case _ => Try {
-              sys.env("AWS_ACCESS_KEY_ID")
-            }
-          }
-        }
-      }
-    }
-
-    def SecretKey : Try[String] = {
-      config.flatMap {
-        config => {
-          Try {
-            config.getString("mbta.aws.credentials.secretKey")
-          }.recoverWith {
-            case _ => Try {
-              sys.env("AWS_SECRET_ACCESS_KEY")
-            }
-          }
-        }
-      }
-    }
-
-    def Region : String = {
-      config.flatMap {
-        config => {
-          Try {
-            config.getString("mbta.aws.credentials.region")
-          }.recoverWith {
-            case _ => Try {
-              sys.env("AWS_REGION")
-            }
-          }
-        }
-      }.getOrElse("us-east-1")
-    }
-
-    def S3RoleArn : Try[String] = {
-      config.flatMap {
-        config => {
-          Try {
-            config.getString("mbta.aws.credentials.s3AccessRole")
-          }.recoverWith {
-            case _ => Try {
-              sys.env("MBTA_S3_ROLEARN")
-            }
-          }
-        }
-      }
-    }
-
-    def S3RoleArnExternalId : Try[String] = {
-      config.flatMap {
-        config => {
-          Try {
-            config.getString("mbta.aws.credentials.s3AccessRoleExternalId")
-          }.recoverWith {
-            case _ => Try {
-              sys.env("MBTA_S3_ROLEARN_EXTERNAL_ID")
-            }
-          }
-        }
-      }
-    }
-
-    def getStorageBucket : Try[String] = {
-      config.flatMap {
-        config => {
-          Try {
-            config.getString("mbta.aws.s3.bucket")
-          }.recoverWith {
-            case _ => Try {
-              sys.env("MBTA_STORAGE_BUCKET")
-            }
-          }
-        }
-      }
-    }
-
-    def getStorageBucketPrefix : Try[String] = {
-      config.flatMap {
-        config => {
-          Try {
-            config.getString("mbta.aws.s3.prefix")
-          }.recoverWith {
-            case _ => Try {
-              sys.env("MBTA_STORAGE_PREFIX")
-            }
-          }
-        }
-      }
-    }
-
     def maxRequestsPerPeriod : Int = {
       ApiKey.map { _ => 1000 }.getOrElse(10)
     }
@@ -199,86 +106,6 @@ class MBTAService extends Actor with ActorLogging {
 
     def updatePeriod : FiniteDuration = {
       ApiKey.map { _ => 15.seconds }.getOrElse(10.minutes)
-    }
-  }
-
-  object Credentials {
-    import software.amazon.awssdk.auth.credentials.{
-      AwsBasicCredentials,
-      AwsCredentialsProvider,
-      DefaultCredentialsProvider,
-      StaticCredentialsProvider
-    }
-    import software.amazon.awssdk.services.sts.auth.{
-      StsAssumeRoleCredentialsProvider
-    }
-    import software.amazon.awssdk.services.sts.model.AssumeRoleRequest
-
-    private[this] lazy val longTermCredentials : StaticCredentialsProvider = StaticCredentialsProvider.create(
-      {
-        Config.AccessKey.flatMap { ak =>
-          Config.SecretKey.map { sk =>
-            AwsBasicCredentials.create(ak, sk)
-          }
-        }.getOrElse {
-          val defaultCredentials = DefaultCredentialsProvider.builder().build().resolveCredentials()
-          AwsBasicCredentials.create(defaultCredentials.accessKeyId(), defaultCredentials.secretAccessKey())
-        }
-      }
-    )
-
-    def operationalCredentials : AwsCredentialsProvider = {
-      Config.S3RoleArn.map { roleArn =>
-        val arr = {
-          val arr = AssumeRoleRequest
-            .builder()
-            .roleArn(roleArn)
-            .roleSessionName("MBTA")
-            .durationSeconds(300)
-
-            Config.S3RoleArnExternalId.map { externalId =>
-              arr.externalId(externalId)
-            }.getOrElse(arr).build()
-        }
-
-        StsAssumeRoleCredentialsProvider.builder()
-          .refreshRequest(arr)
-          .build()
-      }.getOrElse {
-        longTermCredentials
-      }
-    }
-  }
-
-  object S3Access {
-    import org.apache.pekko.stream.connectors.s3.{
-      AccessStyle,
-      MultipartUploadResult,
-      S3Attributes,
-      S3Ext
-    }
-    import org.apache.pekko.stream.connectors.s3.scaladsl.{
-      S3
-    }
-
-    lazy val s3Settings: S3Settings = S3Ext(system)
-      .settings
-      .withCredentialsProvider(Credentials.operationalCredentials)
-      .withAccessStyle(AccessStyle.PathAccessStyle)
-
-    def s3Sink(bucket: String, bucketKey: String) : Sink[ByteString, Future[MultipartUploadResult]] = {
-      S3
-        .multipartUpload(bucket, bucketKey)
-        .withAttributes(S3Attributes.settings(s3Settings))
-    }
-
-    def putObject(vj: ByteString, bucket: String, bucketKey: String): Future[Object] = {
-      Source.single(vj).runWith(s3Sink(bucket, bucketKey))
-        .recover {
-          case e: Throwable =>
-            log.error("S3Access.putObject -- recoverWith -- {}", e)
-            e
-        }
     }
   }
 
@@ -389,6 +216,58 @@ class MBTAService extends Actor with ActorLogging {
       log.info(MBTAService.pp(config))
     }
     MBTAaccess.runQ
+    startHttpServer()
+  }
+
+  def startHttpServer(): Unit = {
+    val route = createApiRoutes()
+    val binding = Http().newServerAt("0.0.0.0", 8080).bind(route)
+    binding.onComplete {
+      case Success(binding) => log.info(s"Server online at http://0.0.0.0:8080/")
+      case Failure(exception) => log.error(s"Failed to bind HTTP server: ${exception}")
+    }
+  }
+
+  def createApiRoutes(): Route = {
+    val corsHeaders = List(
+      `Access-Control-Allow-Origin`.*,
+      `Access-Control-Allow-Methods`(HttpMethods.GET, HttpMethods.OPTIONS),
+      `Access-Control-Allow-Headers`("Content-Type", "Authorization")
+    )
+
+    concat(
+      options {
+        complete(HttpResponse(200).withHeaders(corsHeaders))
+      },
+      path("api" / "routes") {
+        get {
+          val routeData = cachedRoutes.map(route => 
+            s"""{"id":"${route.getString("id")}","long_name":"${route.getString("attributes.long_name")}","short_name":"${route.getString("attributes.short_name")}","color":"${route.getString("attributes.color")}","text_color":"${route.getString("attributes.text_color")}"}"""
+          )
+          val jsonString = s"[${routeData.mkString(",")}]"
+          complete(HttpResponse(entity = HttpEntity(ContentTypes.`application/json`, jsonString)))
+        }
+      },
+      path("api" / "vehicles") {
+        get {
+          val vehicleData = cachedVehicles.map(vehicle => 
+            s"""{"routeId":"${vehicle.routeId}","vehicleId":"${vehicle.vehicleId.getOrElse("")}","latitude":${vehicle.latitude.getOrElse(0.0)},"longitude":${vehicle.longitude.getOrElse(0.0)},"bearing":${vehicle.bearing.getOrElse(0)},"speed":${vehicle.speed.getOrElse(0.0)},"direction":"${vehicle.direction.getOrElse("")}","destination":"${vehicle.destination.getOrElse("")}","currentStatus":"${vehicle.currentStatus.getOrElse("")}","updatedAt":"${vehicle.updatedAt.getOrElse("")}"}"""
+          )
+          val jsonString = s"[${vehicleData.mkString(",")}]"
+          complete(HttpResponse(entity = HttpEntity(ContentTypes.`application/json`, jsonString)))
+        }
+      },
+      path("api" / "vehicles" / Segment) { routeId =>
+        get {
+          val routeVehicles = cachedVehicles.filter(_.routeId == routeId)
+          val vehicleData = routeVehicles.map(vehicle => 
+            s"""{"routeId":"${vehicle.routeId}","vehicleId":"${vehicle.vehicleId.getOrElse("")}","latitude":${vehicle.latitude.getOrElse(0.0)},"longitude":${vehicle.longitude.getOrElse(0.0)},"bearing":${vehicle.bearing.getOrElse(0)},"speed":${vehicle.speed.getOrElse(0.0)},"direction":"${vehicle.direction.getOrElse("")}","destination":"${vehicle.destination.getOrElse("")}","currentStatus":"${vehicle.currentStatus.getOrElse("")}","updatedAt":"${vehicle.updatedAt.getOrElse("")}"}"""
+          )
+          val jsonString = s"[${vehicleData.mkString(",")}]"
+          complete(HttpResponse(entity = HttpEntity(ContentTypes.`application/json`, jsonString)))
+        }
+      }
+    )
   }
 
   object RequestFlow {
@@ -427,7 +306,6 @@ class MBTAService extends Actor with ActorLogging {
       direction           : Option[String] = None,
       destination         : Option[String] = None
     ) extends vd
-    case class VehicleDataAsJsonString(routeId: String, j: ByteString) extends vd
     case class VehicleDataNull() extends vd
 
     def vehiclesPerRouteRawFlow : Flow[vd, vd, NotUsed] = {
@@ -538,58 +416,14 @@ class MBTAService extends Actor with ActorLogging {
         }
     }
 
-    def renderAsJson : Flow[vd, vd, NotUsed] = {
+    def updateCache : Flow[vd, vd, NotUsed] = {
       Flow[vd]
-        .wireTap { v => {
-          log.info("renderAsJson -- {}", MBTAService.pp(v))
-        }}
         .map {
           case v: VehicleData =>
-            import DefaultJsonProtocol._
-
-            implicit object VehicleDataFormat extends JsonFormat[VehicleData] {
-              val baseFormat = jsonFormat18(VehicleData.apply)
-
-              override def read(json : JsValue) : VehicleData = ???
-              override def write(v : VehicleData) : JsValue = {
-                val base : JsValue = baseFormat.write(v)
-                v.latitude.flatMap { lat =>
-                  v.longitude.map { lon =>
-                    JsObject(base.asJsObject.fields ++ Map("position" -> JsString(s"${lat}, ${lon}"))) : JsValue
-                  }
-                }.getOrElse(JsObject(base.asJsObject.fields) : JsValue)
-              }
-            }
-
-            VehicleDataAsJsonString(v.routeId, ByteString(v.toJson.toString + "\n", "UTF-8"))
-
+            // Update cached vehicles
+            cachedVehicles = cachedVehicles.filterNot(_.vehicleId == v.vehicleId) :+ v
+            v
           case _ => VehicleDataNull()
-        }
-        .fold(VehicleDataAsJsonString("", ByteString.empty)) {
-          case (acc, v: VehicleDataAsJsonString) => VehicleDataAsJsonString(v.routeId, acc.j ++ v.j)
-          case (acc, _) => acc
-        }
-    }
-
-    def pushToS3 : Flow[vd, vd, NotUsed] = {
-      Flow[vd]
-        .mapAsync(parallelism = 1) {
-          case vj @ VehicleDataAsJsonString("", ByteString.empty) => Future.successful {
-            log.debug("Supressing null s3 write.")
-            vj
-          }
-          case vj : VehicleDataAsJsonString  => {
-            Config.getStorageBucket.flatMap { bucket =>
-              Config.getStorageBucketPrefix.map { prefix =>
-                S3Access.putObject(vj.j, bucket, s"${prefix}/${vj.routeId}/${java.time.Instant.now().toEpochMilli()}.json").map { _ => vj }
-              }
-            }
-          }.getOrElse(Future.successful {
-            VehicleDataAsJsonString("", ByteString.empty)
-          })
-          case _ => Future.successful {
-            VehicleDataAsJsonString("", ByteString.empty)
-          }
         }
     }
 
@@ -608,9 +442,9 @@ class MBTAService extends Actor with ActorLogging {
           .flatMap {
             case HttpResponse(StatusCodes.OK, _, entity, _) => {
               MBTAaccess.parseMbtaResponse(entity).map { response =>
-                Routes(
-                  routes = response.getObjectList("data").asScala.toVector.map { _.toConfig }
-                )
+                val routes = response.getObjectList("data").asScala.toVector.map { _.toConfig }
+                cachedRoutes = routes
+                Routes(routes = routes)
               }
             }
 
@@ -645,11 +479,10 @@ class MBTAService extends Actor with ActorLogging {
         .via(vehiclesPerRouteRawFlow)
         .via(vehiclesPerRouteFlow)
         .via(stopIdLookupFlow)
-        .via(renderAsJson)
-        .via(pushToS3)
+        .via(updateCache)
         .mergeSubstreams
         .toMat(Sink.foreach {
-          case VehicleDataAsJsonString(_, x) => log.info(x.utf8String)
+          case v: VehicleData => log.debug(s"Updated vehicle: ${v.vehicleId.getOrElse("unknown")}")
           case _ =>
         })(Keep.right)
         .run()

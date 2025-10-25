@@ -1,0 +1,29 @@
+<mat-sidenav-container class="sidenav-container">
+  <mat-sidenav #drawer class="sidenav" fixedInViewport
+      [attr.role]="'navigation'"
+      mode="side" opened="true">
+    <mat-toolbar>MBTA Routes</mat-toolbar>
+    <app-routes></app-routes>
+  </mat-sidenav>
+  
+  <mat-sidenav-content>
+    <mat-toolbar color="primary">
+      <button
+        type="button"
+        aria-label="Toggle sidenav"
+        mat-icon-button
+        (click)="drawer.toggle()">
+        <mat-icon aria-label="Side nav toggle icon">menu</mat-icon>
+      </button>
+      <span>{{title}}</span>
+      <span class="spacer"></span>
+      <mat-icon>train</mat-icon>
+    </mat-toolbar>
+    
+    <div class="content">
+      <app-map></app-map>
+    </div>
+  </mat-sidenav-content>
+</mat-sidenav-container>
+
+<app-vehicle-info></app-vehicle-info>

@@ -1,0 +1,138 @@
+/* You can add global styles to this file, and also import other style files */
+
+@import '~@angular/material/theming';
+
+// Define MBTA color palette
+$mbta-blue: #003DA5;
+$mbta-orange: #ED8B00;
+$mbta-purple: #80276C;
+$mbta-red: #DA291C;
+$mbta-green: #00843D;
+
+// Create custom theme
+$mbta-primary: mat-palette((
+  50: #e3f2fd,
+  100: #bbdefb,
+  200: #90caf9,
+  300: #64b5f6,
+  400: #42a5f5,
+  500: $mbta-blue,
+  600: #1976d2,
+  700: #1565c0,
+  800: #0d47a1,
+  900: #0a3d91,
+  A100: #82b1ff,
+  A200: #448aff,
+  A400: #2979ff,
+  A700: #2962ff,
+  contrast: (
+    50: $black-87-opacity,
+    100: $black-87-opacity,
+    200: $black-87-opacity,
+    300: $black-87-opacity,
+    400: $black-87-opacity,
+    500: white,
+    600: white,
+    700: white,
+    800: white,
+    900: white,
+    A100: $black-87-opacity,
+    A200: white,
+    A400: white,
+    A700: white,
+  )
+));
+
+$mbta-accent: mat-palette((
+  50: #fff3e0,
+  100: #ffe0b2,
+  200: #ffcc80,
+  300: #ffb74d,
+  400: #ffa726,
+  500: $mbta-orange,
+  600: #fb8c00,
+  700: #f57c00,
+  800: #ef6c00,
+  900: #e65100,
+  A100: #ffd180,
+  A200: #ffab40,
+  A400: #ff9100,
+  A700: #ff6f00,
+  contrast: (
+    50: $black-87-opacity,
+    100: $black-87-opacity,
+    200: $black-87-opacity,
+    300: $black-87-opacity,
+    400: $black-87-opacity,
+    500: white,
+    600: white,
+    700: white,
+    800: white,
+    900: white,
+    A100: $black-87-opacity,
+    A200: white,
+    A400: white,
+    A700: white,
+  )
+));
+
+$mbta-theme: mat-light-theme((
+  color: (
+    primary: $mbta-primary,
+    accent: $mbta-accent,
+  )
+));
+
+@include angular-material-theme($mbta-theme);
+
+html, body { 
+  height: 100%; 
+  margin: 0; 
+  padding: 0;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+}
+
+.mbta-purple {
+  color: $mbta-purple;
+}
+
+.mbta-red {
+  color: $mbta-red;
+}
+
+.mbta-green {
+  color: $mbta-green;
+}
+
+.mbta-orange {
+  color: $mbta-orange;
+}
+
+.mbta-blue {
+  color: $mbta-blue;
+}
+
+// Leaflet map styles
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+}
+
+// Vehicle marker styles
+.vehicle-marker {
+  background: $mbta-purple;
+  border: 2px solid white;
+  border-radius: 50%;
+  width: 12px;
+  height: 12px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.vehicle-marker.direction {
+  border-radius: 0;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 12px solid $mbta-purple;
+}
