@@ -2,13 +2,13 @@ package mbta.actor
 
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
-import org.apache.commons.io.IOUtils
 import org.apache.pekko
 import spray.json._
+import pekko.http.scaladsl.marshalling.Marshaller
+import pekko.http.scaladsl.unmarshalling.Unmarshaller
 
 import scala.concurrent.Future
 import scala.concurrent.Promise
-import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.util.Failure
@@ -17,7 +17,6 @@ import scala.util.Try
 
 import pekko.actor._
 import pekko.Done
-import pekko.event.Logging
 import pekko.http.scaladsl.Http
 import pekko.http.scaladsl.model.{
   HttpRequest,
@@ -38,14 +37,12 @@ import pekko.util.{
 }
 import pekko.stream.OverflowStrategy
 import pekko.stream.scaladsl.{
-  Keep,
   Flow,
   Sink,
   Source,
   SourceQueueWithComplete
 }
 import pekko.http.scaladsl.settings.ConnectionPoolSettings
-import org.apache.pekko.event.LoggingAdapter
 
 object MBTAMain extends App {
 
@@ -64,42 +61,21 @@ class MBTAService extends Actor with ActorLogging {
   implicit val logger  : pekko.event.LoggingAdapter = log
   implicit val timeout : Timeout                    = 30.seconds
 
-  // In-memory cache for API data
-  private var cachedRoutes: Vector[Config] = Vector.empty
-  private var cachedVehicles: Vector[RequestFlow.VehicleData] = Vector.empty
 
   object Config {
-    lazy val config: Try[Config] = Try {
-      ConfigFactory.parseString(
-        sys.env.get("MBTA_CONFIG").getOrElse {
-          val resource = getClass.getClassLoader.getResourceAsStream("MBTA.conf")
-          val source   = IOUtils.toString(resource, java.nio.charset.Charset.forName("UTF8"))
-          resource.close
-          source
-        }
-      )
-    }.recover {
-      case e: Throwable =>
-        log.warning("MBTAService.Config.config -- was not processed successfully -- {}", e)
-        ConfigFactory.empty
-    }
-
     def ApiKey : Try[String] = {
-      config.flatMap {
-        config => {
-          Try {
-            config.getString("mbta.api")
-          }.recoverWith {
-            case _ => Try {
-              sys.env("MBTA_API_KEY")
-            }
-          }
-        }
+      Try {
+        sys.env("MBTA_API_KEY")
       }
     }
 
     def maxRequestsPerPeriod : Int = {
-      ApiKey.map { _ => 1000 }.getOrElse(10)
+      ApiKey
+        .map { _ => 1000 }
+        .getOrElse { 
+          log.warning("Config.maxRequestsPerPeriod -- MBTA_API_KEY not found in environment variables -- using default of 10")
+          10 
+        }
     }
 
     def maxRequestsWindow : FiniteDuration = 1.minute
@@ -212,9 +188,6 @@ class MBTAService extends Actor with ActorLogging {
   }
 
   override def preStart() : Unit = {
-    Config.config.map { config =>
-      log.info(MBTAService.pp(config))
-    }
     MBTAaccess.runQ
     startHttpServer()
   }
@@ -228,10 +201,48 @@ class MBTAService extends Actor with ActorLogging {
     }
   }
 
+  object JsonProtocol extends DefaultJsonProtocol {
+    case class RouteInfo(id: String, long_name: String, short_name: String, color: String, text_color: String, route_type: Int)
+    case class StopInfo(id: String, name: String, latitude: Double, longitude: Double)
+    case class VehicleIds(vehicleIds: Vector[String])
+    
+    implicit val routeInfoFormat: RootJsonFormat[RouteInfo] = jsonFormat6(RouteInfo.apply)
+    implicit val stopInfoFormat: RootJsonFormat[StopInfo] = jsonFormat4(StopInfo.apply)
+    implicit val vehicleIdsFormat: RootJsonFormat[VehicleIds] = jsonFormat1(VehicleIds.apply)
+    implicit val vehicleDataFormat: RootJsonFormat[RequestFlow.VehicleData] = jsonFormat18(RequestFlow.VehicleData.apply)
+    
+    // Custom marshallers for HTTP responses
+    implicit def routeInfoListMarshaller: Marshaller[Vector[RouteInfo], HttpEntity.Strict] = 
+      Marshaller.withFixedContentType(ContentTypes.`application/json`) { routeInfos =>
+        HttpEntity(ContentTypes.`application/json`, routeInfos.toJson.compactPrint)
+      }
+      
+    implicit def stopInfoListMarshaller: Marshaller[Vector[StopInfo], HttpEntity.Strict] = 
+      Marshaller.withFixedContentType(ContentTypes.`application/json`) { stopInfos =>
+        HttpEntity(ContentTypes.`application/json`, stopInfos.toJson.compactPrint)
+      }
+      
+    implicit def stringListMarshaller: Marshaller[Vector[String], HttpEntity.Strict] = 
+      Marshaller.withFixedContentType(ContentTypes.`application/json`) { strings =>
+        HttpEntity(ContentTypes.`application/json`, strings.toJson.compactPrint)
+      }
+      
+    implicit def vehicleDataListMarshaller: Marshaller[Vector[RequestFlow.VehicleData], HttpEntity.Strict] = 
+      Marshaller.withFixedContentType(ContentTypes.`application/json`) { vehicleDatas =>
+        HttpEntity(ContentTypes.`application/json`, vehicleDatas.toJson.compactPrint)
+      }
+      
+    // Custom unmarshaller for VehicleIds
+    implicit def vehicleIdsUnmarshaller: Unmarshaller[HttpEntity, VehicleIds] = 
+      Unmarshaller.stringUnmarshaller.map(_.parseJson.convertTo[VehicleIds])
+  }
+
   def createApiRoutes(): Route = {
+    import JsonProtocol._
+
     val corsHeaders = List(
       `Access-Control-Allow-Origin`.*,
-      `Access-Control-Allow-Methods`(HttpMethods.GET, HttpMethods.OPTIONS),
+      `Access-Control-Allow-Methods`(HttpMethods.GET, HttpMethods.POST, HttpMethods.OPTIONS),
       `Access-Control-Allow-Headers`("Content-Type", "Authorization")
     )
 
@@ -239,33 +250,41 @@ class MBTAService extends Actor with ActorLogging {
       options {
         complete(HttpResponse(200).withHeaders(corsHeaders))
       },
-      path("api" / "routes") {
-        get {
-          val routeData = cachedRoutes.map(route => 
-            s"""{"id":"${route.getString("id")}","long_name":"${route.getString("attributes.long_name")}","short_name":"${route.getString("attributes.short_name")}","color":"${route.getString("attributes.color")}","text_color":"${route.getString("attributes.text_color")}"}"""
-          )
-          val jsonString = s"[${routeData.mkString(",")}]"
-          complete(HttpResponse(entity = HttpEntity(ContentTypes.`application/json`, jsonString)))
-        }
-      },
-      path("api" / "vehicles") {
-        get {
-          val vehicleData = cachedVehicles.map(vehicle => 
-            s"""{"routeId":"${vehicle.routeId}","vehicleId":"${vehicle.vehicleId.getOrElse("")}","latitude":${vehicle.latitude.getOrElse(0.0)},"longitude":${vehicle.longitude.getOrElse(0.0)},"bearing":${vehicle.bearing.getOrElse(0)},"speed":${vehicle.speed.getOrElse(0.0)},"direction":"${vehicle.direction.getOrElse("")}","destination":"${vehicle.destination.getOrElse("")}","currentStatus":"${vehicle.currentStatus.getOrElse("")}","updatedAt":"${vehicle.updatedAt.getOrElse("")}"}"""
-          )
-          val jsonString = s"[${vehicleData.mkString(",")}]"
-          complete(HttpResponse(entity = HttpEntity(ContentTypes.`application/json`, jsonString)))
-        }
-      },
-      path("api" / "vehicles" / Segment) { routeId =>
-        get {
-          val routeVehicles = cachedVehicles.filter(_.routeId == routeId)
-          val vehicleData = routeVehicles.map(vehicle => 
-            s"""{"routeId":"${vehicle.routeId}","vehicleId":"${vehicle.vehicleId.getOrElse("")}","latitude":${vehicle.latitude.getOrElse(0.0)},"longitude":${vehicle.longitude.getOrElse(0.0)},"bearing":${vehicle.bearing.getOrElse(0)},"speed":${vehicle.speed.getOrElse(0.0)},"direction":"${vehicle.direction.getOrElse("")}","destination":"${vehicle.destination.getOrElse("")}","currentStatus":"${vehicle.currentStatus.getOrElse("")}","updatedAt":"${vehicle.updatedAt.getOrElse("")}"}"""
-          )
-          val jsonString = s"[${vehicleData.mkString(",")}]"
-          complete(HttpResponse(entity = HttpEntity(ContentTypes.`application/json`, jsonString)))
-        }
+      pathPrefix("api") {
+        concat(
+          path("routes") {
+            get {
+              parameter("type".optional) { typeFilter =>
+                onSuccess(RequestFlow.fetchRoutesOnDemand(typeFilter)) { routes =>
+                  complete(routes)
+                }
+              }
+            }
+          },
+          path("route" / Segment / "stops") { routeId =>
+            get {
+              onSuccess(RequestFlow.fetchStops(routeId)) { stops =>
+                complete(stops)
+              }
+            }
+          },
+          path("route" / Segment / "vehicles") { routeId =>
+            get {
+              onSuccess(RequestFlow.fetchVehicleIdsForRoute(routeId)) { vehicleIds =>
+                complete(vehicleIds)
+              }
+            }
+          },
+          path("vehicles") {
+            post {
+              entity(as[VehicleIds]) { request =>
+                onSuccess(RequestFlow.fetchVehicleData(request.vehicleIds)) { vehicles =>
+                  complete(vehicles)
+                }
+              }
+            }
+          }
+        )
       }
     )
   }
@@ -416,17 +435,6 @@ class MBTAService extends Actor with ActorLogging {
         }
     }
 
-    def updateCache : Flow[vd, vd, NotUsed] = {
-      Flow[vd]
-        .map {
-          case v: VehicleData =>
-            // Update cached vehicles
-            cachedVehicles = cachedVehicles.filterNot(_.vehicleId == v.vehicleId) :+ v
-            v
-          case _ => VehicleDataNull()
-        }
-    }
-
     def fetchRoutes : Flow[vd, vd, NotUsed] = {
       Flow[vd]
         .mapAsync[Routes](parallelism = 1) { _ =>
@@ -443,7 +451,6 @@ class MBTAService extends Actor with ActorLogging {
             case HttpResponse(StatusCodes.OK, _, entity, _) => {
               MBTAaccess.parseMbtaResponse(entity).map { response =>
                 val routes = response.getObjectList("data").asScala.toVector.map { _.toConfig }
-                cachedRoutes = routes
                 Routes(routes = routes)
               }
             }
@@ -471,42 +478,121 @@ class MBTAService extends Actor with ActorLogging {
         }
     }
 
-    def runFetchFlows : Future[Done] = {
-      Source
-        .single(FetchRoutes())
-        .via(fetchRoutes)
-        .groupBy(maxSubstreams = 128, f = { case rid => rid })
-        .via(vehiclesPerRouteRawFlow)
-        .via(vehiclesPerRouteFlow)
-        .via(stopIdLookupFlow)
-        .via(updateCache)
-        .mergeSubstreams
-        .toMat(Sink.foreach {
-          case v: VehicleData => log.debug(s"Updated vehicle: ${v.vehicleId.getOrElse("unknown")}")
-          case _ =>
-        })(Keep.right)
-        .run()
+    def fetchStops(routeId: String): Future[Vector[JsonProtocol.StopInfo]] = {
+      MBTAaccess.queueRequest(
+        HttpRequest(uri = MBTAaccess.mbtaUri(
+          path = "/stops",
+          query = MBTAaccess.mbtaQuery(Map("filter[route]" -> routeId))
+        ))
+      ).flatMap {
+        case HttpResponse(StatusCodes.OK, _, entity, _) =>
+          MBTAaccess.parseMbtaResponse(entity).map { response =>
+            response.getObjectList("data").asScala.toVector.map { stop =>
+              val s = stop.toConfig
+              JsonProtocol.StopInfo(
+                id = s.getString("id"),
+                name = s.getString("attributes.name"),
+                latitude = s.getDouble("attributes.latitude"),
+                longitude = s.getDouble("attributes.longitude")
+              )
+            }
+          }
+        case HttpResponse(code, _, entity, _) =>
+          entity.discardBytes()
+          Future.successful(Vector.empty)
+      }
     }
 
-    def runRF: Future[Done] = {
-      Source
-        .tick(initialDelay = FiniteDuration(1, "seconds"), interval = Config.updatePeriod, tick = TickRoutes)
-        .buffer(size = 1, overflowStrategy = OverflowStrategy.dropHead)
-        .mapAsync[Done](parallelism = 1) { _ =>
-          runFetchFlows
+    def fetchRoutesOnDemand(typeFilter: Option[String]): Future[Vector[JsonProtocol.RouteInfo]] = {
+      val queryParams = typeFilter match {
+        case Some(types) => Map("filter[type]" -> types)
+        case None => Map("filter[type]" -> "0,1,2")
+      }
+      
+      MBTAaccess.queueRequest(
+        HttpRequest(uri = MBTAaccess.mbtaUri(
+          path = "/routes",
+          query = MBTAaccess.mbtaQuery(queryParams)
+        ))
+      ).flatMap {
+        case HttpResponse(StatusCodes.OK, _, entity, _) =>
+          MBTAaccess.parseMbtaResponse(entity).map { response =>
+            response.getObjectList("data").asScala.toVector.map { route =>
+              val r = route.toConfig
+              JsonProtocol.RouteInfo(
+                id = r.getString("id"),
+                long_name = r.getString("attributes.long_name"),
+                short_name = r.getString("attributes.short_name"),
+                color = r.getString("attributes.color"),
+                text_color = r.getString("attributes.text_color"),
+                route_type = r.getInt("attributes.type")
+              )
+            }
+          }
+        case HttpResponse(code, _, entity, _) =>
+          entity.discardBytes()
+          Future.successful(Vector.empty)
+      }
+    }
+
+    def fetchVehicleIdsForRoute(routeId: String): Future[Vector[String]] = {
+      Source.single(VehicleRoute(routeId, Vector.empty, Vector.empty))
+        .via(vehiclesPerRouteRawFlow)
+        .via(vehiclesPerRouteFlow)
+        .runWith(Sink.seq)
+        .map(_.toVector.collect {
+          case vd: VehicleData => vd.vehicleId.getOrElse("")
+        }.filter(_.nonEmpty))
+    }
+
+    def fetchVehicleData(vehicleIds: Vector[String]): Future[Vector[VehicleData]] = {
+      Source(vehicleIds)
+        .mapAsync(parallelism = 10) { vehicleId =>
+          MBTAaccess.queueRequest(
+            HttpRequest(uri = MBTAaccess.mbtaUri(
+              path = "/vehicles",
+              query = MBTAaccess.mbtaQuery(Map("filter[id]" -> vehicleId, "include" -> "stop"))
+            ))
+          ).flatMap {
+            case HttpResponse(StatusCodes.OK, _, entity, _) =>
+              MBTAaccess.parseMbtaResponse(entity).map { response =>
+                response.getObjectList("data").asScala.toVector.headOption.map { vehicle =>
+                  val v = vehicle.toConfig
+                  val directionId = Try(v.getInt("attributes.direction_id")).toOption
+                  VehicleData(
+                    routeId = v.getString("relationships.route.data.id"),
+                    vehicleId = Try(v.getString("attributes.label")).toOption,
+                    stopId = Try(v.getString("relationships.stop.data.id")).toOption,
+                    tripId = Try(v.getString("relationships.trip.data.id")).toOption,
+                    bearing = Try(v.getInt("attributes.bearing")).toOption,
+                    directionId = directionId,
+                    currentStatus = Try(v.getString("attributes.current_status")).toOption,
+                    currentStopSequence = Try(v.getInt("attributes.current_stop_sequence")).toOption,
+                    latitude = Try(v.getDouble("attributes.latitude")).toOption,
+                    longitude = Try(v.getDouble("attributes.longitude")).toOption,
+                    speed = Try(v.getDouble("attributes.speed")).toOption,
+                    updatedAt = Try(v.getString("attributes.updated_at")).toOption,
+                    direction = None, // Will be enriched by stopIdLookupFlow if needed
+                    destination = None
+                  )
+                }
+              }
+            case _ => Future.successful(None)
+          }
         }
-        .toMat(Sink.ignore)(Keep.right)
-        .run()
+        .collect { case Some(vd) => vd }
+        .runWith(Sink.seq)
+        .map(_.toVector)
     }
   }
 
-  RequestFlow.runRF
 
   def receive: PartialFunction[Any,Unit] = {
     case event =>
       log.error("Unexpected event={}", event.toString)
   }
 }
+
 
 object MBTAService {
   def pp(x: Any): String = pprint.PPrinter.Color.tokenize(x, width = 512, height = 1000).mkString

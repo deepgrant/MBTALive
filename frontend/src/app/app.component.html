@@ -3,7 +3,10 @@
       [attr.role]="'navigation'"
       mode="side" opened="true">
     <mat-toolbar>MBTA Routes</mat-toolbar>
-    <app-routes></app-routes>
+    <mat-list>
+      <mat-list-item>Route 1</mat-list-item>
+      <mat-list-item>Route 2</mat-list-item>
+    </mat-list>
   </mat-sidenav>
   
   <mat-sidenav-content>
@@ -21,9 +24,9 @@
     </mat-toolbar>
     
     <div class="content">
-      <app-map></app-map>
+      <div id="map" class="map-container">
+        <p>Map will be loaded here</p>
+      </div>
     </div>
   </mat-sidenav-content>
 </mat-sidenav-container>
-
-<app-vehicle-info></app-vehicle-info>

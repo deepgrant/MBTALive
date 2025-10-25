@@ -6,9 +6,6 @@ import { MatListModule } from '@angular/material/list';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MapComponent } from './components/map/map.component';
-import { RoutesComponent } from './components/routes/routes.component';
-import { VehicleInfoComponent } from './components/vehicle-info/vehicle-info.component';
 
 @Component({
   selector: 'app-root',
@@ -20,10 +17,7 @@ import { VehicleInfoComponent } from './components/vehicle-info/vehicle-info.com
     MatListModule,
     MatCardModule,
     MatButtonModule,
-    MatIconModule,
-    MapComponent,
-    RoutesComponent,
-    VehicleInfoComponent
+    MatIconModule
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
