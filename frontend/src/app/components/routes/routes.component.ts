@@ -77,4 +77,9 @@ export class RoutesComponent implements OnInit, OnDestroy {
   getTextColor(route: Route): string {
     return `#${route.text_color}`;
   }
+
+  refreshRoutes(): void {
+    console.log('RoutesComponent: Refreshing routes...');
+    this.vehicleService.refreshRoutes();
+  }
 }

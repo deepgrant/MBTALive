@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, combineLatest, EMPTY } from 'rxjs';
+import { BehaviorSubject, Observable, combineLatest, EMPTY, of } from 'rxjs';
 import { map, distinctUntilChanged, switchMap, catchError } from 'rxjs/operators';
 import { Vehicle } from '../models/vehicle.model';
 import { Route, Shape } from '../models/route.model';
@@ -23,16 +23,16 @@ export class VehicleService {
   public selectedRouteShapes$: Observable<Shape[]>;
 
   constructor(private apiService: ApiService) {
-    // Set up filtered vehicles based on selected route
+    // Load routes once on initialization
+    this.loadRoutes();
+
+    // Set up filtered vehicles based on selected route with polling
     this.filteredVehicles$ = this.selectedRoute$.pipe(
       switchMap(selectedRoute => {
         if (!selectedRoute) {
-          return new Observable<Vehicle[]>(observer => {
-            observer.next([]);
-            observer.complete();
-          });
+          return of([]);
         }
-        return this.apiService.getVehiclesByRoute(selectedRoute);
+        return this.apiService.getRealTimeVehiclesByRoute(selectedRoute, 10000);
       }),
       distinctUntilChanged()
     );
@@ -63,20 +63,29 @@ export class VehicleService {
         return EMPTY;
       })
     );
-
-    // Start polling for data
-    this.startDataPolling();
   }
 
-  private startDataPolling(): void {
-    // Poll routes every 30 seconds
-    this.apiService.getRealTimeRoutes(30000).subscribe({
+  private loadRoutes(): void {
+    this.apiService.getRoutes().subscribe({
       next: (routes) => {
-        console.log('VehicleService: Routes received:', routes);
+        console.log('VehicleService: Routes loaded:', routes);
         this.routesSubject.next(routes);
       },
       error: (error) => {
-        console.error('VehicleService: Error fetching routes:', error);
+        console.error('VehicleService: Error loading routes:', error);
+      }
+    });
+  }
+
+  refreshRoutes(): void {
+    console.log('VehicleService: Refreshing routes...');
+    this.apiService.getRoutes().subscribe({
+      next: (routes) => {
+        console.log('VehicleService: Routes refreshed:', routes);
+        this.routesSubject.next(routes);
+      },
+      error: (error) => {
+        console.error('VehicleService: Error refreshing routes:', error);
       }
     });
   }

@@ -94,6 +94,14 @@ export class ApiService {
       );
   }
 
+  getRealTimeVehiclesByRoute(routeId: string, intervalMs: number = 10000): Observable<Vehicle[]> {
+    return interval(intervalMs)
+      .pipe(
+        startWith(0),
+        switchMap(() => this.getVehiclesByRoute(routeId))
+      );
+  }
+
   getRouteShapes(routeId: string): Observable<Shape[]> {
     return this.http.get<ShapeResponse[]>(`${this.baseUrl}/route/${routeId}/shapes`)
       .pipe(
