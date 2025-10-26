@@ -4,6 +4,7 @@ export interface Route {
   short_name: string;
   color: string;
   text_color: string;
+  route_type: number;
 }
 
 export interface RouteResponse {
@@ -12,6 +13,7 @@ export interface RouteResponse {
   short_name: string;
   color: string;
   text_color: string;
+  route_type: number;
 }
 
 export interface Shape {

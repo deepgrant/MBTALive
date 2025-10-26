@@ -7,8 +7,29 @@
     <mat-icon>refresh</mat-icon>
   </button>
 </div>
+
+<div class="route-type-filter">
+  <mat-button-toggle-group 
+    [value]="routeTypeFilter" 
+    (change)="setRouteTypeFilter($event.value)"
+    aria-label="Route type filter">
+    <mat-button-toggle value="all">
+      <mat-icon>all_inclusive</mat-icon>
+      All
+    </mat-button-toggle>
+    <mat-button-toggle value="rail">
+      <mat-icon>train</mat-icon>
+      Rail
+    </mat-button-toggle>
+    <mat-button-toggle value="bus">
+      <mat-icon>directions_bus</mat-icon>
+      Bus
+    </mat-button-toggle>
+  </mat-button-toggle-group>
+</div>
+
 <mat-list>
-  <mat-list-item *ngFor="let route of routes" 
+  <mat-list-item *ngFor="let route of getFilteredRoutes()" 
                  (click)="selectRoute(route.id)"
                  [class.selected]="selectedRoute === route.id"
                  class="route-item">
@@ -20,7 +41,9 @@
           {{route.short_name}}
         </span>
         <span class="route-long-name">{{route.long_name}}</span>
+        <mat-icon class="route-type-icon">{{getRouteTypeIcon(route)}}</mat-icon>
       </div>
+      <div class="route-type-label">{{getRouteTypeLabel(route)}}</div>
     </div>
   </mat-list-item>
 </mat-list>

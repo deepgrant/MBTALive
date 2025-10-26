@@ -14,9 +14,10 @@ export class ApiService {
 
   constructor(private http: HttpClient) { }
 
-  getRoutes(): Observable<Route[]> {
-    console.log('Fetching routes from:', `${this.baseUrl}/routes`);
-    return this.http.get<RouteResponse[]>(`${this.baseUrl}/routes`)
+  getRoutes(typeFilter?: string): Observable<Route[]> {
+    const url = typeFilter ? `${this.baseUrl}/routes?type=${typeFilter}` : `${this.baseUrl}/routes`;
+    console.log('Fetching routes from:', url);
+    return this.http.get<RouteResponse[]>(url)
       .pipe(
         map((routes: RouteResponse[]) => {
           console.log('Raw routes response:', routes);
@@ -25,7 +26,8 @@ export class ApiService {
             long_name: route.long_name,
             short_name: route.short_name,
             color: route.color,
-            text_color: route.text_color
+            text_color: route.text_color,
+            route_type: route.route_type
           }));
         }),
         catchError((error: any) => {
@@ -46,41 +48,26 @@ export class ApiService {
 
   getVehiclesByRoute(routeId: string): Observable<Vehicle[]> {
     console.log('ApiService: Getting vehicles for route:', routeId);
-    // First get vehicle IDs for the route
-    return this.http.get<string[]>(`${this.baseUrl}/route/${routeId}/vehicles`)
+    // Directly fetch vehicle data from the route endpoint
+    return this.http.get<VehicleResponse[]>(`${this.baseUrl}/route/${routeId}/vehicles`)
       .pipe(
-        switchMap(vehicleIds => {
-          console.log('ApiService: Got vehicle IDs:', vehicleIds);
-          if (vehicleIds.length === 0) {
-            console.log('ApiService: No vehicle IDs found, returning empty array');
-            return new Observable<Vehicle[]>(observer => {
-              observer.next([]);
-              observer.complete();
-            });
-          }
-          // Then fetch vehicle data using POST
-          console.log('ApiService: Fetching vehicle data for IDs:', vehicleIds);
-          return this.http.post<VehicleResponse[]>(`${this.baseUrl}/vehicles`, { vehicleIds })
-            .pipe(
-              map((vehicles: VehicleResponse[]) => {
-                console.log('ApiService: Got vehicle data:', vehicles);
-                const mappedVehicles = vehicles.map(vehicle => ({
-                  routeId: vehicle.routeId,
-                  vehicleId: vehicle.vehicleId || 'unknown',
-                  latitude: vehicle.latitude || 0,
-                  longitude: vehicle.longitude || 0,
-                  bearing: vehicle.bearing || 0,
-                  speed: vehicle.speed || 0,
-                  direction: vehicle.direction || 'Unknown',
-                  destination: vehicle.destination || 'Unknown',
-                  currentStatus: vehicle.currentStatus || 'Unknown',
-                  stopName: vehicle.stopName || 'Unknown',
-                  updatedAt: vehicle.updatedAt || new Date().toISOString()
-                }));
-                console.log('ApiService: Mapped vehicle data:', mappedVehicles);
-                return mappedVehicles;
-              })
-            );
+        map((vehicles: VehicleResponse[]) => {
+          console.log('ApiService: Got vehicle data:', vehicles);
+          const mappedVehicles = vehicles.map(vehicle => ({
+            routeId: vehicle.routeId,
+            vehicleId: vehicle.vehicleId || 'unknown',
+            latitude: vehicle.latitude || 0,
+            longitude: vehicle.longitude || 0,
+            bearing: vehicle.bearing || 0,
+            speed: vehicle.speed || 0,
+            direction: vehicle.direction || 'Unknown',
+            destination: vehicle.destination || 'Unknown',
+            currentStatus: vehicle.currentStatus || 'Unknown',
+            stopName: vehicle.stopName || 'Unknown',
+            updatedAt: vehicle.updatedAt || new Date().toISOString()
+          }));
+          console.log('ApiService: Mapped vehicle data:', mappedVehicles);
+          return mappedVehicles;
         }),
         catchError(error => {
           console.error('ApiService: Error fetching vehicles for route:', routeId, error);

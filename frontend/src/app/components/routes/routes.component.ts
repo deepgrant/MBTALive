@@ -4,6 +4,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { Subscription } from 'rxjs';
 import { Route } from '../../models/route.model';
 import { VehicleService } from '../../services/vehicle.service';
@@ -16,7 +17,8 @@ import { VehicleService } from '../../services/vehicle.service';
     MatListModule,
     MatCardModule,
     MatButtonModule,
-    MatIconModule
+    MatIconModule,
+    MatButtonToggleModule
   ],
   templateUrl: './routes.component.html',
   styleUrls: ['./routes.component.scss']
@@ -25,6 +27,7 @@ export class RoutesComponent implements OnInit, OnDestroy {
   routes: Route[] = [];
   selectedRoute: string | null = null;
   isRefreshing: boolean = false;
+  routeTypeFilter: string = 'all';
   private subscriptions: Subscription[] = [];
 
   constructor(private vehicleService: VehicleService) { }
@@ -92,5 +95,41 @@ export class RoutesComponent implements OnInit, OnDestroy {
     setTimeout(() => {
       this.isRefreshing = false;
     }, 500);
+  }
+
+  getFilteredRoutes(): Route[] {
+    if (this.routeTypeFilter === 'all') {
+      return this.routes;
+    } else if (this.routeTypeFilter === 'rail') {
+      return this.routes.filter(route => route.route_type <= 2);
+    } else if (this.routeTypeFilter === 'bus') {
+      return this.routes.filter(route => route.route_type === 3);
+    }
+    return this.routes;
+  }
+
+  setRouteTypeFilter(type: string): void {
+    console.log('RoutesComponent: Setting route type filter to:', type);
+    this.routeTypeFilter = type;
+  }
+
+  getRouteTypeIcon(route: Route): string {
+    switch (route.route_type) {
+      case 0: return 'tram'; // Light Rail
+      case 1: return 'train'; // Heavy Rail
+      case 2: return 'train'; // Commuter Rail
+      case 3: return 'directions_bus'; // Bus
+      default: return 'help';
+    }
+  }
+
+  getRouteTypeLabel(route: Route): string {
+    switch (route.route_type) {
+      case 0: return 'Light Rail';
+      case 1: return 'Heavy Rail';
+      case 2: return 'Commuter Rail';
+      case 3: return 'Bus';
+      default: return 'Unknown';
+    }
   }
 }
