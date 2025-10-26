@@ -573,7 +573,7 @@ class MBTAService extends Actor with ActorLogging {
                 response.getObjectList("data").asScala.toVector.headOption.map { vehicle =>
                   val v = vehicle.toConfig
                   val directionId = Try(v.getInt("attributes.direction_id")).toOption
-                  VehicleData(
+                  val baseVehicleData = VehicleData(
                     routeId = v.getString("relationships.route.data.id"),
                     vehicleId = Try(v.getString("attributes.label")).toOption,
                     stopId = Try(v.getString("relationships.stop.data.id")).toOption,
@@ -586,17 +586,81 @@ class MBTAService extends Actor with ActorLogging {
                     longitude = Try(v.getDouble("attributes.longitude")).toOption,
                     speed = Try(v.getDouble("attributes.speed")).toOption,
                     updatedAt = Try(v.getString("attributes.updated_at")).toOption,
-                    direction = None, // Will be enriched by stopIdLookupFlow if needed
-                    destination = None
+                    direction = directionId.map(convertDirectionId),
+                    destination = None, // Will be enriched below
+                    stopName = None // Will be enriched below
                   )
+                  
+                  // Enrich with trip and stop data
+                  enrichVehicleData(baseVehicleData)
                 }
               }
             case _ => Future.successful(None)
           }
         }
-        .collect { case Some(vd) => vd }
+        .collect { case Some(vdFuture) => vdFuture }
+        .mapAsync(parallelism = 5) { vdFuture => vdFuture }
         .runWith(Sink.seq)
         .map(_.toVector)
+    }
+
+    // Helper function to convert directionId to human-readable format
+    def convertDirectionId(directionId: Int): String = {
+      directionId match {
+        case 0 => "Outbound"
+        case 1 => "Inbound"
+        case _ => "Unknown"
+      }
+    }
+
+    // Helper function to enrich vehicle data with trip and stop information
+    def enrichVehicleData(vehicleData: VehicleData): Future[VehicleData] = {
+      val tripFuture = vehicleData.tripId.map { tripId =>
+        MBTAaccess.queueRequest(
+          HttpRequest(uri = MBTAaccess.mbtaUri(
+            path = s"/trips/${tripId}",
+            query = MBTAaccess.mbtaQuery()
+          ))
+        ).flatMap {
+          case HttpResponse(StatusCodes.OK, _, entity, _) =>
+            MBTAaccess.parseMbtaResponse(entity).map { response =>
+              Try(response.getString("data.attributes.headsign")).toOption
+            }
+          case HttpResponse(code, _, entity, _) =>
+            log.error("enrichVehicleData trip lookup returned unexpected code: {} for tripId: {}", code.toString, tripId)
+            entity.discardBytes()
+            Future.successful(None)
+        }
+      }.getOrElse(Future.successful(None))
+
+      val stopFuture = vehicleData.stopId.map { stopId =>
+        MBTAaccess.queueRequest(
+          HttpRequest(uri = MBTAaccess.mbtaUri(
+            path = s"/stops/${stopId}",
+            query = MBTAaccess.mbtaQuery()
+          ))
+        ).flatMap {
+          case HttpResponse(StatusCodes.OK, _, entity, _) =>
+            MBTAaccess.parseMbtaResponse(entity).map { response =>
+              Try(response.getString("data.attributes.name")).toOption
+            }
+          case HttpResponse(code, _, entity, _) =>
+            log.error("enrichVehicleData stop lookup returned unexpected code: {} for stopId: {}", code.toString, stopId)
+            entity.discardBytes()
+            Future.successful(None)
+        }
+      }.getOrElse(Future.successful(None))
+
+      // Combine both futures
+      for {
+        destination <- tripFuture
+        stopName <- stopFuture
+      } yield {
+        vehicleData.copy(
+          destination = destination,
+          stopName = stopName
+        )
+      }
     }
 
     def fetchShapes(routeId: String): Future[Vector[JsonProtocol.ShapeInfo]] = {
@@ -623,22 +687,8 @@ class MBTAService extends Actor with ActorLogging {
     }
   }
 
-
   def receive: PartialFunction[Any,Unit] = {
     case event =>
       log.error("Unexpected event={}", event.toString)
-  }
-}
-
-
-object MBTAService {
-  def pp(x: Any): String = pprint.PPrinter.Color.tokenize(x, width = 512, height = 1000).mkString
-
-  object Request {
-    sealed trait T
-  }
-
-  object Response {
-    sealed trait T
   }
 }
