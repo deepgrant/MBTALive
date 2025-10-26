@@ -18,7 +18,6 @@ repositories {
 dependencies {
   implementation(
     [ libs.scala
-    , libs.scalaReflect
     , libs.scalaParser
     , libs.scalaXML
     , libs.scalaCollectionsCompat
@@ -29,17 +28,14 @@ dependencies {
     , libs.pekko_slf4j
     , libs.pekko_stream
     , libs.pekko_stream_json
-    , libs.pekko_connectors_s3
     , libs.slf4j
     , libs.logback_classic
     , libs.logback_core
     , libs.pprint
     , libs.apache_commons_io
-    , libs.awsSdkServicesSts
     , libs.sprayJSON
     ]
   )
-  scalafix "org.scala-lang:scala-rewrites_2.13:+"
 }
 
 tasks.withType(ScalaCompile) {
@@ -57,7 +53,7 @@ compileScala {
 }
 
 tasks.withType(ScalaCompile).configureEach {
-  scalaCompileOptions.additionalParameters = ['-Wunused']
+  scalaCompileOptions.additionalParameters = ['-Wunused:imports']
 }
 
 jar {
