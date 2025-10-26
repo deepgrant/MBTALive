@@ -177,13 +177,27 @@ export class MapService {
       console.log('MapService: Decoded coordinates:', coordinates.length, 'points');
       
       if (coordinates.length > 0) {
-        const polyline = L.polyline(coordinates, {
-          color: `#${route.color}`,
-          weight: 4,
-          opacity: 0.8
+        // Create enhanced styling for all route types
+        console.log('MapService: Creating enhanced route styling for route type:', route.route_type);
+        
+        // Bottom layer: white glow effect
+        const glowPolyline = L.polyline(coordinates, {
+          color: '#ffffff',
+          weight: 10,
+          opacity: 0.6
         }).addTo(this.map!);
-
-        this.routeLayers.set(`${routeId}-${shape.id}`, polyline);
+        
+        // Top layer: colored route line with increased weight
+        const routePolyline = L.polyline(coordinates, {
+          color: `#${route.color}`,
+          weight: 6,
+          opacity: 0.9
+        }).addTo(this.map!);
+        
+        // Store both layers
+        this.routeLayers.set(`${routeId}-${shape.id}-glow`, glowPolyline);
+        this.routeLayers.set(`${routeId}-${shape.id}`, routePolyline);
+        
         console.log('MapService: Added polyline to map');
       } else {
         console.warn('MapService: No coordinates decoded for shape:', shape.id);
@@ -196,6 +210,7 @@ export class MapService {
   clearRouteLayers(): void {
     if (!this.map) return;
     
+    // Remove all route layers including glow layers
     this.routeLayers.forEach(polyline => this.map!.removeLayer(polyline));
     this.routeLayers.clear();
   }
