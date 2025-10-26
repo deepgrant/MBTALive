@@ -24,6 +24,7 @@ import { VehicleService } from '../../services/vehicle.service';
 export class RoutesComponent implements OnInit, OnDestroy {
   routes: Route[] = [];
   selectedRoute: string | null = null;
+  isRefreshing: boolean = false;
   private subscriptions: Subscription[] = [];
 
   constructor(private vehicleService: VehicleService) { }
@@ -80,6 +81,13 @@ export class RoutesComponent implements OnInit, OnDestroy {
 
   refreshRoutes(): void {
     console.log('RoutesComponent: Refreshing routes...');
+    this.isRefreshing = true;
+    
     this.vehicleService.refreshRoutes();
+    
+    // Reset after animation completes
+    setTimeout(() => {
+      this.isRefreshing = false;
+    }, 500);
   }
 }

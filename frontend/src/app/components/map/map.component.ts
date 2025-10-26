@@ -18,6 +18,7 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   private subscriptions: Subscription[] = [];
   private map: any;
   private currentRoute: Route | null = null;
+  private routeFramed: boolean = false;
 
   constructor(
     private vehicleService: VehicleService,
@@ -92,24 +93,27 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private updateMapWithVehicles(vehicles: Vehicle[]): void {
-    if (vehicles.length > 0) {
-      this.mapService.updateVehicleMarkers(vehicles);
-      this.mapService.fitBoundsToVehicles(vehicles);
-    }
+    console.log('MapComponent: Updating vehicles on map:', vehicles.length);
+    this.mapService.updateVehicleMarkers(vehicles);
+    // DO NOT call fitBoundsToVehicles() - keep current map view
   }
 
   private handleRouteSelection(routeId: string | null): void {
+    // Always clear existing route data first
+    console.log('MapComponent: Clearing previous route data');
+    this.mapService.clearRouteLayers();
+    this.mapService.clearStationMarkers();
+    this.routeFramed = false;  // Reset framing flag
+    
     if (!routeId) {
-      // Clear route and station layers when no route is selected
-      this.mapService.clearRouteLayers();
-      this.mapService.clearStationMarkers();
       this.currentRoute = null;
       return;
     }
 
-    // Get route information
+    // Get route information for new selection
     this.vehicleService.getRouteById(routeId).subscribe(route => {
       if (route) {
+        console.log('MapComponent: Loading new route:', route.id);
         this.currentRoute = route;
       }
     });
@@ -130,13 +134,13 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private fitBoundsToRouteAndStations(): void {
-    // This method will be called after both stations and shapes are loaded
-    // The map service will handle fitting bounds to the displayed content
-    if (this.map) {
-      // Force a small delay to ensure all layers are rendered
+    // Only frame once when route is first loaded
+    if (!this.routeFramed && this.map) {
       setTimeout(() => {
-        this.map.invalidateSize();
-      }, 100);
+        console.log('MapComponent: Framing route to fit window');
+        this.mapService.fitBoundsToRoute();
+        this.routeFramed = true;
+      }, 200); // Delay to ensure shapes and stations are rendered
     }
   }
 }

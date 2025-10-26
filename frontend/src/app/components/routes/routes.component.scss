@@ -5,6 +5,19 @@
   border-bottom: 1px solid #e0e0e0;
 }
 
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinning mat-icon {
+  animation: spin 0.5s linear;
+}
+
 .route-item {
   cursor: pointer;
   border-bottom: 1px solid #e0e0e0;

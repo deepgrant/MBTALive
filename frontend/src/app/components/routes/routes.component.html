@@ -1,5 +1,9 @@
 <div class="routes-header">
-  <button mat-icon-button (click)="refreshRoutes()" aria-label="Refresh routes">
+  <button mat-icon-button 
+          (click)="refreshRoutes()" 
+          [disabled]="isRefreshing"
+          [class.spinning]="isRefreshing"
+          aria-label="Refresh routes">
     <mat-icon>refresh</mat-icon>
   </button>
 </div>

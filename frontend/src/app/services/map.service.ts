@@ -226,6 +226,33 @@ export class MapService {
     this.map.fitBounds(bounds, { padding: [20, 20] });
   }
 
+  fitBoundsToRoute(): void {
+    if (!this.map) return;
+
+    const bounds = L.latLngBounds([]);
+    let hasContent = false;
+
+    // Add all route polyline points to bounds
+    this.routeLayers.forEach(polyline => {
+      const layerBounds = polyline.getBounds();
+      if (layerBounds.isValid()) {
+        bounds.extend(layerBounds);
+        hasContent = true;
+      }
+    });
+
+    // Add all station markers to bounds
+    this.stationMarkers.forEach(marker => {
+      bounds.extend(marker.getLatLng());
+      hasContent = true;
+    });
+
+    // Fit map to calculated bounds
+    if (hasContent) {
+      this.map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  }
+
   private createVehicleMarkerHtml(vehicle: Vehicle): string {
     const rotation = vehicle.bearing || 0;
     const speed = vehicle.speed || 0;
