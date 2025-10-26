@@ -25,30 +25,6 @@ A modern full-stack application for tracking MBTA commuter rail vehicles in real
 - **RxJS** - Reactive programming
 - **TypeScript** - Type-safe JavaScript
 
-## Project Structure
-
-```
-mbta/
-├── source/scala/mbta.scala          # Scala 3 backend with HTTP API
-├── source/resources/                # Configuration files
-├── frontend/                        # Angular application
-│   ├── src/app/
-│   │   ├── components/              # Angular components
-│   │   │   ├── map/                # Map component (HTML, SCSS, TS)
-│   │   │   ├── routes/             # Routes component (HTML, SCSS, TS)
-│   │   │   └── vehicle-info/      # Vehicle info component (HTML, SCSS, TS)
-│   │   ├── services/               # Angular services
-│   │   │   ├── api.service.ts      # HTTP API client
-│   │   │   ├── map.service.ts      # Leaflet map management
-│   │   │   └── vehicle.service.ts  # Vehicle data management
-│   │   └── models/                 # TypeScript models
-│   │       ├── vehicle.model.ts    # Vehicle data structure
-│   │       └── route.model.ts      # Route data structure
-│   ├── package.json                # Angular dependencies
-│   └── proxy.conf.json             # API proxy configuration
-└── build.gradle                    # Gradle build configuration
-```
-
 ## Getting Started
 
 ### Prerequisites
@@ -81,7 +57,8 @@ mbta/
 
 2. **Start the Angular development server**:
    ```bash
-   ng serve
+   cd frontend
+   ng serve --proxy-config proxy.conf.json
    ```
    The frontend will start on `http://localhost:4200`
 
@@ -131,17 +108,17 @@ mbta/
 ## Architecture
 
 ```
-┌─────────────────┐    HTTP/REST    ┌─────────────────┐
-│   Angular UI    │◄──────────────►│   Scala API     │
-│   (Port 4200)   │                 │   (Port 8080)   │
-└─────────────────┘                 └─────────────────┘
-         │                                    │
-         │                                    │
-         ▼                                    ▼
-┌─────────────────┐                 ┌─────────────────┐
-│   Leaflet Map   │                 │   MBTA API     │
-│   (OpenStreet)  │                 │   (External)    │
-└─────────────────┘                 └─────────────────┘
+┌─────────────────┐    HTTP/REST   ┌─────────────────┐
+│   Angular UI    │◄──────────────►│    Scala API    │
+│   (Port 4200)   │                │   (Port 8080)   │
+└─────────────────┘                └─────────────────┘
+         │                                  │
+         │                                  │
+         ▼                                  ▼
+┌─────────────────┐                ┌─────────────────┐
+│   Leaflet Map   │                │    MBTA API     │
+│   (OpenStreet)  │                │   (External)    │
+└─────────────────┘                └─────────────────┘
 ```
 
 ## Configuration
@@ -153,23 +130,3 @@ mbta/
 ### Frontend Configuration
 - `frontend/proxy.conf.json` - API proxy settings
 - `frontend/src/styles.scss` - MBTA theme colors
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Backend won't start**: Check Java version (11+ required)
-2. **Frontend build fails**: Run `npm install` in frontend directory
-3. **Map not loading**: Check browser console for Leaflet errors
-4. **No vehicle data**: Verify MBTA API key is set correctly
-
-### Development Tips
-
-- Use browser dev tools to inspect API calls
-- Check backend logs for MBTA API responses
-- Leaflet map requires proper container sizing
-- CORS is configured for localhost development
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.

@@ -1,8 +1,16 @@
 .routes-header {
   padding: 8px;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   border-bottom: 1px solid #e0e0e0;
+}
+
+.routes-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+  color: #333;
 }
 
 .route-type-filter {
