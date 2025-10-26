@@ -338,7 +338,7 @@ class MBTAService extends Actor with ActorLogging {
             ).flatMap {
               case HttpResponse(StatusCodes.OK, _, entity, _) => {
                 MBTAaccess.parseMbtaResponse(entity).map { resp =>
-                  log.info("vehiclesPerRouteRawFlow({}) returned: OK => {}", route, resp.toString)
+                  log.info("vehiclesPerRouteRawFlow({}) returned: OK", route)
                   VehiclesPerRouteRaw(
                     route       = vr,
                     rawVehicles = resp.getObjectList("data").asScala.toVector.map { _.toConfig }

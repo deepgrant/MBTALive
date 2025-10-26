@@ -7,7 +7,7 @@
 }
 
 .sidenav .mat-toolbar {
-  background: #003DA5;
+  background: #80276C;
   color: white;
 }
 
@@ -20,12 +20,19 @@
   flex: 1 1 auto;
 }
 
+.toolbar-favicon {
+  width: 32px;
+  height: 32px;
+  margin-right: 12px;
+  vertical-align: middle;
+}
+
 .content {
   height: calc(100vh - 64px);
   overflow: hidden;
 }
 
 .mat-toolbar {
-  background: #003DA5;
+  background: #80276C;
   color: white;
 }
