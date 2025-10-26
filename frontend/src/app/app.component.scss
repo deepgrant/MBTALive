@@ -1,19 +1,37 @@
-.sidenav-container {
+.app-container {
+  display: flex;
   height: 100vh;
+  overflow: hidden;
 }
 
-.sidenav {
+.routes-panel {
   width: 300px;
+  background: rgba(255, 255, 255, 0.8);
+  border-right: 1px solid #e0e0e0;
+  overflow-y: auto;
+  z-index: 2;
 }
 
-.sidenav .mat-toolbar {
-  background: #80276C;
-  color: white;
+.vehicle-panel {
+  width: 280px;
+  background: rgba(255, 255, 255, 0.8);
+  border-right: 1px solid #e0e0e0;
+  overflow-y: auto;
+  z-index: 1;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .mat-toolbar {
   position: relative;
-  z-index: 1;
+  z-index: 3;
+  background: #80276C;
+  color: white;
 }
 
 .spacer {
@@ -28,11 +46,6 @@
 }
 
 .content {
-  height: calc(100vh - 64px);
+  flex: 1;
   overflow: hidden;
-}
-
-.mat-toolbar {
-  background: #80276C;
-  color: white;
 }

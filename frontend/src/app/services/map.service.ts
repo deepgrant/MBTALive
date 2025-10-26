@@ -13,6 +13,7 @@ export class MapService {
   private vehicleMarkers: Map<string, L.Marker> = new Map();
   private routeLayers: Map<string, L.Polyline> = new Map();
   private stationMarkers: Map<string, L.Marker> = new Map();
+  private selectedVehicleMarker: L.Marker | null = null;
 
   constructor() { }
 
@@ -373,6 +374,50 @@ export class MapService {
           .split(' ')
           .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
           .join(' ');
+    }
+  }
+
+  centerOnVehicle(vehicleId: string): void {
+    if (!this.map) {
+      console.log('MapService: Cannot center on vehicle - map not initialized');
+      return;
+    }
+
+    const marker = this.vehicleMarkers.get(vehicleId);
+    if (marker) {
+      console.log('MapService: Centering map on vehicle:', vehicleId);
+      const latLng = marker.getLatLng();
+      this.map.setView(latLng, 15);
+      this.highlightVehicleMarker(vehicleId);
+    } else {
+      console.warn('MapService: Vehicle marker not found for ID:', vehicleId);
+    }
+  }
+
+  highlightVehicleMarker(vehicleId: string): void {
+    if (!this.map) return;
+
+    // Remove previous highlight
+    if (this.selectedVehicleMarker) {
+      this.selectedVehicleMarker.setOpacity(1);
+      this.selectedVehicleMarker.setZIndexOffset(0);
+    }
+
+    const marker = this.vehicleMarkers.get(vehicleId);
+    if (marker) {
+      console.log('MapService: Highlighting vehicle marker:', vehicleId);
+      marker.setOpacity(0.8);
+      marker.setZIndexOffset(1000);
+      this.selectedVehicleMarker = marker;
+
+      // Remove highlight after 3 seconds
+      setTimeout(() => {
+        if (marker === this.selectedVehicleMarker) {
+          marker.setOpacity(1);
+          marker.setZIndexOffset(0);
+          this.selectedVehicleMarker = null;
+        }
+      }, 3000);
     }
   }
 

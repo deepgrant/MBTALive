@@ -13,10 +13,12 @@ export class VehicleService {
   private vehiclesSubject = new BehaviorSubject<Vehicle[]>([]);
   private routesSubject = new BehaviorSubject<Route[]>([]);
   private selectedRouteSubject = new BehaviorSubject<string | null>(null);
+  private selectedVehicleSubject = new BehaviorSubject<string | null>(null);
 
   public vehicles$ = this.vehiclesSubject.asObservable();
   public routes$ = this.routesSubject.asObservable();
   public selectedRoute$ = this.selectedRouteSubject.asObservable();
+  public selectedVehicle$ = this.selectedVehicleSubject.asObservable();
 
   public filteredVehicles$: Observable<Vehicle[]>;
   public selectedRouteStations$: Observable<Station[]>;
@@ -110,6 +112,11 @@ export class VehicleService {
   selectRoute(routeId: string | null): void {
     console.log('VehicleService: Selecting route:', routeId);
     this.selectedRouteSubject.next(routeId);
+  }
+
+  selectVehicle(vehicleId: string | null): void {
+    console.log('VehicleService: Selecting vehicle:', vehicleId);
+    this.selectedVehicleSubject.next(vehicleId);
   }
 
   getVehiclesByRoute(routeId: string): Observable<Vehicle[]> {

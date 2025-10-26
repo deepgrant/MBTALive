@@ -72,7 +72,20 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     });
 
-    this.subscriptions.push(vehicleSub, selectedRouteSub, stationsSub, shapesSub);
+    // Subscribe to selected vehicle
+    const selectedVehicleSub = this.vehicleService.selectedVehicle$.subscribe({
+      next: (vehicleId) => {
+        console.log('MapComponent: Selected vehicle changed:', vehicleId);
+        if (vehicleId) {
+          this.mapService.highlightVehicleMarker(vehicleId);
+        }
+      },
+      error: (error) => {
+        console.error('MapComponent: Error receiving selected vehicle:', error);
+      }
+    });
+
+    this.subscriptions.push(vehicleSub, selectedRouteSub, stationsSub, shapesSub, selectedVehicleSub);
   }
 
   ngAfterViewInit(): void {
