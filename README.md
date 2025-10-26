@@ -2,6 +2,8 @@
 
 A modern full-stack application for tracking MBTA commuter rail vehicles in real-time using Scala 3 backend and Angular frontend with interactive maps.
 
+![Screenshot 2025-10-26 at 7 16 43 PM](https://github.com/user-attachments/assets/f25166f1-bc4c-4665-bf6d-3bc2316b4a34)
+
 ## Features
 
 - **Real-time Vehicle Tracking**: Live updates of commuter rail vehicle positions
