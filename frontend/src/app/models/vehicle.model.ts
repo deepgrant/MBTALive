@@ -8,6 +8,7 @@ export interface Vehicle {
   direction: string;
   destination: string;
   currentStatus: string;
+  stopName: string;
   updatedAt: string;
 }
 
@@ -21,6 +22,7 @@ export interface VehicleResponse {
   direction?: string;
   destination?: string;
   currentStatus?: string;
+  stopName?: string;
   updatedAt?: string;
   directionId?: number;
   stopId?: string;

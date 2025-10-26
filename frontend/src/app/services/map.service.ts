@@ -123,7 +123,7 @@ export class MapService {
         Direction: ${vehicle.direction}<br>
         Destination: ${vehicle.destination}<br>
         Speed: ${vehicle.speed.toFixed(1)} mph<br>
-        Status: ${vehicle.currentStatus}<br>
+        Status: ${this.formatVehicleStatus(vehicle.currentStatus, vehicle.stopName)}<br>
         Updated: ${new Date(vehicle.updatedAt).toLocaleTimeString()}
       </div>
     `);
@@ -336,6 +336,27 @@ export class MapService {
         ">${station.name}</div>
       </div>
     `;
+  }
+
+  private formatVehicleStatus(status: string, stopName?: string): string {
+    if (!status) return 'Unknown';
+    
+    const stop = stopName && stopName !== 'Unknown' ? stopName : 'next stop';
+    
+    switch (status.toUpperCase()) {
+      case 'IN_TRANSIT_TO':
+        return `In transit to ${stop}`;
+      case 'STOPPED_AT':
+        return `Stopped at ${stop}`;
+      case 'INCOMING_AT':
+        return `Incoming at ${stop}`;
+      default:
+        // Convert underscores to spaces and title case
+        return status.replace(/_/g, ' ')
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ');
+    }
   }
 
   private decodePolyline(encoded: string): L.LatLngExpression[] {

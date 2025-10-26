@@ -74,6 +74,7 @@ export class ApiService {
                   direction: vehicle.direction || 'Unknown',
                   destination: vehicle.destination || 'Unknown',
                   currentStatus: vehicle.currentStatus || 'Unknown',
+                  stopName: vehicle.stopName || 'Unknown',
                   updatedAt: vehicle.updatedAt || new Date().toISOString()
                 }));
                 console.log('ApiService: Mapped vehicle data:', mappedVehicles);
