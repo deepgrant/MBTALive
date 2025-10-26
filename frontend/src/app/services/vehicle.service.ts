@@ -35,7 +35,22 @@ export class VehicleService {
           return of([]);
         }
         console.log('VehicleService: Starting vehicle polling for route:', selectedRoute);
-        return this.apiService.getRealTimeVehiclesByRoute(selectedRoute, 10000);
+        return this.apiService.getRealTimeVehiclesByRoute(selectedRoute, 10000).pipe(
+          switchMap(vehicles => {
+            // Get route info to add route type to vehicles
+            return this.getRouteById(selectedRoute).pipe(
+              map(route => {
+                if (route) {
+                  return vehicles.map(vehicle => ({
+                    ...vehicle,
+                    routeType: route.route_type
+                  }));
+                }
+                return vehicles;
+              })
+            );
+          })
+        );
       })
     );
 

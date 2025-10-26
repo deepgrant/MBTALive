@@ -10,6 +10,7 @@ export interface Vehicle {
   currentStatus: string;
   stopName: string;
   updatedAt: string;
+  routeType?: number;
 }
 
 export interface VehicleResponse {
@@ -29,4 +30,5 @@ export interface VehicleResponse {
   tripId?: string;
   currentStopSequence?: number;
   timeStamp: number;
+  routeType?: number;
 }

@@ -116,13 +116,14 @@ export class MapService {
     }
 
     // Add popup with vehicle information
+    const isBus = vehicle.routeType === 3;
     marker.bindPopup(`
       <div>
         <strong>Vehicle ${vehicle.vehicleId}</strong><br>
         Route: ${vehicle.routeId}<br>
         Direction: ${vehicle.direction}<br>
         Destination: ${vehicle.destination}<br>
-        Speed: ${vehicle.speed.toFixed(1)} mph<br>
+        ${isBus ? `Vehicle: ${vehicle.vehicleId}` : `Speed: ${vehicle.speed.toFixed(1)} mph`}<br>
         Status: ${this.formatVehicleStatus(vehicle.currentStatus, vehicle.stopName)}<br>
         Updated: ${new Date(vehicle.updatedAt).toLocaleTimeString()}
       </div>
@@ -308,11 +309,12 @@ export class MapService {
   private createVehicleMarkerHtml(vehicle: Vehicle): string {
     const rotation = vehicle.bearing || 0;
     const speed = vehicle.speed || 0;
+    const isBus = vehicle.routeType === 3;
     
     return `
       <div class="vehicle-marker-container" style="transform: rotate(${rotation}deg);">
         <div class="vehicle-marker-circle">
-          <div class="vehicle-marker-speed">${speed.toFixed(0)}</div>
+          ${isBus ? '' : `<div class="vehicle-marker-speed">${speed.toFixed(0)}</div>`}
         </div>
         <div class="vehicle-marker-direction"></div>
       </div>
