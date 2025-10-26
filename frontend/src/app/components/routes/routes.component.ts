@@ -63,10 +63,13 @@ export class RoutesComponent implements OnInit, OnDestroy {
   }
 
   selectRoute(routeId: string): void {
+    console.log('RoutesComponent: Route clicked:', routeId, 'currently selected:', this.selectedRoute);
     if (this.selectedRoute === routeId) {
       // Deselect if already selected
+      console.log('RoutesComponent: Deselecting route');
       this.vehicleService.selectRoute(null);
     } else {
+      console.log('RoutesComponent: Selecting new route:', routeId);
       this.vehicleService.selectRoute(routeId);
     }
   }

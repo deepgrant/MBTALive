@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, combineLatest, EMPTY, of } from 'rxjs';
-import { map, distinctUntilChanged, switchMap, catchError } from 'rxjs/operators';
+import { map, switchMap, catchError } from 'rxjs/operators';
 import { Vehicle } from '../models/vehicle.model';
 import { Route, Shape } from '../models/route.model';
 import { Station } from '../models/station.model';
@@ -29,12 +29,14 @@ export class VehicleService {
     // Set up filtered vehicles based on selected route with polling
     this.filteredVehicles$ = this.selectedRoute$.pipe(
       switchMap(selectedRoute => {
+        console.log('VehicleService: Selected route changed to:', selectedRoute);
         if (!selectedRoute) {
+          console.log('VehicleService: No route selected, returning empty vehicles');
           return of([]);
         }
+        console.log('VehicleService: Starting vehicle polling for route:', selectedRoute);
         return this.apiService.getRealTimeVehiclesByRoute(selectedRoute, 10000);
-      }),
-      distinctUntilChanged()
+      })
     );
 
     // Set up observables for selected route data
@@ -91,6 +93,7 @@ export class VehicleService {
   }
 
   selectRoute(routeId: string | null): void {
+    console.log('VehicleService: Selecting route:', routeId);
     this.selectedRouteSubject.next(routeId);
   }
 

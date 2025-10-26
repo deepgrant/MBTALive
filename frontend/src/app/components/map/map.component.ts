@@ -94,7 +94,16 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private updateMapWithVehicles(vehicles: Vehicle[]): void {
     console.log('MapComponent: Updating vehicles on map:', vehicles.length);
+    console.log('MapComponent: Vehicle data received:', vehicles);
+    
+    if (vehicles.length === 0) {
+      console.log('MapComponent: No vehicles to display');
+      return;
+    }
+    
+    console.log('MapComponent: Calling mapService.updateVehicleMarkers');
     this.mapService.updateVehicleMarkers(vehicles);
+    console.log('MapComponent: Vehicle markers update call completed');
     // DO NOT call fitBoundsToVehicles() - keep current map view
   }
 

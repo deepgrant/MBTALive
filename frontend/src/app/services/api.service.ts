@@ -45,34 +45,45 @@ export class ApiService {
   }
 
   getVehiclesByRoute(routeId: string): Observable<Vehicle[]> {
+    console.log('ApiService: Getting vehicles for route:', routeId);
     // First get vehicle IDs for the route
     return this.http.get<string[]>(`${this.baseUrl}/route/${routeId}/vehicles`)
       .pipe(
         switchMap(vehicleIds => {
+          console.log('ApiService: Got vehicle IDs:', vehicleIds);
           if (vehicleIds.length === 0) {
+            console.log('ApiService: No vehicle IDs found, returning empty array');
             return new Observable<Vehicle[]>(observer => {
               observer.next([]);
               observer.complete();
             });
           }
           // Then fetch vehicle data using POST
+          console.log('ApiService: Fetching vehicle data for IDs:', vehicleIds);
           return this.http.post<VehicleResponse[]>(`${this.baseUrl}/vehicles`, { vehicleIds })
             .pipe(
-              map((vehicles: VehicleResponse[]) => 
-                vehicles.map(vehicle => ({
+              map((vehicles: VehicleResponse[]) => {
+                console.log('ApiService: Got vehicle data:', vehicles);
+                const mappedVehicles = vehicles.map(vehicle => ({
                   routeId: vehicle.routeId,
-                  vehicleId: vehicle.vehicleId,
-                  latitude: vehicle.latitude,
-                  longitude: vehicle.longitude,
-                  bearing: vehicle.bearing,
-                  speed: vehicle.speed,
-                  direction: vehicle.direction,
-                  destination: vehicle.destination,
-                  currentStatus: vehicle.currentStatus,
-                  updatedAt: vehicle.updatedAt
-                }))
-              )
+                  vehicleId: vehicle.vehicleId || 'unknown',
+                  latitude: vehicle.latitude || 0,
+                  longitude: vehicle.longitude || 0,
+                  bearing: vehicle.bearing || 0,
+                  speed: vehicle.speed || 0,
+                  direction: vehicle.direction || 'Unknown',
+                  destination: vehicle.destination || 'Unknown',
+                  currentStatus: vehicle.currentStatus || 'Unknown',
+                  updatedAt: vehicle.updatedAt || new Date().toISOString()
+                }));
+                console.log('ApiService: Mapped vehicle data:', mappedVehicles);
+                return mappedVehicles;
+              })
             );
+        }),
+        catchError(error => {
+          console.error('ApiService: Error fetching vehicles for route:', routeId, error);
+          return of([]);
         })
       );
   }
@@ -95,10 +106,14 @@ export class ApiService {
   }
 
   getRealTimeVehiclesByRoute(routeId: string, intervalMs: number = 10000): Observable<Vehicle[]> {
+    console.log('ApiService: Starting real-time vehicle polling for route:', routeId, 'interval:', intervalMs);
     return interval(intervalMs)
       .pipe(
         startWith(0),
-        switchMap(() => this.getVehiclesByRoute(routeId))
+        switchMap(() => {
+          console.log('ApiService: Polling vehicles for route:', routeId, 'at', new Date().toLocaleTimeString());
+          return this.getVehiclesByRoute(routeId);
+        })
       );
   }
 

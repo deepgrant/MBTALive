@@ -68,12 +68,17 @@ export class MapService {
   }
 
   addVehicleMarker(vehicle: Vehicle): void {
-    if (!this.map) return;
+    if (!this.map) {
+      console.log('MapService: Cannot add vehicle marker - map not initialized');
+      return;
+    }
 
+    console.log('MapService: Adding vehicle marker for vehicle:', vehicle.vehicleId, 'at', vehicle.latitude, vehicle.longitude);
     const markerId = vehicle.vehicleId;
     
     // Remove existing marker if it exists
     if (this.vehicleMarkers.has(markerId)) {
+      console.log('MapService: Removing existing marker for vehicle:', markerId);
       this.map.removeLayer(this.vehicleMarkers.get(markerId)!);
     }
 
@@ -85,9 +90,30 @@ export class MapService {
       iconAnchor: [10, 10]
     });
 
+    console.log('MapService: Creating marker at coordinates:', [vehicle.latitude, vehicle.longitude]);
     const marker = L.marker([vehicle.latitude, vehicle.longitude], {
       icon: vehicleIcon
     }).addTo(this.map);
+
+    console.log('MapService: Marker added to map successfully');
+    
+    // Check if marker is within current map bounds
+    if (this.map) {
+      const bounds = this.map.getBounds();
+      const markerLatLng = L.latLng(vehicle.latitude, vehicle.longitude);
+      const isInBounds = bounds.contains(markerLatLng);
+      console.log('MapService: Marker is within current map bounds:', isInBounds);
+      console.log('MapService: Current map bounds:', bounds);
+      console.log('MapService: Marker position:', markerLatLng);
+      
+      // If marker is not in bounds, log a warning
+      if (!isInBounds) {
+        console.warn('MapService: Vehicle marker is OUTSIDE current map bounds!');
+        console.warn('MapService: Vehicle coordinates:', vehicle.latitude, vehicle.longitude);
+        console.warn('MapService: Map center:', this.map.getCenter());
+        console.warn('MapService: Map zoom:', this.map.getZoom());
+      }
+    }
 
     // Add popup with vehicle information
     marker.bindPopup(`
@@ -103,19 +129,30 @@ export class MapService {
     `);
 
     this.vehicleMarkers.set(markerId, marker);
+    console.log('MapService: Vehicle marker stored in markers map');
   }
 
   updateVehicleMarkers(vehicles: Vehicle[]): void {
-    if (!this.map) return;
+    if (!this.map) {
+      console.log('MapService: Cannot update vehicle markers - map not initialized');
+      return;
+    }
+
+    console.log('MapService: Updating vehicle markers with', vehicles.length, 'vehicles');
+    console.log('MapService: Vehicle data:', vehicles);
 
     // Clear existing markers
+    console.log('MapService: Clearing', this.vehicleMarkers.size, 'existing markers');
     this.vehicleMarkers.forEach(marker => this.map!.removeLayer(marker));
     this.vehicleMarkers.clear();
 
     // Add new markers
-    vehicles.forEach(vehicle => {
+    vehicles.forEach((vehicle, index) => {
+      console.log(`MapService: Processing vehicle ${index + 1}/${vehicles.length}:`, vehicle);
       this.addVehicleMarker(vehicle);
     });
+
+    console.log('MapService: Vehicle markers update complete');
   }
 
   addRouteLayer(route: Route, shapes: Shape[]): void {
@@ -258,39 +295,11 @@ export class MapService {
     const speed = vehicle.speed || 0;
     
     return `
-      <div style="
-        width: 20px;
-        height: 20px;
-        background: #80276C;
-        border: 2px solid white;
-        border-radius: 50%;
-        transform: rotate(${rotation}deg);
-        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        position: relative;
-      ">
-        <div style="
-          position: absolute;
-          top: -8px;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 0;
-          height: 0;
-          border-left: 4px solid transparent;
-          border-right: 4px solid transparent;
-          border-bottom: 8px solid #80276C;
-        "></div>
-        <div style="
-          position: absolute;
-          bottom: -12px;
-          left: 50%;
-          transform: translateX(-50%);
-          font-size: 8px;
-          color: #80276C;
-          font-weight: bold;
-          background: white;
-          padding: 1px 2px;
-          border-radius: 2px;
-        ">${speed.toFixed(0)}</div>
+      <div class="vehicle-marker-container" style="transform: rotate(${rotation}deg);">
+        <div class="vehicle-marker-circle">
+          <div class="vehicle-marker-speed">${speed.toFixed(0)}</div>
+        </div>
+        <div class="vehicle-marker-direction"></div>
       </div>
     `;
   }
