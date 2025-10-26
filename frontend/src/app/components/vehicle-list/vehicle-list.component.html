@@ -1,5 +1,8 @@
 <div class="vehicle-list-header" *ngIf="selectedRoute">
   <h2 class="vehicle-list-title">Vehicles on Route {{selectedRoute}}</h2>
+  <button mat-icon-button (click)="testHighlighting()" title="Test highlighting">
+    <mat-icon>flash_on</mat-icon>
+  </button>
 </div>
 
 <div class="vehicle-list-content" *ngIf="selectedRoute && vehicles.length > 0">

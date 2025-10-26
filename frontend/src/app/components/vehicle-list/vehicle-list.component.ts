@@ -76,8 +76,17 @@ export class VehicleListComponent implements OnInit, OnDestroy {
 
   selectVehicle(vehicleId: string): void {
     console.log('VehicleListComponent: Vehicle clicked:', vehicleId);
+    console.log('VehicleListComponent: Available vehicles:', this.vehicles.map(v => v.vehicleId));
+    console.log('VehicleListComponent: Calling vehicleService.selectVehicle...');
     this.vehicleService.selectVehicle(vehicleId);
+    console.log('VehicleListComponent: Calling mapService.centerOnVehicle...');
     this.mapService.centerOnVehicle(vehicleId);
+    console.log('VehicleListComponent: Vehicle selection complete');
+  }
+
+  testHighlighting(): void {
+    console.log('VehicleListComponent: Testing highlighting...');
+    this.mapService.testHighlighting();
   }
 
   formatSpeed(speed: number): string {

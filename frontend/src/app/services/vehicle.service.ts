@@ -116,7 +116,9 @@ export class VehicleService {
 
   selectVehicle(vehicleId: string | null): void {
     console.log('VehicleService: Selecting vehicle:', vehicleId);
+    console.log('VehicleService: Current selected vehicle:', this.selectedVehicleSubject.value);
     this.selectedVehicleSubject.next(vehicleId);
+    console.log('VehicleService: Vehicle selection updated');
   }
 
   getVehiclesByRoute(routeId: string): Observable<Vehicle[]> {
