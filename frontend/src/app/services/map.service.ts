@@ -13,6 +13,10 @@ export class MapService {
   private vehicleMarkers: Map<string, L.Marker> = new Map();
   private routeLayers: Map<string, L.Polyline> = new Map();
   private stationMarkers: Map<string, L.Marker> = new Map();
+  private selectedVehicleMarker: L.Marker | null = null;
+  private vehicleData: Map<string, Vehicle> = new Map();
+  private originalIcons: Map<string, any> = new Map();
+  private highlightOverlay: L.Marker | null = null;
 
   constructor() { }
 
@@ -76,6 +80,9 @@ export class MapService {
     console.log('MapService: Adding vehicle marker for vehicle:', vehicle.vehicleId, 'at', vehicle.latitude, vehicle.longitude);
     const markerId = vehicle.vehicleId;
     
+    // Store vehicle data for highlighting
+    this.vehicleData.set(markerId, vehicle);
+    
     // Remove existing marker if it exists
     if (this.vehicleMarkers.has(markerId)) {
       console.log('MapService: Removing existing marker for vehicle:', markerId);
@@ -85,10 +92,13 @@ export class MapService {
     // Create custom icon for vehicle with direction
     const vehicleIcon = L.divIcon({
       className: 'vehicle-marker',
-      html: this.createVehicleMarkerHtml(vehicle),
+      html: this.createVehicleMarkerHtml(vehicle, false),
       iconSize: [20, 20],
       iconAnchor: [10, 10]
     });
+
+    // Store original icon for restoration
+    this.originalIcons.set(markerId, vehicleIcon);
 
     console.log('MapService: Creating marker at coordinates:', [vehicle.latitude, vehicle.longitude]);
     const marker = L.marker([vehicle.latitude, vehicle.longitude], {
@@ -116,13 +126,14 @@ export class MapService {
     }
 
     // Add popup with vehicle information
+    const isBus = vehicle.routeType === 3;
     marker.bindPopup(`
       <div>
         <strong>Vehicle ${vehicle.vehicleId}</strong><br>
         Route: ${vehicle.routeId}<br>
         Direction: ${vehicle.direction}<br>
         Destination: ${vehicle.destination}<br>
-        Speed: ${vehicle.speed.toFixed(1)} mph<br>
+        ${isBus ? `Vehicle: ${vehicle.vehicleId}` : `Speed: ${vehicle.speed.toFixed(1)} mph`}<br>
         Status: ${this.formatVehicleStatus(vehicle.currentStatus, vehicle.stopName)}<br>
         Updated: ${new Date(vehicle.updatedAt).toLocaleTimeString()}
       </div>
@@ -141,16 +152,37 @@ export class MapService {
     console.log('MapService: Updating vehicle markers with', vehicles.length, 'vehicles');
     console.log('MapService: Vehicle data:', vehicles);
 
+    // Store which vehicle was highlighted before clearing
+    const previouslyHighlightedVehicle = this.selectedVehicleMarker ? 
+      Array.from(this.vehicleMarkers.entries()).find(([id, marker]) => marker === this.selectedVehicleMarker)?.[0] : null;
+
+    // Clear existing highlight overlay
+    if (this.selectedVehicleMarker) {
+      console.log('MapService: Clearing highlight overlay due to polling update');
+      this.map.removeLayer(this.selectedVehicleMarker);
+      this.selectedVehicleMarker = null;
+    }
+
     // Clear existing markers
     console.log('MapService: Clearing', this.vehicleMarkers.size, 'existing markers');
     this.vehicleMarkers.forEach(marker => this.map!.removeLayer(marker));
     this.vehicleMarkers.clear();
+    this.vehicleData.clear();
+    this.originalIcons.clear();
 
     // Add new markers
     vehicles.forEach((vehicle, index) => {
       console.log(`MapService: Processing vehicle ${index + 1}/${vehicles.length}:`, vehicle);
       this.addVehicleMarker(vehicle);
     });
+
+    // Re-apply highlighting if there was a previously highlighted vehicle
+    if (previouslyHighlightedVehicle) {
+      console.log('MapService: Re-applying highlight to vehicle after update:', previouslyHighlightedVehicle);
+      setTimeout(() => {
+        this.highlightVehicleMarker(previouslyHighlightedVehicle);
+      }, 100);
+    }
 
     console.log('MapService: Vehicle markers update complete');
   }
@@ -305,16 +337,26 @@ export class MapService {
     }
   }
 
-  private createVehicleMarkerHtml(vehicle: Vehicle): string {
+  private createVehicleMarkerHtml(vehicle: Vehicle, isHighlighted: boolean = false): string {
     const rotation = vehicle.bearing || 0;
     const speed = vehicle.speed || 0;
+    const isBus = vehicle.routeType === 3;
+    const size = isHighlighted ? 24 : 20;
+    const borderWidth = isHighlighted ? 3 : 2;
+    const borderColor = isHighlighted ? '#FF5722' : '#ffffff';
     
     return `
-      <div class="vehicle-marker-container" style="transform: rotate(${rotation}deg);">
-        <div class="vehicle-marker-circle">
-          <div class="vehicle-marker-speed">${speed.toFixed(0)}</div>
+      <div class="vehicle-marker-container" style="transform: rotate(${rotation}deg); width: ${size}px; height: ${size}px;">
+        <div class="vehicle-marker-circle" style="
+          width: ${size}px;
+          height: ${size}px;
+          border: ${borderWidth}px solid ${borderColor};
+          ${isHighlighted ? 'box-shadow: 0 0 10px rgba(255, 87, 34, 0.8);' : ''}
+        ">
+          ${isBus ? '' : `<div class="vehicle-marker-speed">${speed.toFixed(0)}</div>`}
         </div>
         <div class="vehicle-marker-direction"></div>
+        ${isHighlighted ? '<div class="vehicle-marker-highlight-ring"></div>' : ''}
       </div>
     `;
   }
@@ -371,6 +413,188 @@ export class MapService {
           .split(' ')
           .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
           .join(' ');
+    }
+  }
+
+  centerOnVehicle(vehicleId: string): void {
+    if (!this.map) {
+      console.log('MapService: Cannot center on vehicle - map not initialized');
+      return;
+    }
+
+    console.log('MapService: Attempting to center on vehicle:', vehicleId);
+    const marker = this.vehicleMarkers.get(vehicleId);
+    if (marker) {
+      console.log('MapService: Centering map on vehicle:', vehicleId);
+      const latLng = marker.getLatLng();
+      console.log('MapService: Vehicle coordinates:', latLng);
+      this.map.setView(latLng, 15);
+      console.log('MapService: Map centered on vehicle:', vehicleId);
+    } else {
+      console.warn('MapService: Vehicle marker not found for ID:', vehicleId);
+      console.warn('MapService: Available markers:', Array.from(this.vehicleMarkers.keys()));
+    }
+  }
+
+  highlightVehicleMarker(vehicleId: string): void {
+    if (!this.map) {
+      console.log('MapService: Cannot highlight - map not initialized');
+      return;
+    }
+
+    console.log('MapService: Attempting to highlight vehicle:', vehicleId);
+    console.log('MapService: Available vehicle markers:', Array.from(this.vehicleMarkers.keys()));
+    console.log('MapService: Available vehicle data:', Array.from(this.vehicleData.keys()));
+
+    // Remove previous highlight
+    if (this.highlightOverlay) {
+      console.log('MapService: Removing previous highlight overlay');
+      this.map.removeLayer(this.highlightOverlay);
+      this.highlightOverlay = null;
+    }
+
+    const marker = this.vehicleMarkers.get(vehicleId);
+    if (marker) {
+      console.log('MapService: Marker found for vehicle:', vehicleId);
+      
+      // Get vehicle data for highlighting
+      const vehicle = this.getVehicleById(vehicleId);
+      if (vehicle) {
+        console.log('MapService: Creating highlight overlay');
+        
+        // Create a separate highlight overlay at the same position
+        const highlightIcon = L.divIcon({
+          className: 'vehicle-highlight-overlay',
+          html: '<div class="highlight-ring"></div>',
+          iconSize: [40, 40],
+          iconAnchor: [20, 20]
+        });
+        
+        const latLng = marker.getLatLng();
+        this.highlightOverlay = L.marker(latLng, {
+          icon: highlightIcon,
+          interactive: false,
+          zIndexOffset: 1000
+        }).addTo(this.map);
+        
+        console.log('MapService: Highlight overlay created at:', latLng);
+        
+        // Auto-remove highlight after 2 seconds (fallback)
+        setTimeout(() => {
+          if (this.highlightOverlay) {
+            console.log('MapService: Auto-removing highlight overlay after 2 seconds');
+            this.map!.removeLayer(this.highlightOverlay);
+            this.highlightOverlay = null;
+          }
+        }, 2000);
+        
+        console.log('MapService: Highlight will also be removed on next polling update');
+      } else {
+        console.warn('MapService: Vehicle data not found for highlighting:', vehicleId);
+      }
+    } else {
+      console.warn('MapService: Marker not found for vehicle:', vehicleId);
+      console.warn('MapService: Available markers:', this.vehicleMarkers);
+    }
+  }
+
+  private restoreOriginalMarker(marker: L.Marker): void {
+    // Find the vehicle ID for this marker
+    let vehicleId: string | null = null;
+    for (const [id, m] of this.vehicleMarkers.entries()) {
+      if (m === marker) {
+        vehicleId = id;
+        break;
+      }
+    }
+    
+    if (vehicleId) {
+      const originalIcon = this.originalIcons.get(vehicleId);
+      if (originalIcon) {
+        marker.setIcon(originalIcon);
+      }
+    }
+    
+    marker.setOpacity(1);
+    marker.setZIndexOffset(0);
+    
+    // Remove pulsing animation
+    const element = marker.getElement();
+    if (element) {
+      element.style.animation = '';
+    }
+    
+    this.selectedVehicleMarker = null;
+  }
+
+  private getVehicleById(vehicleId: string): Vehicle | null {
+    return this.vehicleData.get(vehicleId) || null;
+  }
+
+  private addPulsingEffect(marker: L.Marker): void {
+    const element = marker.getElement();
+    if (element) {
+      element.style.animation = 'vehicle-pulse 1.5s ease-in-out infinite';
+    }
+  }
+
+  // Simple test method to verify highlighting works
+  testHighlighting(): void {
+    console.log('MapService: Testing highlighting...');
+    console.log('MapService: Available markers:', Array.from(this.vehicleMarkers.keys()));
+    
+    if (this.vehicleMarkers.size > 0) {
+      const firstVehicleId = Array.from(this.vehicleMarkers.keys())[0];
+      console.log('MapService: Testing with first vehicle:', firstVehicleId);
+      
+      // SIMPLE TEST: Just make the marker very obvious
+      const marker = this.vehicleMarkers.get(firstVehicleId);
+      if (marker) {
+        console.log('MapService: Found marker, applying SIMPLE highlight');
+        
+        // Make it very obvious
+        marker.setOpacity(0.3); // Very transparent
+        marker.setZIndexOffset(9999); // On top
+        
+        // Try to get the element and make it huge and red
+        setTimeout(() => {
+          const element = marker.getElement();
+          if (element) {
+            console.log('MapService: Element found, making it HUGE and RED');
+            element.style.width = '50px';
+            element.style.height = '50px';
+            element.style.backgroundColor = 'red';
+            element.style.border = '5px solid yellow';
+            element.style.borderRadius = '50%';
+            element.style.position = 'relative';
+            element.style.zIndex = '9999';
+            console.log('MapService: Applied HUGE RED styling');
+          } else {
+            console.log('MapService: Element not found');
+          }
+        }, 100);
+        
+        // Reset after 3 seconds
+        setTimeout(() => {
+          console.log('MapService: Resetting test highlight');
+          marker.setOpacity(1);
+          marker.setZIndexOffset(0);
+          const element = marker.getElement();
+          if (element) {
+            element.style.width = '';
+            element.style.height = '';
+            element.style.backgroundColor = '';
+            element.style.border = '';
+            element.style.borderRadius = '';
+            element.style.position = '';
+            element.style.zIndex = '';
+          }
+        }, 3000);
+      } else {
+        console.log('MapService: Marker not found for testing');
+      }
+    } else {
+      console.log('MapService: No markers available for testing');
     }
   }
 

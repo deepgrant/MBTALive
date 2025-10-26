@@ -1,0 +1,73 @@
+<div class="vehicle-list-header" *ngIf="selectedRoute">
+  <h2 class="vehicle-list-title">Vehicles on Route {{selectedRoute}}</h2>
+  <button mat-icon-button (click)="testHighlighting()" title="Test highlighting">
+    <mat-icon>flash_on</mat-icon>
+  </button>
+</div>
+
+<div class="vehicle-list-content" *ngIf="selectedRoute && vehicles.length > 0">
+  <mat-list>
+    <mat-list-item *ngFor="let vehicle of vehicles" 
+                   (click)="selectVehicle(vehicle.vehicleId)"
+                   [class.selected]="selectedVehicle === vehicle.vehicleId"
+                   class="vehicle-item">
+      <div class="vehicle-info">
+        <div class="vehicle-header">
+          <span class="vehicle-id">{{vehicle.vehicleId}}</span>
+          <mat-icon class="vehicle-type-icon">{{isBus(vehicle) ? 'directions_bus' : 'train'}}</mat-icon>
+        </div>
+        
+        <div class="vehicle-details">
+          <div class="detail-row">
+            <mat-icon>directions</mat-icon>
+            <span>{{vehicle.direction}}</span>
+          </div>
+          
+          <div class="detail-row">
+            <mat-icon>place</mat-icon>
+            <span>{{vehicle.destination}}</span>
+          </div>
+          
+          <div class="detail-row" *ngIf="!isBus(vehicle)">
+            <mat-icon>speed</mat-icon>
+            <span>{{formatSpeed(vehicle.speed)}}</span>
+          </div>
+          
+          <div class="detail-row">
+            <mat-icon>info</mat-icon>
+            <span>{{formatStatus(vehicle.currentStatus, vehicle.stopName)}}</span>
+          </div>
+          
+          <div class="detail-row">
+            <mat-icon>schedule</mat-icon>
+            <span>{{formatTime(vehicle.updatedAt)}}</span>
+          </div>
+        </div>
+      </div>
+    </mat-list-item>
+  </mat-list>
+</div>
+
+<div class="vehicle-list-empty" *ngIf="selectedRoute && vehicles.length === 0">
+  <mat-card class="empty-state-card">
+    <mat-card-content>
+      <div class="empty-state-content">
+        <mat-icon class="empty-icon">directions_bus</mat-icon>
+        <h3>No Vehicles Found</h3>
+        <p>No vehicles are currently active on this route.</p>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>
+
+<div class="vehicle-list-no-route" *ngIf="!selectedRoute">
+  <mat-card class="no-route-card">
+    <mat-card-content>
+      <div class="no-route-content">
+        <mat-icon class="no-route-icon">route</mat-icon>
+        <h3>Select a Route</h3>
+        <p>Choose a route from the left panel to view its vehicles.</p>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

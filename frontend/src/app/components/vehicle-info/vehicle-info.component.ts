@@ -66,4 +66,8 @@ export class VehicleInfoComponent implements OnInit, OnDestroy {
           .join(' ');
     }
   }
+
+  isBus(vehicle: Vehicle): boolean {
+    return vehicle.routeType === 3;
+  }
 }

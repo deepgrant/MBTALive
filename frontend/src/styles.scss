@@ -100,3 +100,123 @@ html, body {
   border-right: 4px solid transparent;
   border-bottom: 8px solid $mbta-purple;
 }
+
+// Vehicle highlighting styles
+.vehicle-marker-selected {
+  .vehicle-marker-circle {
+    background: $mbta-orange !important;
+    border-color: #FF5722 !important;
+    box-shadow: 0 0 15px rgba(255, 87, 34, 0.8) !important;
+  }
+  
+  .vehicle-marker-direction {
+    border-bottom-color: $mbta-orange !important;
+  }
+}
+
+.vehicle-marker-highlight-ring {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  right: -6px;
+  bottom: -6px;
+  border: 2px solid #FF5722;
+  border-radius: 50%;
+  animation: vehicle-pulse-ring 1.5s ease-in-out infinite;
+}
+
+// Animations
+@keyframes vehicle-pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes vehicle-pulse-ring {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+
+// Enhanced pulsing glow animation for vehicle highlighting
+@keyframes pulse-glow {
+  0% {
+    box-shadow: 0 0 20px #FF5722, 0 0 40px #FF5722;
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 30px #FF5722, 0 0 60px #FF5722, 0 0 80px #FF5722;
+    transform: scale(1.1);
+  }
+  100% {
+    box-shadow: 0 0 20px #FF5722, 0 0 40px #FF5722;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+// Test highlight class for vehicle markers
+.test-highlight {
+  border: 4px solid #FF5722 !important;
+  box-shadow: 0 0 20px #FF5722, 0 0 40px #FF5722 !important;
+  animation: pulse-glow 1.5s ease-in-out infinite !important;
+  background-color: #FF5722 !important;
+  transform: scale(1.2) !important;
+}
+
+// Vehicle highlight overlay - separate from original marker
+.vehicle-highlight-overlay {
+  pointer-events: none;
+}
+
+.highlight-ring {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #FF5722;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 20px #FF5722, 0 0 40px #FF5722;
+  animation: pulse-glow 0.8s ease-in-out infinite;
+  position: relative;
+}
+
+.highlight-ring::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  right: -8px;
+  bottom: -8px;
+  border: 2px solid #FF5722;
+  border-radius: 50%;
+  animation: pulse-ring 0.8s ease-in-out infinite;
+}

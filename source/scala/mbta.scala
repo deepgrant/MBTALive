@@ -552,6 +552,7 @@ class MBTAService extends Actor with ActorLogging {
             Source.single(VehicleRoute(routeId, directionNames, destinationNames))
               .via(vehiclesPerRouteRawFlow)
               .via(vehiclesPerRouteFlow)
+              .via(stopIdLookupFlow)
               .runWith(Sink.seq)
               .map(_.toVector.collect {
                 case vd: VehicleData => vd

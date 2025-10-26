@@ -1,18 +1,20 @@
-<mat-sidenav-container class="sidenav-container">
-  <mat-sidenav #drawer class="sidenav" fixedInViewport
-      [attr.role]="'navigation'"
-      mode="side" opened="true">
+<div class="app-container">
+  <div class="routes-panel" *ngIf="routesPanelVisible">
     <app-routes></app-routes>
-  </mat-sidenav>
+  </div>
   
-  <mat-sidenav-content>
+  <div class="vehicle-panel" *ngIf="selectedRoute">
+    <app-vehicle-list></app-vehicle-list>
+  </div>
+  
+  <div class="main-content">
     <mat-toolbar color="primary">
       <button
         type="button"
-        aria-label="Toggle sidenav"
+        aria-label="Toggle routes panel"
         mat-icon-button
-        (click)="drawer.toggle()">
-        <mat-icon aria-label="Side nav toggle icon">menu</mat-icon>
+        (click)="toggleRoutesPanel()">
+        <mat-icon aria-label="Routes toggle icon">menu</mat-icon>
       </button>
       <img src="assets/favicon.png" alt="MBTA Logo" class="toolbar-favicon">
       <span>{{title}}</span>
@@ -23,5 +25,5 @@
     <div class="content">
       <app-map></app-map>
     </div>
-  </mat-sidenav-content>
-</mat-sidenav-container>
+  </div>
+</div>

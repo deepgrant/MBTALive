@@ -16,9 +16,14 @@
         <span>{{selectedVehicle.destination}}</span>
       </div>
       
-      <div class="detail-row">
+      <div class="detail-row" *ngIf="!isBus(selectedVehicle)">
         <mat-icon>speed</mat-icon>
         <span>{{formatSpeed(selectedVehicle.speed)}}</span>
+      </div>
+      
+      <div class="detail-row" *ngIf="isBus(selectedVehicle)">
+        <mat-icon>directions_bus</mat-icon>
+        <span>{{selectedVehicle.vehicleId}}</span>
       </div>
       
       <div class="detail-row">
