@@ -209,14 +209,19 @@ html, body {
   position: relative;
 }
 
-.highlight-ring::before {
-  content: '';
-  position: absolute;
-  top: -8px;
-  left: -8px;
-  right: -8px;
-  bottom: -8px;
-  border: 2px solid #FF5722;
-  border-radius: 50%;
-  animation: pulse-ring 0.8s ease-in-out infinite;
+// Vehicle tooltip styles
+.vehicle-tooltip {
+  background: rgba(0, 0, 0, 0.8) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+  font-weight: bold !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+  white-space: nowrap !important;
+}
+
+.vehicle-tooltip::before {
+  border-top-color: rgba(0, 0, 0, 0.8) !important;
 }

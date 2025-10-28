@@ -126,19 +126,13 @@ export class MapService {
       }
     }
 
-    // Add popup with vehicle information
-    const isBus = vehicle.routeType === 3;
-    marker.bindPopup(`
-      <div>
-        <strong>Vehicle ${vehicle.vehicleId}</strong><br>
-        Route: ${vehicle.routeId}<br>
-        Direction: ${vehicle.direction}<br>
-        Destination: ${vehicle.destination}<br>
-        ${isBus ? `Vehicle: ${vehicle.vehicleId}` : `Speed: ${vehicle.speed.toFixed(1)} mph`}<br>
-        Status: ${this.formatVehicleStatus(vehicle.currentStatus, vehicle.stopName)}<br>
-        Updated: ${new Date(vehicle.updatedAt).toLocaleTimeString()}
-      </div>
-    `);
+    // Add permanent tooltip with vehicle number only
+    marker.bindTooltip(vehicle.vehicleId, {
+      permanent: true,
+      direction: 'top',
+      className: 'vehicle-tooltip',
+      offset: [0, -10]
+    });
 
     this.vehicleMarkers.set(markerId, marker);
     console.log('MapService: Vehicle marker stored in markers map');
