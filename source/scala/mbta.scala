@@ -173,12 +173,18 @@ class MBTAService extends Actor with ActorLogging {
       }
     }
 
-    def parseMbtaResponse(entity: HttpEntity) : Future[Config] = {
+    def parseMbtaResponseAsFlow(entity: HttpEntity) : Source[Config, NotUsed] = {
       entity
         .withoutSizeLimit
         .dataBytes
-        .runWith(Sink.fold(ByteString.empty)(_ ++ _))
+        .fold(ByteString.empty)(_ ++ _)
         .map { s => ConfigFactory.parseString(s.utf8String) }
+        .mapMaterializedValue(_ => NotUsed)
+    }
+
+    def parseMbtaResponse(entity: HttpEntity) : Future[Config] = {
+      parseMbtaResponseAsFlow(entity)
+        .runWith(Sink.head)
         .recover {
           case e: Throwable =>
             log.error("MBTAaccess.parseMbtaResponse -- recover -- {}", e)
@@ -565,113 +571,12 @@ class MBTAService extends Actor with ActorLogging {
       }
     }
 
-    def fetchVehicleData(vehicleIds: Vector[String]): Future[Vector[VehicleData]] = {
-      Source(vehicleIds)
-        .mapAsync(parallelism = 10) { vehicleId =>
-          MBTAaccess.queueRequest(
-            HttpRequest(uri = MBTAaccess.mbtaUri(
-              path = s"/vehicles/${vehicleId}",
-              query = MBTAaccess.mbtaQuery(Map("include" -> "stop"))
-            ))
-          ).flatMap {
-            case HttpResponse(StatusCodes.OK, _, entity, _) =>
-              MBTAaccess.parseMbtaResponse(entity).map { response =>
-                val vehicles = response.getObjectList("data").asScala.toVector
-                log.info(s"fetchVehicleData: Found ${vehicles.length} vehicles for vehicleId $vehicleId")
-
-                if (vehicles.nonEmpty) { 
-                  val vehicle = vehicles.head.toConfig
-                  val directionId = Try(vehicle.getInt("attributes.direction_id")).toOption
-                  val baseVehicleData = VehicleData(
-                    routeId = vehicle.getString("relationships.route.data.id"),
-                    vehicleId = Try(vehicle.getString("attributes.label")).toOption,
-                    stopId = Try(vehicle.getString("relationships.stop.data.id")).toOption,
-                    tripId = Try(vehicle.getString("relationships.trip.data.id")).toOption,
-                    bearing = Try(vehicle.getInt("attributes.bearing")).toOption,
-                    directionId = directionId,
-                    currentStatus = Try(vehicle.getString("attributes.current_status")).toOption,
-                    currentStopSequence = Try(vehicle.getInt("attributes.current_stop_sequence")).toOption,
-                    latitude = Try(vehicle.getDouble("attributes.latitude")).toOption,
-                    longitude = Try(vehicle.getDouble("attributes.longitude")).toOption,
-                    speed = Try(vehicle.getDouble("attributes.speed")).toOption,
-                    updatedAt = Try(vehicle.getString("attributes.updated_at")).toOption,
-                    direction = directionId.map(convertDirectionId),
-                    destination = None, // Will be enriched below
-                    stopName = None // Will be enriched below
-                  )
-                  
-                  // Enrich with trip and stop data
-                  Some(enrichVehicleData(baseVehicleData))
-                } else {
-                  log.warning(s"fetchVehicleData: No vehicles found for vehicleId $vehicleId")
-                  None
-                }
-              }
-            case _ => Future.successful(None)
-          }
-        }
-        .collect { case Some(vdFuture) => vdFuture }
-        .mapAsync(parallelism = 5) { vdFuture => vdFuture }
-        .runWith(Sink.seq)
-        .map(_.toVector)
-    }
-
     // Helper function to convert directionId to human-readable format
     def convertDirectionId(directionId: Int): String = {
       directionId match {
         case 0 => "Outbound"
         case 1 => "Inbound"
         case _ => "Unknown"
-      }
-    }
-
-    // Helper function to enrich vehicle data with trip and stop information
-    def enrichVehicleData(vehicleData: VehicleData): Future[VehicleData] = {
-      val tripFuture = vehicleData.tripId.map { tripId =>
-        MBTAaccess.queueRequest(
-          HttpRequest(uri = MBTAaccess.mbtaUri(
-            path = s"/trips/${tripId}",
-            query = MBTAaccess.mbtaQuery()
-          ))
-        ).flatMap {
-          case HttpResponse(StatusCodes.OK, _, entity, _) =>
-            MBTAaccess.parseMbtaResponse(entity).map { response =>
-              Try(response.getString("data.attributes.headsign")).toOption
-            }
-          case HttpResponse(code, _, entity, _) =>
-            log.error("enrichVehicleData trip lookup returned unexpected code: {} for tripId: {}", code.toString, tripId)
-            entity.discardBytes()
-            Future.successful(None)
-        }
-      }.getOrElse(Future.successful(None))
-
-      val stopFuture = vehicleData.stopId.map { stopId =>
-        MBTAaccess.queueRequest(
-          HttpRequest(uri = MBTAaccess.mbtaUri(
-            path = s"/stops/${stopId}",
-            query = MBTAaccess.mbtaQuery()
-          ))
-        ).flatMap {
-          case HttpResponse(StatusCodes.OK, _, entity, _) =>
-            MBTAaccess.parseMbtaResponse(entity).map { response =>
-              Try(response.getString("data.attributes.name")).toOption
-            }
-          case HttpResponse(code, _, entity, _) =>
-            log.error("enrichVehicleData stop lookup returned unexpected code: {} for stopId: {}", code.toString, stopId)
-            entity.discardBytes()
-            Future.successful(None)
-        }
-      }.getOrElse(Future.successful(None))
-
-      // Combine both futures
-      for {
-        destination <- tripFuture
-        stopName <- stopFuture
-      } yield {
-        vehicleData.copy(
-          destination = destination,
-          stopName = stopName
-        )
       }
     }
 
