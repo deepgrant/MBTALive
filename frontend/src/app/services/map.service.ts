@@ -102,7 +102,8 @@ export class MapService {
 
     console.log('MapService: Creating marker at coordinates:', [vehicle.latitude, vehicle.longitude]);
     const marker = L.marker([vehicle.latitude, vehicle.longitude], {
-      icon: vehicleIcon
+      icon: vehicleIcon,
+      zIndexOffset: 1000
     }).addTo(this.map);
 
     console.log('MapService: Marker added to map successfully');
@@ -266,7 +267,8 @@ export class MapService {
     });
 
     const marker = L.marker([station.latitude, station.longitude], {
-      icon: stationIcon
+      icon: stationIcon,
+      zIndexOffset: 0
     }).addTo(this.map);
 
     // Add popup with station information
@@ -474,7 +476,7 @@ export class MapService {
         this.highlightOverlay = L.marker(latLng, {
           icon: highlightIcon,
           interactive: false,
-          zIndexOffset: 1000
+          zIndexOffset: 2000
         }).addTo(this.map);
         
         console.log('MapService: Highlight overlay created at:', latLng);
