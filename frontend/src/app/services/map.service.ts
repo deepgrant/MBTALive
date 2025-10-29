@@ -381,7 +381,7 @@ export class MapService {
       <div style="
         width: 24px;
         height: 24px;
-        background: #1E88E5;
+        background: rgba(108, 117, 125, 0.7);
         border: 2px solid white;
         border-radius: 50%;
         box-shadow: 0 2px 4px rgba(0,0,0,0.3);
@@ -396,7 +396,7 @@ export class MapService {
           left: 50%;
           transform: translateX(-50%);
           font-size: 8px;
-          color: #1E88E5;
+          color: #6c757d;
           font-weight: bold;
           background: white;
           padding: 1px 2px;
