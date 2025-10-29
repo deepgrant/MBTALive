@@ -31,7 +31,7 @@ A modern full-stack application for tracking MBTA commuter rail vehicles in real
 
 ### Prerequisites
 
-- **Java 11+** for Scala backend
+- **Java 21** for Scala backend
 - **Node.js 18+** and **npm** for Angular frontend
 - **MBTA API Key** (optional, for higher rate limits)
 
