@@ -35,6 +35,25 @@
         <mat-icon>schedule</mat-icon>
         <span>{{formatTime(selectedVehicle.updatedAt)}}</span>
       </div>
+      
+      <div class="detail-row delay-info" [ngClass]="getDelayStatus(selectedVehicle.delaySeconds).severity">
+        <mat-icon>schedule</mat-icon>
+        <span [style.color]="getDelayStatus(selectedVehicle.delaySeconds).color">
+          {{getDelayStatus(selectedVehicle.delaySeconds).label}}
+        </span>
+      </div>
+      
+      <div class="detail-row" *ngIf="selectedVehicle.predictedArrivalTime || selectedVehicle.scheduledArrivalTime">
+        <mat-icon>access_time</mat-icon>
+        <span>
+          <div *ngIf="selectedVehicle.scheduledArrivalTime" class="time-info">
+            <strong>Scheduled:</strong> {{formatTime(selectedVehicle.scheduledArrivalTime)}}
+          </div>
+          <div *ngIf="selectedVehicle.predictedArrivalTime" class="time-info">
+            <strong>Predicted:</strong> {{formatTime(selectedVehicle.predictedArrivalTime)}}
+          </div>
+        </span>
+      </div>
     </div>
   </mat-card-content>
   

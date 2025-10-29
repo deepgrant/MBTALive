@@ -215,7 +215,7 @@ class MBTAService extends Actor with ActorLogging {
     implicit val routeInfoFormat: RootJsonFormat[RouteInfo] = jsonFormat6(RouteInfo.apply)
     implicit val stopInfoFormat: RootJsonFormat[StopInfo] = jsonFormat4(StopInfo.apply)
     implicit val shapeInfoFormat: RootJsonFormat[ShapeInfo] = jsonFormat2(ShapeInfo.apply)
-    implicit val vehicleDataFormat: RootJsonFormat[RequestFlow.VehicleData] = jsonFormat18(RequestFlow.VehicleData.apply)
+    implicit val vehicleDataFormat: RootJsonFormat[RequestFlow.VehicleData] = jsonFormat21(RequestFlow.VehicleData.apply)
     
     // Custom marshallers for HTTP responses
     implicit def routeInfoListMarshaller: Marshaller[Vector[RouteInfo], HttpEntity.Strict] = 
@@ -308,7 +308,8 @@ class MBTAService extends Actor with ActorLogging {
     ) extends vd
     case class VehiclesPerRouteRaw(
       route            : VehicleRoute,
-      rawVehicles      : Vector[Config]
+      rawVehicles      : Vector[Config],
+      rawPredictions   : Vector[Config] = Vector.empty[Config]
     ) extends vd
     case class VehicleData(
       routeId             : String,
@@ -328,7 +329,10 @@ class MBTAService extends Actor with ActorLogging {
       stopZone            : Option[String] = None,
       timeStamp           : Long           = java.time.Instant.now().toEpochMilli(),
       direction           : Option[String] = None,
-      destination         : Option[String] = None
+      destination         : Option[String] = None,
+      predictedArrivalTime : Option[String] = None,
+      scheduledArrivalTime : Option[String] = None,
+      delaySeconds        : Option[Int]    = None
     ) extends vd
     case class VehicleDataNull() extends vd
 
@@ -345,9 +349,12 @@ class MBTAService extends Actor with ActorLogging {
               case HttpResponse(StatusCodes.OK, _, entity, _) => {
                 MBTAaccess.parseMbtaResponse(entity).map { resp =>
                   log.info("vehiclesPerRouteRawFlow({}) returned: OK", route)
+                  val vehicles = resp.getObjectList("data").asScala.toVector.map { _.toConfig }
+                  
                   VehiclesPerRouteRaw(
-                    route       = vr,
-                    rawVehicles = resp.getObjectList("data").asScala.toVector.map { _.toConfig }
+                    route           = vr,
+                    rawVehicles     = vehicles,
+                    rawPredictions  = Vector.empty[Config] // Predictions will be fetched separately
                   )
                 }
               }
@@ -355,8 +362,9 @@ class MBTAService extends Actor with ActorLogging {
                 log.error("vehiclesPerRouteFlow returned unexpected code: {}", code.toString)
                 entity.discardBytes()
                 VehiclesPerRouteRaw(
-                  route       = vr,
-                  rawVehicles = Vector.empty[Config]
+                  route           = vr,
+                  rawVehicles     = Vector.empty[Config],
+                  rawPredictions  = Vector.empty[Config]
                 )
               }
             }
@@ -371,7 +379,7 @@ class MBTAService extends Actor with ActorLogging {
     def vehiclesPerRouteFlow : Flow[vd, vd, NotUsed] = {
       Flow[vd]
         .mapConcat {
-          case VehiclesPerRouteRaw(route, rv) => {
+          case VehiclesPerRouteRaw(route, rv, _) => {
             rv.map { r =>
               val directionId : Try[Int] = Try(r.getInt("attributes.direction_id"))
 
@@ -435,6 +443,159 @@ class MBTAService extends Actor with ActorLogging {
 
           case unExpected => Future.successful {
             log.error("stopIdLookupFlow unexpected input: {}", unExpected.toString)
+            VehicleDataNull()
+          }
+        }
+    }
+
+    def scheduleLookupFlow : Flow[vd, vd, NotUsed] = {
+      Flow[vd]
+        .mapAsync(parallelism = 8) {
+          case vd : VehicleData => {
+            (vd.tripId, vd.stopId) match {
+              case (Some(tripId), Some(stopId)) =>
+                val uri = MBTAaccess.mbtaUri(
+                  path  = "/schedules",
+                  query = MBTAaccess.mbtaQuery(Map("filter[trip]" -> tripId, "filter[stop]" -> stopId))
+                )
+
+                log.info("scheduleLookupFlow: Fetching schedules for vehicle {} with tripId: {} and stopId: {}", vd.vehicleId.getOrElse("unknown"), tripId, stopId)
+
+                MBTAaccess.queueRequest(
+                  HttpRequest(uri = uri)
+                ).flatMap {
+                  case HttpResponse(StatusCodes.OK, _, entity, _) => {
+                    MBTAaccess.parseMbtaResponse(entity).map { resp =>
+                      val schedules = resp.getObjectList("data").asScala.toVector.map { _.toConfig }
+                      
+                      log.info("scheduleLookupFlow: Received {} schedules for tripId: {} and stopId: {}", schedules.length, tripId, stopId)
+                      
+                      if (schedules.nonEmpty) {
+                        log.info("scheduleLookupFlow: First schedule data: {}", schedules.head.toString)
+                      } else {
+                        log.warning("scheduleLookupFlow: No schedules found for tripId: {} and stopId: {}", tripId, stopId)
+                      }
+                      
+                      schedules.headOption match {
+                        case Some(schedule) =>
+                          val scheduledArrival = Try(schedule.getString("attributes.arrival_time")).toOption
+                          val scheduledDeparture = Try(schedule.getString("attributes.departure_time")).toOption
+                          
+                          log.info("scheduleLookupFlow: Parsed scheduled times - arrival: {}, departure: {}", 
+                            scheduledArrival.getOrElse("None"), scheduledDeparture.getOrElse("None"))
+                          
+                          vd.copy(
+                            scheduledArrivalTime = scheduledArrival.orElse(scheduledDeparture)
+                          )
+                        case None => vd
+                      }
+                    }
+                  }
+                  case HttpResponse(code, _, entity, _) => Future.successful {
+                    log.error("scheduleLookupFlow returned unexpected code: {} with uri: {}", code.toString, uri.toString)
+                    entity.discardBytes()
+                    vd
+                  }
+                }
+              case _ => Future.successful(vd)
+            }
+          }
+
+          case unExpected => Future.successful {
+            log.error("scheduleLookupFlow unexpected input: {}", unExpected.toString)
+            VehicleDataNull()
+          }
+        }
+    }
+
+    def predictionLookupFlow : Flow[vd, vd, NotUsed] = {
+      Flow[vd]
+        .mapAsync(parallelism = 8) {
+          case vd : VehicleData => {
+            vd.tripId match {
+              case Some(tripId) =>
+                val uri = MBTAaccess.mbtaUri(
+                  path  = "/predictions",
+                  query = MBTAaccess.mbtaQuery(Map("filter[trip]" -> tripId))
+                )
+
+                log.info("predictionLookupFlow: Fetching predictions for vehicle {} with tripId: {} and stopId: {}", vd.vehicleId.getOrElse("unknown"), tripId, vd.stopId.getOrElse("unknown"))
+
+                MBTAaccess.queueRequest(
+                  HttpRequest(uri = uri)
+                ).flatMap {
+                  case HttpResponse(StatusCodes.OK, _, entity, _) => {
+                    MBTAaccess.parseMbtaResponse(entity).map { resp =>
+                      val predictions = resp.getObjectList("data").asScala.toVector.map { _.toConfig }
+                      
+                      log.info("predictionLookupFlow: Received {} predictions for tripId: {}", predictions.length, tripId)
+                      
+                      if (predictions.nonEmpty) {
+                        log.info("predictionLookupFlow: First prediction data: {}", predictions.head.toString)
+                      } else {
+                        log.warning("predictionLookupFlow: No predictions found for tripId: {}", tripId)
+                      }
+                      
+                      // Find prediction for the current stop or use the first available
+                      val relevantPrediction = predictions.find { pred =>
+                        val predStopId = Try(pred.getString("relationships.stop.data.id")).toOption
+                        predStopId == vd.stopId
+                      }.orElse(predictions.headOption)
+                      
+                      relevantPrediction match {
+                        case Some(pred) =>
+                          val predicted = Try(pred.getString("attributes.arrival_time")).toOption
+                          val scheduleRelationship = Try(pred.getString("attributes.schedule_relationship")).toOption
+                          
+                          log.info("predictionLookupFlow: Parsed predicted time: {}, schedule_relationship: {}", 
+                            predicted.getOrElse("None"), scheduleRelationship.getOrElse("None"))
+                          
+                          // Calculate delay using scheduled time from previous flow
+                          val delaySeconds = (predicted, vd.scheduledArrivalTime) match {
+                            case (Some(predTime), Some(schedTime)) =>
+                              try {
+                                val predInstant = java.time.Instant.parse(predTime)
+                                val schedInstant = java.time.Instant.parse(schedTime)
+                                val delay = java.time.Duration.between(schedInstant, predInstant).getSeconds.toInt
+                                log.info("predictionLookupFlow: Calculated delay: {} seconds ({} minutes) for vehicle {}", delay, delay / 60, vd.vehicleId.getOrElse("unknown"))
+                                Some(delay)
+                              } catch {
+                                case e: Exception => 
+                                  log.error("predictionLookupFlow: Error parsing times - predTime: {}, schedTime: {}, error: {}", predTime, schedTime, e.getMessage)
+                                  None
+                              }
+                            case _ => 
+                              log.warning("predictionLookupFlow: Missing time data - predicted: {}, scheduled: {}", predicted.isDefined, vd.scheduledArrivalTime.isDefined)
+                              None
+                          }
+                          
+                          val updatedVehicle = vd.copy(
+                            predictedArrivalTime = predicted,
+                            delaySeconds = delaySeconds
+                          )
+                          
+                          log.info("predictionLookupFlow: Updated vehicle {} with delay data - delaySeconds: {}", vd.vehicleId.getOrElse("unknown"), delaySeconds.getOrElse("None"))
+                          updatedVehicle
+                        case None => 
+                          log.warning("predictionLookupFlow: No predictions available for vehicle {} with tripId: {}", vd.vehicleId.getOrElse("unknown"), tripId)
+                          vd
+                      }
+                    }
+                  }
+                  case HttpResponse(code, _, entity, _) => Future.successful {
+                    log.error("predictionLookupFlow returned unexpected code: {} with uri: {}", code.toString, uri.toString)
+                    entity.discardBytes()
+                    vd
+                  }
+                }
+              case None => 
+                log.warning("predictionLookupFlow: No tripId available for vehicle {}", vd.vehicleId.getOrElse("unknown"))
+                Future.successful(vd)
+            }
+          }
+
+          case unExpected => Future.successful {
+            log.error("predictionLookupFlow unexpected input: {}", unExpected.toString)
             VehicleDataNull()
           }
         }
@@ -559,6 +720,8 @@ class MBTAService extends Actor with ActorLogging {
               .via(vehiclesPerRouteRawFlow)
               .via(vehiclesPerRouteFlow)
               .via(stopIdLookupFlow)
+              .via(scheduleLookupFlow)
+              .via(predictionLookupFlow)
               .runWith(Sink.seq)
               .map(_.toVector.collect {
                 case vd: VehicleData => vd

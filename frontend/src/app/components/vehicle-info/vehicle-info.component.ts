@@ -70,4 +70,35 @@ export class VehicleInfoComponent implements OnInit, OnDestroy {
   isBus(vehicle: Vehicle): boolean {
     return vehicle.routeType === 3;
   }
+
+  getDelayStatus(delaySeconds?: number): { color: string; label: string; severity: 'on-time' | 'minor-delay' | 'major-delay' } {
+    if (!delaySeconds || delaySeconds < 300) { // Less than 5 minutes
+      return {
+        color: '#28a745', // Green
+        label: 'On Time',
+        severity: 'on-time'
+      };
+    } else if (delaySeconds < 600) { // 5-10 minutes
+      return {
+        color: '#ffc107', // Yellow/Orange
+        label: `${Math.round(delaySeconds / 60)} min delay`,
+        severity: 'minor-delay'
+      };
+    } else { // More than 10 minutes
+      return {
+        color: '#dc3545', // Red
+        label: `${Math.round(delaySeconds / 60)} min delay`,
+        severity: 'major-delay'
+      };
+    }
+  }
+
+  formatDelayTime(delaySeconds?: number): string {
+    if (!delaySeconds) return 'No delay data';
+    
+    const minutes = Math.round(delaySeconds / 60);
+    if (minutes === 0) return 'On time';
+    if (minutes > 0) return `${minutes} min late`;
+    return `${Math.abs(minutes)} min early`;
+  }
 }

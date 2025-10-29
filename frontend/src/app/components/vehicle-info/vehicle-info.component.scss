@@ -30,3 +30,36 @@
     color: #333;
   }
 }
+
+.delay-info {
+  &.on-time {
+    mat-icon {
+      color: #28a745;
+    }
+  }
+  
+  &.minor-delay {
+    mat-icon {
+      color: #ffc107;
+    }
+  }
+  
+  &.major-delay {
+    mat-icon {
+      color: #dc3545;
+    }
+  }
+}
+
+.time-info {
+  font-size: 12px;
+  margin-bottom: 4px;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+  
+  strong {
+    color: #003DA5;
+  }
+}

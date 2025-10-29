@@ -343,11 +343,27 @@ export class MapService {
     const borderWidth = isHighlighted ? 3 : 2;
     const borderColor = isHighlighted ? '#FF5722' : '#ffffff';
     
+    // Get delay status
+    const delayStatus = this.getDelayStatus(vehicle.delaySeconds);
+    
+    // Determine marker styling based on delay
+    let markerBackgroundColor = '#2196F3'; // Default blue
+    let delayIndicator = '';
+    
+    if (delayStatus.severity === 'minor-delay') {
+      markerBackgroundColor = '#ffc107'; // Yellow/Orange
+      delayIndicator = '<div class="delay-indicator minor-delay" title="Minor Delay"></div>';
+    } else if (delayStatus.severity === 'major-delay') {
+      markerBackgroundColor = '#dc3545'; // Red
+      delayIndicator = '<div class="delay-indicator major-delay" title="Major Delay"></div>';
+    }
+    
     return `
       <div class="vehicle-marker-container" style="transform: rotate(${rotation}deg); width: ${size}px; height: ${size}px;">
         <div class="vehicle-marker-circle" style="
           width: ${size}px;
           height: ${size}px;
+          background-color: ${markerBackgroundColor};
           border: ${borderWidth}px solid ${borderColor};
           ${isHighlighted ? 'box-shadow: 0 0 10px rgba(255, 87, 34, 0.8);' : ''}
         ">
@@ -355,6 +371,7 @@ export class MapService {
         </div>
         <div class="vehicle-marker-direction"></div>
         ${isHighlighted ? '<div class="vehicle-marker-highlight-ring"></div>' : ''}
+        ${delayIndicator}
       </div>
     `;
   }
@@ -607,6 +624,33 @@ export class MapService {
     } catch (error) {
       console.error('MapService: Error decoding polyline:', error);
       return [];
+    }
+  }
+
+  /**
+   * Get delay status for a vehicle based on delay seconds
+   * @param delaySeconds - Delay in seconds (positive = late, negative = early)
+   * @returns Object with color, label, and severity information
+   */
+  getDelayStatus(delaySeconds?: number): { color: string; label: string; severity: 'on-time' | 'minor-delay' | 'major-delay' } {
+    if (!delaySeconds || delaySeconds < 300) { // Less than 5 minutes
+      return {
+        color: '#28a745', // Green
+        label: 'On Time',
+        severity: 'on-time'
+      };
+    } else if (delaySeconds < 600) { // 5-10 minutes
+      return {
+        color: '#ffc107', // Yellow/Orange
+        label: `${Math.round(delaySeconds / 60)} min delay`,
+        severity: 'minor-delay'
+      };
+    } else { // More than 10 minutes
+      return {
+        color: '#dc3545', // Red
+        label: `${Math.round(delaySeconds / 60)} min delay`,
+        severity: 'major-delay'
+      };
     }
   }
 }
