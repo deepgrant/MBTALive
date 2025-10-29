@@ -65,7 +65,10 @@ export class ApiService {
             currentStatus: vehicle.currentStatus || 'Unknown',
             stopName: vehicle.stopName || 'Unknown',
             updatedAt: vehicle.updatedAt || new Date().toISOString(),
-            routeType: vehicle.routeType
+            routeType: vehicle.routeType,
+            predictedArrivalTime: vehicle.predictedArrivalTime,
+            scheduledArrivalTime: vehicle.scheduledArrivalTime,
+            delaySeconds: vehicle.delaySeconds
           }));
           console.log('ApiService: Mapped vehicle data:', mappedVehicles);
           return mappedVehicles;
@@ -109,7 +112,7 @@ export class ApiService {
   getRouteShapes(routeId: string): Observable<Shape[]> {
     return this.http.get<ShapeResponse[]>(`${this.baseUrl}/route/${routeId}/shapes`)
       .pipe(
-        map((shapes: ShapeResponse[]) => 
+        map((shapes: ShapeResponse[]) =>
           shapes.map(shape => ({
             id: shape.id,
             polyline: shape.polyline
@@ -121,7 +124,7 @@ export class ApiService {
   getRouteStops(routeId: string): Observable<Station[]> {
     return this.http.get<StationResponse[]>(`${this.baseUrl}/route/${routeId}/stops`)
       .pipe(
-        map((stops: StationResponse[]) => 
+        map((stops: StationResponse[]) =>
           stops.map(stop => ({
             id: stop.id,
             name: stop.name,

@@ -2,11 +2,11 @@
   <div class="routes-panel" *ngIf="routesPanelVisible">
     <app-routes></app-routes>
   </div>
-  
+
   <div class="vehicle-panel" *ngIf="selectedRoute">
     <app-vehicle-list></app-vehicle-list>
   </div>
-  
+
   <div class="main-content">
     <mat-toolbar color="primary">
       <button
@@ -14,14 +14,13 @@
         aria-label="Toggle routes panel"
         mat-icon-button
         (click)="toggleRoutesPanel()">
-        <mat-icon aria-label="Routes toggle icon">menu</mat-icon>
+        <mat-icon aria-label="Routes toggle icon">{{routesPanelVisible ? 'chevron_left' : 'chevron_right'}}</mat-icon>
       </button>
       <img src="assets/favicon.png" alt="MBTA Logo" class="toolbar-favicon">
       <span>{{title}}</span>
       <span class="spacer"></span>
-      <mat-icon>train</mat-icon>
     </mat-toolbar>
-    
+
     <div class="content">
       <app-map></app-map>
     </div>

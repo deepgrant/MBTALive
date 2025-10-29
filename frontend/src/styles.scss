@@ -10,9 +10,9 @@ $mbta-purple: #80276C;
 $mbta-red: #DA291C;
 $mbta-green: #00843D;
 
-html, body { 
-  height: 100%; 
-  margin: 0; 
+html, body {
+  height: 100%;
+  margin: 0;
   padding: 0;
   font-family: Roboto, "Helvetica Neue", sans-serif;
 }
@@ -108,7 +108,7 @@ html, body {
     border-color: #FF5722 !important;
     box-shadow: 0 0 15px rgba(255, 87, 34, 0.8) !important;
   }
-  
+
   .vehicle-marker-direction {
     border-bottom-color: $mbta-orange !important;
   }
@@ -209,14 +209,36 @@ html, body {
   position: relative;
 }
 
-.highlight-ring::before {
-  content: '';
-  position: absolute;
-  top: -8px;
-  left: -8px;
-  right: -8px;
-  bottom: -8px;
-  border: 2px solid #FF5722;
-  border-radius: 50%;
-  animation: pulse-ring 0.8s ease-in-out infinite;
+// Vehicle tooltip styles
+.vehicle-tooltip {
+  background: rgba(0, 0, 0, 0.8) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+  font-weight: bold !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+  white-space: nowrap !important;
+}
+
+.vehicle-tooltip::before {
+  border-top-color: rgba(0, 0, 0, 0.8) !important;
+}
+
+// Outbound vehicle tooltip styles (bottom positioned, white background)
+.vehicle-tooltip-outbound {
+  background: rgba(255, 255, 255, 0.9) !important;
+  color: black !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+  font-weight: bold !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+  white-space: nowrap !important;
+}
+
+.vehicle-tooltip-outbound::before {
+  border-bottom-color: rgba(255, 255, 255, 0.9) !important;
 }

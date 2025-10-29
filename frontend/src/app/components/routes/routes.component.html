@@ -1,7 +1,7 @@
 <div class="routes-header">
   <h2 class="routes-title">MBTA Routes</h2>
-  <button mat-icon-button 
-          (click)="refreshRoutes()" 
+  <button mat-icon-button
+          (click)="refreshRoutes()"
           [disabled]="isRefreshing"
           [class.spinning]="isRefreshing"
           aria-label="Refresh routes">
@@ -10,8 +10,8 @@
 </div>
 
 <div class="route-type-filter">
-  <mat-button-toggle-group 
-    [value]="routeTypeFilter" 
+  <mat-button-toggle-group
+    [value]="routeTypeFilter"
     (change)="setRouteTypeFilter($event.value)"
     aria-label="Route type filter">
     <mat-button-toggle value="all">
@@ -30,13 +30,13 @@
 </div>
 
 <mat-list>
-  <mat-list-item *ngFor="let route of getFilteredRoutes()" 
+  <mat-list-item *ngFor="let route of getFilteredRoutes()"
                  (click)="selectRoute(route.id)"
                  [class.selected]="selectedRoute === route.id"
                  class="route-item">
     <div class="route-info">
       <div class="route-header">
-        <span class="route-short-name" 
+        <span class="route-short-name"
               [style.background-color]="getRouteColor(route)"
               [style.color]="getTextColor(route)">
           {{route.short_name}}

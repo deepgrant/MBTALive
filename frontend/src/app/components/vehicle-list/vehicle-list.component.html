@@ -1,45 +1,67 @@
 <div class="vehicle-list-header" *ngIf="selectedRoute">
   <h2 class="vehicle-list-title">Vehicles on Route {{selectedRoute}}</h2>
-  <button mat-icon-button (click)="testHighlighting()" title="Test highlighting">
-    <mat-icon>flash_on</mat-icon>
-  </button>
 </div>
 
 <div class="vehicle-list-content" *ngIf="selectedRoute && vehicles.length > 0">
   <mat-list>
-    <mat-list-item *ngFor="let vehicle of vehicles" 
+    <mat-list-item *ngFor="let vehicle of vehicles"
                    (click)="selectVehicle(vehicle.vehicleId)"
                    [class.selected]="selectedVehicle === vehicle.vehicleId"
-                   class="vehicle-item">
+                   [class]="'vehicle-item ' + getDelayStatus(vehicle.delaySeconds).severity">
       <div class="vehicle-info">
         <div class="vehicle-header">
           <span class="vehicle-id">{{vehicle.vehicleId}}</span>
-          <mat-icon class="vehicle-type-icon">{{isBus(vehicle) ? 'directions_bus' : 'train'}}</mat-icon>
+          <div class="vehicle-status-indicators">
+            <div class="delay-indicator"
+                 [style.background-color]="getDelayStatus(vehicle.delaySeconds).color"
+                 [title]="getDelayStatus(vehicle.delaySeconds).label">
+            </div>
+            <mat-icon class="vehicle-type-icon">{{isBus(vehicle) ? 'directions_bus' : 'train'}}</mat-icon>
+          </div>
         </div>
-        
+
         <div class="vehicle-details">
           <div class="detail-row">
             <mat-icon>directions</mat-icon>
             <span>{{vehicle.direction}}</span>
           </div>
-          
+
           <div class="detail-row">
             <mat-icon>place</mat-icon>
             <span>{{vehicle.destination}}</span>
           </div>
-          
+
           <div class="detail-row" *ngIf="!isBus(vehicle)">
             <mat-icon>speed</mat-icon>
             <span>{{formatSpeed(vehicle.speed)}}</span>
           </div>
-          
+
+          <div class="detail-row delay-info" [ngClass]="getDelayStatus(vehicle.delaySeconds).severity">
+            <mat-icon>schedule</mat-icon>
+            <span [style.color]="getDelayStatus(vehicle.delaySeconds).color">
+              {{getDelayStatus(vehicle.delaySeconds).label}}
+            </span>
+          </div>
+
+          <div class="detail-row" *ngIf="vehicle.predictedArrivalTime || vehicle.scheduledArrivalTime">
+            <mat-icon>access_time</mat-icon>
+            <span>
+              <div *ngIf="vehicle.scheduledArrivalTime" class="time-info">
+                <strong>Scheduled:</strong> {{formatTime(vehicle.scheduledArrivalTime)}}
+              </div>
+              <div *ngIf="vehicle.predictedArrivalTime" class="time-info">
+                <strong>Predicted:</strong> {{formatTime(vehicle.predictedArrivalTime)}}
+              </div>
+            </span>
+          </div>
+
           <div class="detail-row">
             <mat-icon>info</mat-icon>
             <span>{{formatStatus(vehicle.currentStatus, vehicle.stopName)}}</span>
           </div>
-          
+
           <div class="detail-row">
-            <mat-icon>schedule</mat-icon>
+            <mat-icon>update</mat-icon>
             <span>{{formatTime(vehicle.updatedAt)}}</span>
           </div>
         </div>
