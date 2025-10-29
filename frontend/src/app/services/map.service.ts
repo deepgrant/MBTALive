@@ -127,11 +127,13 @@ export class MapService {
     }
 
     // Add permanent tooltip with vehicle number only
+    // Set tooltip style based on direction
+    const isOutbound = vehicle.direction === 'Outbound';
     marker.bindTooltip(vehicle.vehicleId, {
       permanent: true,
-      direction: 'top',
-      className: 'vehicle-tooltip',
-      offset: [0, -10]
+      direction: isOutbound ? 'bottom' : 'top',
+      className: isOutbound ? 'vehicle-tooltip-outbound' : 'vehicle-tooltip',
+      offset: isOutbound ? [0, 10] : [0, -10]
     });
 
     this.vehicleMarkers.set(markerId, marker);
