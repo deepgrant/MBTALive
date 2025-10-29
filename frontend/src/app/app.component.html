@@ -2,11 +2,11 @@
   <div class="routes-panel" *ngIf="routesPanelVisible">
     <app-routes></app-routes>
   </div>
-  
+
   <div class="vehicle-panel" *ngIf="selectedRoute">
     <app-vehicle-list></app-vehicle-list>
   </div>
-  
+
   <div class="main-content">
     <mat-toolbar color="primary">
       <button
@@ -20,7 +20,7 @@
       <span>{{title}}</span>
       <span class="spacer"></span>
     </mat-toolbar>
-    
+
     <div class="content">
       <app-map></app-map>
     </div>

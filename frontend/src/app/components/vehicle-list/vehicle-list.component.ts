@@ -33,7 +33,7 @@ export class VehicleListComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     console.log('VehicleListComponent: Initializing...');
-    
+
     // Subscribe to filtered vehicles
     const vehiclesSub = this.vehicleService.filteredVehicles$.subscribe({
       next: (vehicles) => {
@@ -99,9 +99,9 @@ export class VehicleListComponent implements OnInit, OnDestroy {
 
   formatStatus(status: string, stopName?: string): string {
     if (!status) return 'Unknown';
-    
+
     const stop = stopName && stopName !== 'Unknown' ? stopName : 'next stop';
-    
+
     switch (status.toUpperCase()) {
       case 'IN_TRANSIT_TO':
         return `In transit to ${stop}`;

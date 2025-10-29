@@ -48,9 +48,9 @@ export class VehicleInfoComponent implements OnInit, OnDestroy {
 
   formatStatus(status: string, stopName?: string): string {
     if (!status) return 'Unknown';
-    
+
     const stop = stopName && stopName !== 'Unknown' ? stopName : 'next stop';
-    
+
     switch (status.toUpperCase()) {
       case 'IN_TRANSIT_TO':
         return `In transit to ${stop}`;
@@ -95,7 +95,7 @@ export class VehicleInfoComponent implements OnInit, OnDestroy {
 
   formatDelayTime(delaySeconds?: number): string {
     if (!delaySeconds) return 'No delay data';
-    
+
     const minutes = Math.round(delaySeconds / 60);
     if (minutes === 0) return 'On time';
     if (minutes > 0) return `${minutes} min late`;

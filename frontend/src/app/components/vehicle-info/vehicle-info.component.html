@@ -3,46 +3,46 @@
     <mat-card-title>Vehicle {{selectedVehicle.vehicleId}}</mat-card-title>
     <mat-card-subtitle>Route {{selectedVehicle.routeId}}</mat-card-subtitle>
   </mat-card-header>
-  
+
   <mat-card-content>
     <div class="vehicle-details">
       <div class="detail-row">
         <mat-icon>directions</mat-icon>
         <span>{{selectedVehicle.direction}}</span>
       </div>
-      
+
       <div class="detail-row">
         <mat-icon>place</mat-icon>
         <span>{{selectedVehicle.destination}}</span>
       </div>
-      
+
       <div class="detail-row" *ngIf="!isBus(selectedVehicle)">
         <mat-icon>speed</mat-icon>
         <span>{{formatSpeed(selectedVehicle.speed)}}</span>
       </div>
-      
+
       <div class="detail-row" *ngIf="isBus(selectedVehicle)">
         <mat-icon>directions_bus</mat-icon>
         <span>{{selectedVehicle.vehicleId}}</span>
       </div>
-      
+
       <div class="detail-row">
         <mat-icon>info</mat-icon>
         <span>{{formatStatus(selectedVehicle.currentStatus, selectedVehicle.stopName)}}</span>
       </div>
-      
+
       <div class="detail-row">
         <mat-icon>schedule</mat-icon>
         <span>{{formatTime(selectedVehicle.updatedAt)}}</span>
       </div>
-      
+
       <div class="detail-row delay-info" [ngClass]="getDelayStatus(selectedVehicle.delaySeconds).severity">
         <mat-icon>schedule</mat-icon>
         <span [style.color]="getDelayStatus(selectedVehicle.delaySeconds).color">
           {{getDelayStatus(selectedVehicle.delaySeconds).label}}
         </span>
       </div>
-      
+
       <div class="detail-row" *ngIf="selectedVehicle.predictedArrivalTime || selectedVehicle.scheduledArrivalTime">
         <mat-icon>access_time</mat-icon>
         <span>
@@ -56,7 +56,7 @@
       </div>
     </div>
   </mat-card-content>
-  
+
   <mat-card-actions>
     <button mat-button (click)="closeInfo()">
       <mat-icon>close</mat-icon>

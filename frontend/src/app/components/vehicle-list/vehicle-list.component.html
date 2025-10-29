@@ -4,7 +4,7 @@
 
 <div class="vehicle-list-content" *ngIf="selectedRoute && vehicles.length > 0">
   <mat-list>
-    <mat-list-item *ngFor="let vehicle of vehicles" 
+    <mat-list-item *ngFor="let vehicle of vehicles"
                    (click)="selectVehicle(vehicle.vehicleId)"
                    [class.selected]="selectedVehicle === vehicle.vehicleId"
                    class="vehicle-item">
@@ -13,28 +13,28 @@
           <span class="vehicle-id">{{vehicle.vehicleId}}</span>
           <mat-icon class="vehicle-type-icon">{{isBus(vehicle) ? 'directions_bus' : 'train'}}</mat-icon>
         </div>
-        
+
         <div class="vehicle-details">
           <div class="detail-row">
             <mat-icon>directions</mat-icon>
             <span>{{vehicle.direction}}</span>
           </div>
-          
+
           <div class="detail-row">
             <mat-icon>place</mat-icon>
             <span>{{vehicle.destination}}</span>
           </div>
-          
+
           <div class="detail-row" *ngIf="!isBus(vehicle)">
             <mat-icon>speed</mat-icon>
             <span>{{formatSpeed(vehicle.speed)}}</span>
           </div>
-          
+
           <div class="detail-row">
             <mat-icon>info</mat-icon>
             <span>{{formatStatus(vehicle.currentStatus, vehicle.stopName)}}</span>
           </div>
-          
+
           <div class="detail-row">
             <mat-icon>schedule</mat-icon>
             <span>{{formatTime(vehicle.updatedAt)}}</span>

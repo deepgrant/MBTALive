@@ -63,12 +63,12 @@
     border-radius: 50%;
     border: 1px solid white;
     z-index: 2;
-    
+
     &.minor-delay {
       background-color: #ffc107;
       animation: pulse-warning 2s infinite;
     }
-    
+
     &.major-delay {
       background-color: #dc3545;
       animation: pulse-danger 1.5s infinite;

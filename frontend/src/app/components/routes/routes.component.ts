@@ -34,7 +34,7 @@ export class RoutesComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     console.log('RoutesComponent: Initializing...');
-    
+
     // Subscribe to routes
     const routesSub = this.vehicleService.routes$.subscribe({
       next: (routes) => {
@@ -88,9 +88,9 @@ export class RoutesComponent implements OnInit, OnDestroy {
   refreshRoutes(): void {
     console.log('RoutesComponent: Refreshing routes...');
     this.isRefreshing = true;
-    
+
     this.vehicleService.refreshRoutes();
-    
+
     // Reset after animation completes
     setTimeout(() => {
       this.isRefreshing = false;

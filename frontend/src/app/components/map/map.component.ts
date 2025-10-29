@@ -27,7 +27,7 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
 
   ngOnInit(): void {
     console.log('MapComponent: Initializing...');
-    
+
     // Subscribe to vehicle updates
     const vehicleSub = this.vehicleService.filteredVehicles$.subscribe({
       next: (vehicles) => {
@@ -114,12 +114,12 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   private updateMapWithVehicles(vehicles: Vehicle[]): void {
     console.log('MapComponent: Updating vehicles on map:', vehicles.length);
     console.log('MapComponent: Vehicle data received:', vehicles);
-    
+
     if (vehicles.length === 0) {
       console.log('MapComponent: No vehicles to display');
       return;
     }
-    
+
     console.log('MapComponent: Calling mapService.updateVehicleMarkers');
     this.mapService.updateVehicleMarkers(vehicles);
     console.log('MapComponent: Vehicle markers update call completed');
@@ -132,7 +132,7 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
     this.mapService.clearRouteLayers();
     this.mapService.clearStationMarkers();
     this.routeFramed = false;  // Reset framing flag
-    
+
     if (!routeId) {
       this.currentRoute = null;
       return;
