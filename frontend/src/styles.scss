@@ -216,10 +216,25 @@ html, body {
   border: none !important;
   border-radius: 4px !important;
   padding: 4px 8px !important;
-  font-size: 12px !important;
-  font-weight: bold !important;
+  font-size: 11px !important;
+  font-weight: normal !important;
   box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
   white-space: nowrap !important;
+  line-height: 1.4 !important;
+
+  strong {
+    font-weight: bold;
+  }
+
+  div {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    
+    &:first-child {
+      margin-bottom: 2px;
+    }
+  }
 }
 
 .vehicle-tooltip::before {
@@ -233,10 +248,25 @@ html, body {
   border: none !important;
   border-radius: 4px !important;
   padding: 4px 8px !important;
-  font-size: 12px !important;
-  font-weight: bold !important;
+  font-size: 11px !important;
+  font-weight: normal !important;
   box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
   white-space: nowrap !important;
+  line-height: 1.4 !important;
+
+  strong {
+    font-weight: bold;
+  }
+
+  div {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    
+    &:first-child {
+      margin-bottom: 2px;
+    }
+  }
 }
 
 .vehicle-tooltip-outbound::before {

@@ -17,6 +17,7 @@
                  [title]="getDelayStatus(vehicle.delaySeconds).label">
             </div>
             <mat-icon class="vehicle-type-icon">{{isBus(vehicle) ? 'directions_bus' : 'train'}}</mat-icon>
+            <span *ngIf="vehicle.tripName" class="trip-name">{{vehicle.tripName}}</span>
           </div>
         </div>
 

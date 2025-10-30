@@ -126,14 +126,18 @@ export class MapService {
       }
     }
 
-    // Add permanent tooltip with vehicle number only
+    // Add permanent tooltip with vehicle number and trip name
     // Set tooltip style based on direction
     const isOutbound = vehicle.direction === 'Outbound';
-    marker.bindTooltip(vehicle.vehicleId, {
+    const tooltipText = vehicle.tripName 
+      ? `<div><strong>ID:</strong> ${vehicle.vehicleId}</div><div><strong>Trip:</strong> ${vehicle.tripName}</div>`
+      : `<div><strong>ID:</strong> ${vehicle.vehicleId}</div>`;
+    marker.bindTooltip(tooltipText, {
       permanent: true,
       direction: isOutbound ? 'bottom' : 'top',
       className: isOutbound ? 'vehicle-tooltip-outbound' : 'vehicle-tooltip',
-      offset: isOutbound ? [0, 10] : [0, -10]
+      offset: isOutbound ? [0, 10] : [0, -10],
+      interactive: false
     });
 
     this.vehicleMarkers.set(markerId, marker);

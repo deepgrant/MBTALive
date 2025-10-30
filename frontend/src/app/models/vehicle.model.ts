@@ -14,6 +14,7 @@ export interface Vehicle {
   predictedArrivalTime?: string;
   scheduledArrivalTime?: string;
   delaySeconds?: number;
+  tripName?: string;
 }
 
 export interface VehicleResponse {
@@ -31,6 +32,7 @@ export interface VehicleResponse {
   directionId?: number;
   stopId?: string;
   tripId?: string;
+  tripName?: string;
   currentStopSequence?: number;
   timeStamp: number;
   routeType?: number;
