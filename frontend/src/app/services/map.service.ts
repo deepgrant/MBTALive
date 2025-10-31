@@ -129,8 +129,23 @@ export class MapService {
     // Add permanent tooltip with vehicle number and trip name
     // Set tooltip style based on direction
     const isOutbound = vehicle.direction === 'Outbound';
+    const delaySeconds = vehicle.delaySeconds || 0;
+    const hasCriticalDelay = delaySeconds > 900; // 15 minutes
+    const hasSevereDelay = delaySeconds >= 1800; // >= 30 minutes
+    
+    let tripNameClass = '';
+    let tripLabelClass = '';
+    if (hasSevereDelay) {
+      // Flash both trip name and label for severe delays (>30 min)
+      tripNameClass = 'flash-trip-name';
+      tripLabelClass = 'flash-trip-label';
+    } else if (hasCriticalDelay) {
+      // Flash trip name only for critical delays (>15 min)
+      tripNameClass = 'flash-trip-name';
+    }
+    
     const tooltipText = vehicle.tripName 
-      ? `<div><strong>ID:</strong> ${vehicle.vehicleId}</div><div><strong>Trip:</strong> ${vehicle.tripName}</div>`
+      ? `<div><strong>ID:</strong> ${vehicle.vehicleId}</div><div><strong class="${tripLabelClass}">Trip:</strong> <span class="${tripNameClass}">${vehicle.tripName}</span></div>`
       : `<div><strong>ID:</strong> ${vehicle.vehicleId}</div>`;
     marker.bindTooltip(tooltipText, {
       permanent: true,
