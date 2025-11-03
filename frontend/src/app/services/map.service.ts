@@ -19,10 +19,11 @@ export class MapService {
   private originalIcons: Map<string, any> = new Map();
   private highlightOverlay: L.Marker | null = null;
   private trackedVehicleId: string | null = null;
-  private previousBounds: L.LatLngBounds | null = null;
+  private previousView: { center: L.LatLngLiteral; zoom: number } | null = null;
   private trackingInterval: any = null;
   private routeBounds: L.LatLngBounds | null = null;
   private lastTrackedVehicleData: Vehicle | null = null;
+  private isTrackingActive: boolean = false;
 
   constructor(private dialogService: VehicleCompletionDialogService) { }
 
@@ -519,8 +520,12 @@ export class MapService {
       return;
     }
 
-    // Save current map bounds
-    this.previousBounds = this.map.getBounds();
+    // Save current map view
+    const center = this.map.getCenter();
+    this.previousView = {
+      center: { lat: center.lat, lng: center.lng },
+      zoom: this.map.getZoom()
+    };
 
     // Get vehicle data and store for tracking
     const vehicle = this.vehicleData.get(vehicleId);
@@ -530,6 +535,7 @@ export class MapService {
 
     // Set tracked vehicle ID
     this.trackedVehicleId = vehicleId;
+    this.isTrackingActive = true;
 
     // Zoom in on vehicle
     const latLng = marker.getLatLng();
@@ -538,7 +544,7 @@ export class MapService {
 
     // Start continuous tracking interval (update every 2 seconds)
     this.trackingInterval = setInterval(() => {
-      if (!this.map || !this.trackedVehicleId) {
+      if (!this.map || !this.trackedVehicleId || !this.isTrackingActive) {
         return;
       }
 
@@ -561,32 +567,35 @@ export class MapService {
   }
 
   private stopVehicleTracking(): void {
+    this.isTrackingActive = false;
+
     if (this.trackingInterval) {
       clearInterval(this.trackingInterval);
       this.trackingInterval = null;
     }
 
-    if (this.map && this.previousBounds) {
-      // Restore previous map bounds
-      this.map.fitBounds(this.previousBounds, { padding: [50, 50] });
+    if (this.map && this.previousView) {
+      // Restore previous map view exactly
+      this.map.setView(this.previousView.center, this.previousView.zoom, { animate: true });
     }
 
     this.trackedVehicleId = null;
-    this.previousBounds = null;
+    this.previousView = null;
     this.lastTrackedVehicleData = null;
     console.log('MapService: Stopped vehicle tracking');
   }
 
   private handleVehicleDisappeared(premature: boolean): void {
-    if (!this.trackedVehicleId || !this.lastTrackedVehicleData) {
+    if (!this.isTrackingActive || !this.trackedVehicleId || !this.lastTrackedVehicleData) {
       return;
     }
 
     const vehicleId = this.trackedVehicleId;
-    const routeId = this.lastTrackedVehicleData.routeId;
-    const lastUpdateTime = this.lastTrackedVehicleData.updatedAt || new Date().toISOString();
-    const finalArrivalTime = this.lastTrackedVehicleData.predictedArrivalTime || 
-                            this.lastTrackedVehicleData.scheduledArrivalTime;
+    const trackedData = { ...this.lastTrackedVehicleData };
+    const routeId = trackedData.routeId;
+    const lastUpdateTime = trackedData.updatedAt || new Date().toISOString();
+    const finalArrivalTime = trackedData.predictedArrivalTime || 
+                            trackedData.scheduledArrivalTime;
 
     // Stop tracking
     this.stopVehicleTracking();
