@@ -4,6 +4,7 @@ import * as polyline from '@mapbox/polyline';
 import { Vehicle } from '../models/vehicle.model';
 import { Route, Shape } from '../models/route.model';
 import { Station } from '../models/station.model';
+import { VehicleCompletionDialogService } from './vehicle-completion-dialog.service';
 
 @Injectable({
   providedIn: 'root'
@@ -17,8 +18,13 @@ export class MapService {
   private vehicleData: Map<string, Vehicle> = new Map();
   private originalIcons: Map<string, any> = new Map();
   private highlightOverlay: L.Marker | null = null;
+  private trackedVehicleId: string | null = null;
+  private previousBounds: L.LatLngBounds | null = null;
+  private trackingInterval: any = null;
+  private routeBounds: L.LatLngBounds | null = null;
+  private lastTrackedVehicleData: Vehicle | null = null;
 
-  constructor() { }
+  constructor(private dialogService: VehicleCompletionDialogService) { }
 
   initializeMap(containerId: string): L.Map {
     console.log('MapService: Initializing map with container:', containerId);
@@ -172,6 +178,17 @@ export class MapService {
     const previouslyHighlightedVehicle = this.selectedVehicleMarker ?
       Array.from(this.vehicleMarkers.entries()).find(([id, marker]) => marker === this.selectedVehicleMarker)?.[0] : null;
 
+    // Store tracked vehicle ID to check if it still exists
+    const currentlyTrackedVehicle = this.trackedVehicleId;
+    const trackedVehicleStillExists = currentlyTrackedVehicle && 
+      vehicles.some(v => v.vehicleId === currentlyTrackedVehicle);
+
+    // Check if tracked vehicle disappeared
+    if (currentlyTrackedVehicle && !trackedVehicleStillExists) {
+      console.log('MapService: Tracked vehicle no longer exists in update:', currentlyTrackedVehicle);
+      this.handleVehicleDisappeared(true);
+    }
+
     // Clear existing highlight overlay
     if (this.selectedVehicleMarker) {
       console.log('MapService: Clearing highlight overlay due to polling update');
@@ -190,6 +207,11 @@ export class MapService {
     vehicles.forEach((vehicle, index) => {
       console.log(`MapService: Processing vehicle ${index + 1}/${vehicles.length}:`, vehicle);
       this.addVehicleMarker(vehicle);
+      
+      // Update last tracked vehicle data if this is the tracked vehicle
+      if (this.trackedVehicleId === vehicle.vehicleId) {
+        this.lastTrackedVehicleData = { ...vehicle };
+      }
     });
 
     // Re-apply highlighting if there was a previously highlighted vehicle
@@ -198,6 +220,16 @@ export class MapService {
       setTimeout(() => {
         this.highlightVehicleMarker(previouslyHighlightedVehicle);
       }, 100);
+    }
+
+    // Continue tracking if vehicle still exists (marker will be updated in tracking interval)
+    if (currentlyTrackedVehicle && trackedVehicleStillExists) {
+      console.log('MapService: Tracking continues for vehicle:', currentlyTrackedVehicle);
+      // Update vehicle data for tracking
+      const trackedVehicle = vehicles.find(v => v.vehicleId === currentlyTrackedVehicle);
+      if (trackedVehicle) {
+        this.lastTrackedVehicleData = { ...trackedVehicle };
+      }
     }
 
     console.log('MapService: Vehicle markers update complete');
@@ -348,8 +380,9 @@ export class MapService {
       hasContent = true;
     });
 
-    // Fit map to calculated bounds
+    // Fit map to calculated bounds and store for tracking
     if (hasContent) {
+      this.routeBounds = bounds;
       this.map.fitBounds(bounds, { padding: [50, 50] });
     }
   }
@@ -456,18 +489,133 @@ export class MapService {
       return;
     }
 
-    console.log('MapService: Attempting to center on vehicle:', vehicleId);
-    const marker = this.vehicleMarkers.get(vehicleId);
-    if (marker) {
-      console.log('MapService: Centering map on vehicle:', vehicleId);
-      const latLng = marker.getLatLng();
-      console.log('MapService: Vehicle coordinates:', latLng);
-      this.map.setView(latLng, 15);
-      console.log('MapService: Map centered on vehicle:', vehicleId);
-    } else {
-      console.warn('MapService: Vehicle marker not found for ID:', vehicleId);
-      console.warn('MapService: Available markers:', Array.from(this.vehicleMarkers.keys()));
+    // If clicking the same vehicle that's being tracked, stop tracking
+    if (this.trackedVehicleId === vehicleId) {
+      console.log('MapService: Stopping tracking for vehicle:', vehicleId);
+      this.stopVehicleTracking();
+      return;
     }
+
+    // If tracking a different vehicle, stop tracking that one first
+    if (this.trackedVehicleId !== null) {
+      console.log('MapService: Stopping tracking for previous vehicle:', this.trackedVehicleId);
+      this.stopVehicleTracking();
+    }
+
+    // Start tracking the new vehicle
+    console.log('MapService: Starting tracking for vehicle:', vehicleId);
+    this.startVehicleTracking(vehicleId);
+  }
+
+  private startVehicleTracking(vehicleId: string): void {
+    if (!this.map) {
+      console.log('MapService: Cannot start tracking - map not initialized');
+      return;
+    }
+
+    const marker = this.vehicleMarkers.get(vehicleId);
+    if (!marker) {
+      console.warn('MapService: Cannot start tracking - vehicle marker not found:', vehicleId);
+      return;
+    }
+
+    // Save current map bounds
+    this.previousBounds = this.map.getBounds();
+
+    // Get vehicle data and store for tracking
+    const vehicle = this.vehicleData.get(vehicleId);
+    if (vehicle) {
+      this.lastTrackedVehicleData = { ...vehicle };
+    }
+
+    // Set tracked vehicle ID
+    this.trackedVehicleId = vehicleId;
+
+    // Zoom in on vehicle
+    const latLng = marker.getLatLng();
+    this.map.setView(latLng, 15);
+    console.log('MapService: Started tracking vehicle:', vehicleId);
+
+    // Start continuous tracking interval (update every 2 seconds)
+    this.trackingInterval = setInterval(() => {
+      if (!this.map || !this.trackedVehicleId) {
+        return;
+      }
+
+      const trackedMarker = this.vehicleMarkers.get(this.trackedVehicleId);
+      if (trackedMarker) {
+        const position = trackedMarker.getLatLng();
+        // Update vehicle data if available
+        const currentVehicle = this.vehicleData.get(this.trackedVehicleId);
+        if (currentVehicle) {
+          this.lastTrackedVehicleData = { ...currentVehicle };
+        }
+        // Smoothly pan to vehicle position
+        this.map.setView(position, 15, { animate: true, duration: 1.0 });
+      } else {
+        // Vehicle disappeared, stop tracking and show dialog
+        console.log('MapService: Tracked vehicle disappeared:', this.trackedVehicleId);
+        this.handleVehicleDisappeared(false);
+      }
+    }, 2000);
+  }
+
+  private stopVehicleTracking(): void {
+    if (this.trackingInterval) {
+      clearInterval(this.trackingInterval);
+      this.trackingInterval = null;
+    }
+
+    if (this.map && this.previousBounds) {
+      // Restore previous map bounds
+      this.map.fitBounds(this.previousBounds, { padding: [50, 50] });
+    }
+
+    this.trackedVehicleId = null;
+    this.previousBounds = null;
+    this.lastTrackedVehicleData = null;
+    console.log('MapService: Stopped vehicle tracking');
+  }
+
+  private handleVehicleDisappeared(premature: boolean): void {
+    if (!this.trackedVehicleId || !this.lastTrackedVehicleData) {
+      return;
+    }
+
+    const vehicleId = this.trackedVehicleId;
+    const routeId = this.lastTrackedVehicleData.routeId;
+    const lastUpdateTime = this.lastTrackedVehicleData.updatedAt || new Date().toISOString();
+    const finalArrivalTime = this.lastTrackedVehicleData.predictedArrivalTime || 
+                            this.lastTrackedVehicleData.scheduledArrivalTime;
+
+    // Stop tracking
+    this.stopVehicleTracking();
+
+    // Zoom back to route-wide view
+    if (this.routeBounds && this.map) {
+      this.map.fitBounds(this.routeBounds, { padding: [50, 50] });
+    } else {
+      this.fitBoundsToRoute();
+    }
+
+    // Show completion dialog
+    this.showVehicleCompletionDialog(vehicleId, routeId, premature, finalArrivalTime, lastUpdateTime);
+  }
+
+  private showVehicleCompletionDialog(
+    vehicleId: string,
+    routeId: string,
+    premature: boolean,
+    finalArrivalTime: string | undefined,
+    lastUpdateTime: string
+  ): void {
+    this.dialogService.showDialog({
+      vehicleId,
+      routeId,
+      completedNormally: !premature,
+      finalArrivalTime,
+      lastUpdateTime
+    });
   }
 
   highlightVehicleMarker(vehicleId: string): void {

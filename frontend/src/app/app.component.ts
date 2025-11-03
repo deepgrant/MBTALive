@@ -6,7 +6,9 @@ import { MatIconModule } from '@angular/material/icon';
 import { RoutesComponent } from './components/routes/routes.component';
 import { MapComponent } from './components/map/map.component';
 import { VehicleListComponent } from './components/vehicle-list/vehicle-list.component';
+import { VehicleCompletionDialogComponent } from './components/vehicle-completion-dialog/vehicle-completion-dialog.component';
 import { VehicleService } from './services/vehicle.service';
+import { VehicleCompletionDialogService } from './services/vehicle-completion-dialog.service';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -19,7 +21,8 @@ import { Subscription } from 'rxjs';
     MatIconModule,
     RoutesComponent,
     MapComponent,
-    VehicleListComponent
+    VehicleListComponent,
+    VehicleCompletionDialogComponent
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
@@ -28,9 +31,13 @@ export class AppComponent implements OnInit, OnDestroy {
   title = 'MBTA Tracker';
   selectedRoute: string | null = null;
   routesPanelVisible = true;
+  dialogData: any = null;
   private subscriptions: Subscription[] = [];
 
-  constructor(private vehicleService: VehicleService) { }
+  constructor(
+    private vehicleService: VehicleService,
+    private dialogService: VehicleCompletionDialogService
+  ) { }
 
   ngOnInit(): void {
     // Subscribe to selected route to show/hide vehicle panel
@@ -43,7 +50,14 @@ export class AppComponent implements OnInit, OnDestroy {
       }
     });
 
-    this.subscriptions.push(selectedRouteSub);
+    // Subscribe to dialog service
+    const dialogSub = this.dialogService.dialogData$.subscribe({
+      next: (data) => {
+        this.dialogData = data;
+      }
+    });
+
+    this.subscriptions.push(selectedRouteSub, dialogSub);
   }
 
   ngOnDestroy(): void {
@@ -52,5 +66,9 @@ export class AppComponent implements OnInit, OnDestroy {
 
   toggleRoutesPanel(): void {
     this.routesPanelVisible = !this.routesPanelVisible;
+  }
+
+  onDialogClose(): void {
+    this.dialogService.closeDialog();
   }
 }

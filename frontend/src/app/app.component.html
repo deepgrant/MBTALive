@@ -25,4 +25,14 @@
       <app-map></app-map>
     </div>
   </div>
+
+  <app-vehicle-completion-dialog
+    *ngIf="dialogData"
+    [vehicleId]="dialogData.vehicleId"
+    [routeId]="dialogData.routeId"
+    [completedNormally]="dialogData.completedNormally"
+    [finalArrivalTime]="dialogData.finalArrivalTime"
+    [lastUpdateTime]="dialogData.lastUpdateTime"
+    (closed)="onDialogClose()">
+  </app-vehicle-completion-dialog>
 </div>
