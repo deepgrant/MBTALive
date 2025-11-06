@@ -18,6 +18,7 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   private subscriptions: Subscription[] = [];
   private map: any;
   private currentRoute: Route | null = null;
+  private currentRouteId: string | null = null;
   private routeFramed: boolean = false;
 
   constructor(
@@ -117,21 +118,33 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (vehicles.length === 0) {
       console.log('MapComponent: No vehicles to display');
+      // Still pass route ID even if no vehicles
+      this.mapService.updateVehicleMarkers(vehicles, this.currentRouteId);
       return;
     }
 
-    console.log('MapComponent: Calling mapService.updateVehicleMarkers');
-    this.mapService.updateVehicleMarkers(vehicles);
+    // Get route ID from vehicles if not set (should all be same route)
+    const routeIdFromVehicles = vehicles[0]?.routeId;
+    
+    console.log('MapComponent: Calling mapService.updateVehicleMarkers with route ID:', this.currentRouteId || routeIdFromVehicles);
+    this.mapService.updateVehicleMarkers(vehicles, this.currentRouteId || routeIdFromVehicles);
     console.log('MapComponent: Vehicle markers update call completed');
     // DO NOT call fitBoundsToVehicles() - keep current map view
   }
 
   private handleRouteSelection(routeId: string | null): void {
+    // Stop vehicle tracking silently when route changes to prevent false dialog
+    console.log('MapComponent: Stopping vehicle tracking due to route change');
+    this.mapService.stopVehicleTrackingSilently();
+
     // Always clear existing route data first
     console.log('MapComponent: Clearing previous route data');
     this.mapService.clearRouteLayers();
     this.mapService.clearStationMarkers();
     this.routeFramed = false;  // Reset framing flag
+
+    // Update current route ID
+    this.currentRouteId = routeId;
 
     if (!routeId) {
       this.currentRoute = null;

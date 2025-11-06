@@ -19,6 +19,7 @@ export class MapService {
   private originalIcons: Map<string, any> = new Map();
   private highlightOverlay: L.Marker | null = null;
   private trackedVehicleId: string | null = null;
+  private trackedVehicleRouteId: string | null = null; // Route ID when tracking started
   private previousView: { center: L.LatLngLiteral; zoom: number } | null = null;
   private trackingInterval: any = null;
   private routeBounds: L.LatLngBounds | null = null;
@@ -166,7 +167,7 @@ export class MapService {
     console.log('MapService: Vehicle marker stored in markers map');
   }
 
-  updateVehicleMarkers(vehicles: Vehicle[]): void {
+  updateVehicleMarkers(vehicles: Vehicle[], currentRouteId?: string | null): void {
     if (!this.map) {
       console.log('MapService: Cannot update vehicle markers - map not initialized');
       return;
@@ -174,6 +175,8 @@ export class MapService {
 
     console.log('MapService: Updating vehicle markers with', vehicles.length, 'vehicles');
     console.log('MapService: Vehicle data:', vehicles);
+    console.log('MapService: Current route ID:', currentRouteId);
+    console.log('MapService: Tracked vehicle route ID:', this.trackedVehicleRouteId);
 
     // Store which vehicle was highlighted before clearing
     const previouslyHighlightedVehicle = this.selectedVehicleMarker ?
@@ -181,12 +184,34 @@ export class MapService {
 
     // Store tracked vehicle ID to check if it still exists
     const currentlyTrackedVehicle = this.trackedVehicleId;
-    const trackedVehicleStillExists = currentlyTrackedVehicle && 
-      vehicles.some(v => v.vehicleId === currentlyTrackedVehicle);
+    const trackedVehicleInList = currentlyTrackedVehicle ? 
+      vehicles.find(v => v.vehicleId === currentlyTrackedVehicle) : null;
+    const trackedVehicleStillExists = trackedVehicleInList !== null;
 
-    // Check if tracked vehicle disappeared
-    if (currentlyTrackedVehicle && !trackedVehicleStillExists) {
-      console.log('MapService: Tracked vehicle no longer exists in update:', currentlyTrackedVehicle);
+    // Check if tracked vehicle disappeared or changed routes
+    if (currentlyTrackedVehicle && !trackedVehicleStillExists && this.isTrackingActive) {
+      // Vehicle is missing from the current list
+      // Check if user switched routes (current route != tracked route) - don't show dialog
+      // Or if vehicle left the tracked route (current route == tracked route) - show dialog
+      if (currentRouteId && this.trackedVehicleRouteId && currentRouteId === this.trackedVehicleRouteId) {
+        // Still viewing the same route, vehicle left/completed the route - show dialog
+        console.log('MapService: Tracked vehicle left route:', currentlyTrackedVehicle, 'from route:', this.trackedVehicleRouteId);
+        this.handleVehicleDisappeared(true);
+      } else if (currentRouteId && this.trackedVehicleRouteId && currentRouteId !== this.trackedVehicleRouteId) {
+        // User switched routes - tracking should have been stopped silently, but clean up just in case
+        console.log('MapService: User switched routes, tracked vehicle missing from new route:', currentlyTrackedVehicle);
+        // Don't show dialog - user intentionally switched routes
+      } else {
+        // Route info not available or tracking not active - check if tracking is still active
+        if (this.isTrackingActive) {
+          console.log('MapService: Tracked vehicle disappeared (route context unclear):', currentlyTrackedVehicle);
+          this.handleVehicleDisappeared(true);
+        }
+      }
+    } else if (trackedVehicleInList && this.trackedVehicleRouteId && trackedVehicleInList.routeId !== this.trackedVehicleRouteId) {
+      // Vehicle exists in list but on different route - vehicle changed routes
+      console.log('MapService: Tracked vehicle changed routes:', currentlyTrackedVehicle, 
+        'from', this.trackedVehicleRouteId, 'to', trackedVehicleInList.routeId);
       this.handleVehicleDisappeared(true);
     }
 
@@ -531,6 +556,9 @@ export class MapService {
     const vehicle = this.vehicleData.get(vehicleId);
     if (vehicle) {
       this.lastTrackedVehicleData = { ...vehicle };
+      // Store the route ID when tracking starts
+      this.trackedVehicleRouteId = vehicle.routeId;
+      console.log('MapService: Tracking vehicle on route:', this.trackedVehicleRouteId);
     }
 
     // Set tracked vehicle ID
@@ -580,9 +608,31 @@ export class MapService {
     }
 
     this.trackedVehicleId = null;
+    this.trackedVehicleRouteId = null;
     this.previousView = null;
     this.lastTrackedVehicleData = null;
     console.log('MapService: Stopped vehicle tracking');
+  }
+
+  stopVehicleTrackingSilently(): void {
+    // Stop tracking without showing the completion dialog
+    // Used when route changes to prevent false dialog appearance
+    this.isTrackingActive = false;
+
+    if (this.trackingInterval) {
+      clearInterval(this.trackingInterval);
+      this.trackingInterval = null;
+    }
+
+    // Clear tracked vehicle ID to prevent updateVehicleMarkers from triggering dialog
+    this.trackedVehicleId = null;
+    this.trackedVehicleRouteId = null;
+    this.lastTrackedVehicleData = null;
+    
+    // Don't restore previous view when stopping silently (route change handles view)
+    // Don't clear previousView - may be needed if user wants to go back
+    
+    console.log('MapService: Stopped vehicle tracking silently (route change)');
   }
 
   private handleVehicleDisappeared(premature: boolean): void {
