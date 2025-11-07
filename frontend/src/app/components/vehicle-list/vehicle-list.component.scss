@@ -1,6 +1,13 @@
+.vehicle-list-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 .vehicle-list-header {
   padding: 8px;
   border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
 }
 
 .vehicle-list-title {
@@ -11,8 +18,9 @@
 }
 
 .vehicle-list-content {
-  height: calc(100vh - 200px);
+  flex: 1;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .vehicle-item {
@@ -173,11 +181,12 @@
 
 .vehicle-list-empty,
 .vehicle-list-no-route {
+  flex: 1;
   padding: 16px;
-  height: calc(100vh - 200px);
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 0;
 }
 
 .empty-state-card,

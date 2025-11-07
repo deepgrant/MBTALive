@@ -1,8 +1,9 @@
-<div class="vehicle-list-header" *ngIf="selectedRoute">
-  <h2 class="vehicle-list-title">Vehicles on Route {{selectedRoute}}</h2>
-</div>
+<div class="vehicle-list-container">
+  <div class="vehicle-list-header" *ngIf="selectedRoute">
+    <h2 class="vehicle-list-title">Vehicles on Route {{selectedRoute}}</h2>
+  </div>
 
-<div class="vehicle-list-content" *ngIf="selectedRoute && vehicles.length > 0">
+  <div class="vehicle-list-content" *ngIf="selectedRoute && vehicles.length > 0">
   <mat-list>
     <mat-list-item *ngFor="let vehicle of vehicles"
                    (click)="selectVehicle(vehicle.vehicleId)"
@@ -69,9 +70,9 @@
       </div>
     </mat-list-item>
   </mat-list>
-</div>
+  </div>
 
-<div class="vehicle-list-empty" *ngIf="selectedRoute && vehicles.length === 0">
+  <div class="vehicle-list-empty" *ngIf="selectedRoute && vehicles.length === 0">
   <mat-card class="empty-state-card">
     <mat-card-content>
       <div class="empty-state-content">
@@ -81,9 +82,9 @@
       </div>
     </mat-card-content>
   </mat-card>
-</div>
+  </div>
 
-<div class="vehicle-list-no-route" *ngIf="!selectedRoute">
+  <div class="vehicle-list-no-route" *ngIf="!selectedRoute">
   <mat-card class="no-route-card">
     <mat-card-content>
       <div class="no-route-content">
@@ -93,4 +94,5 @@
       </div>
     </mat-card-content>
   </mat-card>
+  </div>
 </div>

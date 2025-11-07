@@ -277,8 +277,12 @@ class MBTAService extends Actor with ActorLogging {
           },
           path("route" / Segment / "vehicles") { routeId =>
             get {
-              onSuccess(RequestFlow.fetchVehiclesForRoute(routeId)) { vehicles =>
-                complete(vehicles)
+              parameter("sortBy".optional, "sortOrder".optional) { (sortByOpt, sortOrderOpt) =>
+                val sortBy = sortByOpt.getOrElse("vehicleId")
+                val sortOrder = sortOrderOpt.getOrElse("asc")
+                onSuccess(RequestFlow.fetchVehiclesForRoute(routeId, sortBy, sortOrder)) { vehicles =>
+                  complete(vehicles)
+                }
               }
             }
           },
@@ -724,7 +728,7 @@ class MBTAService extends Actor with ActorLogging {
       }
     }
 
-    def fetchVehiclesForRoute(routeId: String): Future[Vector[VehicleData]] = {
+    def fetchVehiclesForRoute(routeId: String, sortBy: String = "vehicleId", sortOrder: String = "asc"): Future[Vector[VehicleData]] = {
       // First fetch the route to get direction names and destination names
       MBTAaccess.queueRequest(
         HttpRequest(uri = MBTAaccess.mbtaUri(
@@ -749,12 +753,36 @@ class MBTAService extends Actor with ActorLogging {
               .map(_.toVector.collect {
                 case vd: VehicleData => vd
               })
+              .map { vehicles =>
+                sortVehicles(vehicles, sortBy, sortOrder)
+              }
           }.flatten
         case HttpResponse(code, _, entity, _) =>
           log.error("fetchVehiclesForRoute route lookup returned unexpected code: {} for routeId: {}", code.toString, routeId)
           entity.discardBytes()
           Future.successful(Vector.empty[VehicleData])
       }
+    }
+
+    def sortVehicles(vehicles: Vector[VehicleData], sortBy: String, sortOrder: String): Vector[VehicleData] = {
+      val isAscending = sortOrder.toLowerCase == "asc"
+      
+      val sorted = sortBy.toLowerCase match {
+        case "tripid" | "tripId" =>
+          vehicles.sortWith { (a, b) =>
+            val aValue = a.tripId.getOrElse(a.vehicleId.getOrElse(""))
+            val bValue = b.tripId.getOrElse(b.vehicleId.getOrElse(""))
+            if (isAscending) aValue < bValue else aValue > bValue
+          }
+        case _ => // Default to vehicleId
+          vehicles.sortWith { (a, b) =>
+            val aValue = a.vehicleId.getOrElse("")
+            val bValue = b.vehicleId.getOrElse("")
+            if (isAscending) aValue < bValue else aValue > bValue
+          }
+      }
+      
+      sorted
     }
 
     // Helper function to convert directionId to human-readable format
