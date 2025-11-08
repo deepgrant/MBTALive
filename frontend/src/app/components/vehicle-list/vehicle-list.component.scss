@@ -36,7 +36,35 @@
 
   &.selected {
     background-color: #e3f2fd;
-    border-left: 4px solid #003DA5;
+    border: 3px solid #DA291C !important;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(218, 41, 28, 0.3);
+
+    // Shimmer effect overlay
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.5) 50%,
+        transparent 100%
+      );
+      animation: shimmer 2.5s ease-in-out infinite;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    // Ensure content is above shimmer
+    .vehicle-info {
+      position: relative;
+      z-index: 2;
+    }
   }
 
   // Color coding based on delay status
@@ -103,6 +131,15 @@
   0% { opacity: 1; }
   50% { opacity: 0.7; }
   100% { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
 }
 
 .vehicle-type-icon {
