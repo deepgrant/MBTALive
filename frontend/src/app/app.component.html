@@ -19,6 +19,14 @@
       <img src="assets/favicon.png" alt="MBTA Logo" class="toolbar-favicon">
       <span>{{title}}</span>
       <span class="spacer"></span>
+      <button
+        type="button"
+        aria-label="Settings and preferences"
+        mat-icon-button
+        (click)="resetToInitialState()"
+        title="Reset to initial state">
+        <mat-icon aria-label="Settings icon">menu</mat-icon>
+      </button>
     </mat-toolbar>
 
     <div class="content">
