@@ -925,7 +925,7 @@ export class MapService {
   }
 
   /**
-   * Save current map bounds to cookies
+   * Save current map bounds to settings cookie
    */
   private saveMapBounds(): void {
     if (!this.map) return;
@@ -933,27 +933,29 @@ export class MapService {
     const center = this.map.getCenter();
     const zoom = this.map.getZoom();
 
-    console.log('MapService: Saving map bounds to cookies', { lat: center.lat, lng: center.lng, zoom });
+    console.log('MapService: Saving map bounds to settings cookie', { lat: center.lat, lng: center.lng, zoom });
 
-    this.cookieService.setCookie('mbta_map_center_lat', center.lat.toString());
-    this.cookieService.setCookie('mbta_map_center_lng', center.lng.toString());
-    this.cookieService.setCookie('mbta_map_zoom', zoom.toString());
+    // Get current settings and update map bounds
+    const currentSettings = this.cookieService.getSettingsCookie() || {};
+    currentSettings.mapCenter = { lat: center.lat, lng: center.lng };
+    currentSettings.mapZoom = zoom;
+    this.cookieService.setSettingsCookie(currentSettings);
   }
 
   /**
-   * Restore map bounds from cookies
+   * Restore map bounds from settings cookie
    */
   private restoreMapBounds(): void {
     if (!this.map) return;
 
-    const savedLat = this.cookieService.getCookie('mbta_map_center_lat');
-    const savedLng = this.cookieService.getCookie('mbta_map_center_lng');
-    const savedZoom = this.cookieService.getCookie('mbta_map_zoom');
+    const settings = this.cookieService.getSettingsCookie();
+    const mapCenter = settings?.mapCenter;
+    const mapZoom = settings?.mapZoom;
 
-    if (savedLat && savedLng && savedZoom) {
-      const lat = parseFloat(savedLat);
-      const lng = parseFloat(savedLng);
-      const zoom = parseInt(savedZoom, 10);
+    if (mapCenter && mapZoom !== undefined) {
+      const lat = mapCenter.lat;
+      const lng = mapCenter.lng;
+      const zoom = mapZoom;
 
       // Validate values
       if (
@@ -962,7 +964,7 @@ export class MapService {
         lng >= -180 && lng <= 180 &&
         zoom >= 0 && zoom <= 19
       ) {
-        console.log('MapService: Restoring map bounds from cookies', { lat, lng, zoom });
+        console.log('MapService: Restoring map bounds from settings cookie', { lat, lng, zoom });
         this.boundsRestored = true;
         
         // Set map view after a short delay to ensure map is fully initialized
@@ -972,7 +974,7 @@ export class MapService {
           }
         }, 300);
       } else {
-        console.log('MapService: Invalid saved map bounds, using defaults');
+        console.log('MapService: Invalid saved map bounds, clearing from settings');
         this.clearMapBoundsCookies();
       }
     } else {
@@ -981,12 +983,13 @@ export class MapService {
   }
 
   /**
-   * Clear map bounds cookies
+   * Clear map bounds from settings cookie
    */
   private clearMapBoundsCookies(): void {
-    this.cookieService.deleteCookie('mbta_map_center_lat');
-    this.cookieService.deleteCookie('mbta_map_center_lng');
-    this.cookieService.deleteCookie('mbta_map_zoom');
+    const currentSettings = this.cookieService.getSettingsCookie() || {};
+    delete currentSettings.mapCenter;
+    delete currentSettings.mapZoom;
+    this.cookieService.setSettingsCookie(currentSettings);
   }
 
   /**

@@ -117,13 +117,11 @@ export class VehicleService {
     console.log('VehicleService: Selecting route:', routeId);
     this.selectedRouteSubject.next(routeId);
     
-    // Save route selection to cookie (unless we're restoring from cookie)
+    // Save route selection to settings cookie (unless we're restoring from cookie)
     if (!skipCookieSave) {
-      if (routeId) {
-        this.cookieService.setCookie('mbta_selected_route', routeId);
-      } else {
-        this.cookieService.deleteCookie('mbta_selected_route');
-      }
+      const currentSettings = this.cookieService.getSettingsCookie() || {};
+      currentSettings.selectedRoute = routeId;
+      this.cookieService.setSettingsCookie(currentSettings);
     }
   }
 
@@ -159,7 +157,8 @@ export class VehicleService {
   restoreRouteFromCookie(): void {
     this.routes$.pipe(take(1)).subscribe(routes => {
       if (routes.length > 0) {
-        const savedRoute = this.cookieService.getCookie('mbta_selected_route');
+        const settings = this.cookieService.getSettingsCookie();
+        const savedRoute = settings?.selectedRoute;
         if (savedRoute) {
           // Verify the route exists in the loaded routes
           const routeExists = routes.some(route => route.id === savedRoute);
@@ -171,8 +170,10 @@ export class VehicleService {
               this.selectRoute(savedRoute, true);
             }, 100);
           } else {
-            console.log('VehicleService: Saved route not found in routes, clearing cookie');
-            this.cookieService.deleteCookie('mbta_selected_route');
+            console.log('VehicleService: Saved route not found in routes, clearing from settings');
+            // Update settings to remove invalid route
+            const updatedSettings = { ...settings, selectedRoute: null };
+            this.cookieService.setSettingsCookie(updatedSettings);
           }
         }
       }

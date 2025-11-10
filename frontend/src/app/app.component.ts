@@ -42,11 +42,11 @@ export class AppComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit(): void {
-    // Restore routes panel visibility from cookie
-    const savedVisibility = this.cookieService.getCookie('mbta_routes_panel_visible');
-    if (savedVisibility !== null) {
-      this.routesPanelVisible = savedVisibility === 'true';
-      console.log('AppComponent: Restored routes panel visibility from cookie:', this.routesPanelVisible);
+    // Restore routes panel visibility from settings cookie
+    const settings = this.cookieService.getSettingsCookie();
+    if (settings?.routesPanelVisible !== undefined) {
+      this.routesPanelVisible = settings.routesPanelVisible;
+      console.log('AppComponent: Restored routes panel visibility from settings cookie:', this.routesPanelVisible);
     }
 
     // Subscribe to selected route to show/hide vehicle panel
@@ -75,9 +75,11 @@ export class AppComponent implements OnInit, OnDestroy {
 
   toggleRoutesPanel(): void {
     this.routesPanelVisible = !this.routesPanelVisible;
-    // Save routes panel visibility to cookie
-    this.cookieService.setCookie('mbta_routes_panel_visible', this.routesPanelVisible.toString());
-    console.log('AppComponent: Saved routes panel visibility to cookie:', this.routesPanelVisible);
+    // Save routes panel visibility to settings cookie
+    const currentSettings = this.cookieService.getSettingsCookie() || {};
+    currentSettings.routesPanelVisible = this.routesPanelVisible;
+    this.cookieService.setSettingsCookie(currentSettings);
+    console.log('AppComponent: Saved routes panel visibility to settings cookie:', this.routesPanelVisible);
   }
 
   onDialogClose(): void {
