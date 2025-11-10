@@ -102,6 +102,14 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
       try {
         this.map = this.mapService.initializeMap('map');
         console.log('MapComponent: Map initialized successfully:', this.map);
+        
+        // Restore route selection from cookie after map is fully initialized
+        // Wait longer to ensure map bounds restoration completes and map is ready
+        // This ensures the map is ready to display route shapes and vehicles
+        setTimeout(() => {
+          console.log('MapComponent: Restoring route from cookie after map initialization');
+          this.vehicleService.restoreRouteFromCookie();
+        }, 800);
       } catch (error) {
         console.error('MapComponent: Error initializing map:', error);
       }
@@ -176,12 +184,16 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private fitBoundsToRouteAndStations(): void {
     // Only frame once when route is first loaded
-    if (!this.routeFramed && this.map) {
+    // Skip framing if bounds were restored from cookies (user preference)
+    if (!this.routeFramed && this.map && !this.mapService.wereBoundsRestored()) {
       setTimeout(() => {
         console.log('MapComponent: Framing route to fit window');
         this.mapService.fitBoundsToRoute();
         this.routeFramed = true;
       }, 200); // Delay to ensure shapes and stations are rendered
+    } else if (this.mapService.wereBoundsRestored()) {
+      console.log('MapComponent: Skipping route framing because bounds were restored from cookies');
+      this.routeFramed = true; // Mark as framed to prevent future framing
     }
   }
 }

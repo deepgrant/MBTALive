@@ -5,6 +5,7 @@ import { Vehicle } from '../models/vehicle.model';
 import { Route, Shape } from '../models/route.model';
 import { Station } from '../models/station.model';
 import { VehicleCompletionDialogService } from './vehicle-completion-dialog.service';
+import { CookieService } from './cookie.service';
 
 @Injectable({
   providedIn: 'root'
@@ -25,8 +26,14 @@ export class MapService {
   private routeBounds: L.LatLngBounds | null = null;
   private lastTrackedVehicleData: Vehicle | null = null;
   private isTrackingActive: boolean = false;
+  private boundsSaveTimeout: any = null;
+  private readonly BOUNDS_SAVE_DELAY = 2500; // 2.5 seconds
+  private boundsRestored: boolean = false;
 
-  constructor(private dialogService: VehicleCompletionDialogService) { }
+  constructor(
+    private dialogService: VehicleCompletionDialogService,
+    private cookieService: CookieService
+  ) { }
 
   initializeMap(containerId: string): L.Map {
     console.log('MapService: Initializing map with container:', containerId);
@@ -63,6 +70,12 @@ export class MapService {
     }).addTo(this.map);
 
     console.log('MapService: Map initialized successfully');
+
+    // Restore map bounds from cookie after initialization
+    this.restoreMapBounds();
+
+    // Set up event listeners for map bounds saving (debounced)
+    this.setupMapBoundsSaving();
 
     // Force a resize after a short delay to ensure proper rendering
     setTimeout(() => {
@@ -878,5 +891,108 @@ export class MapService {
         severity: 'major-delay'
       };
     }
+  }
+
+  /**
+   * Set up event listeners for map bounds saving with debouncing
+   */
+  private setupMapBoundsSaving(): void {
+    if (!this.map) return;
+
+    // Listen to map move and zoom events
+    this.map.on('moveend', () => {
+      this.debouncedSaveMapBounds();
+    });
+
+    this.map.on('zoomend', () => {
+      this.debouncedSaveMapBounds();
+    });
+  }
+
+  /**
+   * Debounced method to save map bounds to cookies
+   */
+  private debouncedSaveMapBounds(): void {
+    // Clear existing timeout
+    if (this.boundsSaveTimeout) {
+      clearTimeout(this.boundsSaveTimeout);
+    }
+
+    // Set new timeout to save after inactivity period
+    this.boundsSaveTimeout = setTimeout(() => {
+      this.saveMapBounds();
+    }, this.BOUNDS_SAVE_DELAY);
+  }
+
+  /**
+   * Save current map bounds to cookies
+   */
+  private saveMapBounds(): void {
+    if (!this.map) return;
+
+    const center = this.map.getCenter();
+    const zoom = this.map.getZoom();
+
+    console.log('MapService: Saving map bounds to cookies', { lat: center.lat, lng: center.lng, zoom });
+
+    this.cookieService.setCookie('mbta_map_center_lat', center.lat.toString());
+    this.cookieService.setCookie('mbta_map_center_lng', center.lng.toString());
+    this.cookieService.setCookie('mbta_map_zoom', zoom.toString());
+  }
+
+  /**
+   * Restore map bounds from cookies
+   */
+  private restoreMapBounds(): void {
+    if (!this.map) return;
+
+    const savedLat = this.cookieService.getCookie('mbta_map_center_lat');
+    const savedLng = this.cookieService.getCookie('mbta_map_center_lng');
+    const savedZoom = this.cookieService.getCookie('mbta_map_zoom');
+
+    if (savedLat && savedLng && savedZoom) {
+      const lat = parseFloat(savedLat);
+      const lng = parseFloat(savedLng);
+      const zoom = parseInt(savedZoom, 10);
+
+      // Validate values
+      if (
+        !isNaN(lat) && !isNaN(lng) && !isNaN(zoom) &&
+        lat >= -90 && lat <= 90 &&
+        lng >= -180 && lng <= 180 &&
+        zoom >= 0 && zoom <= 19
+      ) {
+        console.log('MapService: Restoring map bounds from cookies', { lat, lng, zoom });
+        this.boundsRestored = true;
+        
+        // Set map view after a short delay to ensure map is fully initialized
+        setTimeout(() => {
+          if (this.map) {
+            this.map.setView([lat, lng], zoom);
+          }
+        }, 300);
+      } else {
+        console.log('MapService: Invalid saved map bounds, using defaults');
+        this.clearMapBoundsCookies();
+      }
+    } else {
+      console.log('MapService: No saved map bounds found, using defaults');
+    }
+  }
+
+  /**
+   * Clear map bounds cookies
+   */
+  private clearMapBoundsCookies(): void {
+    this.cookieService.deleteCookie('mbta_map_center_lat');
+    this.cookieService.deleteCookie('mbta_map_center_lng');
+    this.cookieService.deleteCookie('mbta_map_zoom');
+  }
+
+  /**
+   * Check if map bounds were restored from cookies
+   */
+  wereBoundsRestored(): boolean {
+    return this.boundsRestored;
   }
 }

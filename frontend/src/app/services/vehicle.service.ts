@@ -1,10 +1,11 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, combineLatest, EMPTY, of } from 'rxjs';
-import { map, switchMap, catchError } from 'rxjs/operators';
+import { map, switchMap, catchError, take } from 'rxjs/operators';
 import { Vehicle } from '../models/vehicle.model';
 import { Route, Shape } from '../models/route.model';
 import { Station } from '../models/station.model';
 import { ApiService } from './api.service';
+import { CookieService } from './cookie.service';
 
 @Injectable({
   providedIn: 'root'
@@ -24,7 +25,10 @@ export class VehicleService {
   public selectedRouteStations$: Observable<Station[]>;
   public selectedRouteShapes$: Observable<Shape[]>;
 
-  constructor(private apiService: ApiService) {
+  constructor(
+    private apiService: ApiService,
+    private cookieService: CookieService
+  ) {
     // Load routes once on initialization
     this.loadRoutes();
 
@@ -109,9 +113,18 @@ export class VehicleService {
     });
   }
 
-  selectRoute(routeId: string | null): void {
+  selectRoute(routeId: string | null, skipCookieSave: boolean = false): void {
     console.log('VehicleService: Selecting route:', routeId);
     this.selectedRouteSubject.next(routeId);
+    
+    // Save route selection to cookie (unless we're restoring from cookie)
+    if (!skipCookieSave) {
+      if (routeId) {
+        this.cookieService.setCookie('mbta_selected_route', routeId);
+      } else {
+        this.cookieService.deleteCookie('mbta_selected_route');
+      }
+    }
   }
 
   selectVehicle(vehicleId: string | null): void {
@@ -137,5 +150,32 @@ export class VehicleService {
     return this.routes$.pipe(
       map(routes => routes.find(route => route.id === routeId))
     );
+  }
+
+  /**
+   * Restore route selection from cookie
+   * Should be called after routes are loaded and map is initialized
+   */
+  restoreRouteFromCookie(): void {
+    this.routes$.pipe(take(1)).subscribe(routes => {
+      if (routes.length > 0) {
+        const savedRoute = this.cookieService.getCookie('mbta_selected_route');
+        if (savedRoute) {
+          // Verify the route exists in the loaded routes
+          const routeExists = routes.some(route => route.id === savedRoute);
+          if (routeExists) {
+            console.log('VehicleService: Restoring route selection from cookie:', savedRoute);
+            // Use a small delay to ensure map is ready
+            // Skip cookie save since we're restoring from cookie
+            setTimeout(() => {
+              this.selectRoute(savedRoute, true);
+            }, 100);
+          } else {
+            console.log('VehicleService: Saved route not found in routes, clearing cookie');
+            this.cookieService.deleteCookie('mbta_selected_route');
+          }
+        }
+      }
+    });
   }
 }
