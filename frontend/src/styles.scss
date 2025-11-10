@@ -216,10 +216,25 @@ html, body {
   border: none !important;
   border-radius: 4px !important;
   padding: 4px 8px !important;
-  font-size: 12px !important;
-  font-weight: bold !important;
+  font-size: 11px !important;
+  font-weight: normal !important;
   box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
   white-space: nowrap !important;
+  line-height: 1.4 !important;
+
+  strong {
+    font-weight: bold;
+  }
+
+  div {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    
+    &:first-child {
+      margin-bottom: 2px;
+    }
+  }
 }
 
 .vehicle-tooltip::before {
@@ -233,12 +248,95 @@ html, body {
   border: none !important;
   border-radius: 4px !important;
   padding: 4px 8px !important;
-  font-size: 12px !important;
-  font-weight: bold !important;
+  font-size: 11px !important;
+  font-weight: normal !important;
   box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
   white-space: nowrap !important;
+  line-height: 1.4 !important;
+
+  strong {
+    font-weight: bold;
+  }
+
+  div {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    
+    &:first-child {
+      margin-bottom: 2px;
+    }
+  }
 }
 
 .vehicle-tooltip-outbound::before {
   border-bottom-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+// Flash trip name between red and white for delays > 15 minutes
+@keyframes flash-trip-name {
+  0%, 100% {
+    color: #ff0000;
+  }
+  50% {
+    color: #ffffff;
+  }
+}
+
+// Flash trip label alternately (opposite phase to trip name) for delays > 30 minutes
+// When trip name is red, label is white; when trip name is white, label is red
+@keyframes flash-trip-label {
+  0%, 100% {
+    color: #ffffff;
+  }
+  50% {
+    color: #ff0000;
+  }
+}
+
+// For outbound tooltip (white background, black text), flash between black and red
+.vehicle-tooltip-outbound {
+  .flash-trip-label {
+    animation: flash-trip-label-outbound 1s ease-in-out infinite;
+  }
+}
+
+@keyframes flash-trip-label-outbound {
+  0%, 100% {
+    color: #000000;
+  }
+  50% {
+    color: #ff0000;
+  }
+}
+
+// Apply flashing animation to trip name and label
+.vehicle-tooltip {
+  .flash-trip-name {
+    animation: flash-trip-name 1s ease-in-out infinite;
+  }
+
+  .flash-trip-label {
+    animation: flash-trip-label 1s ease-in-out infinite;
+  }
+}
+
+// For outbound tooltip, trip name flashes between red and black (not white)
+@keyframes flash-trip-name-outbound {
+  0%, 100% {
+    color: #ff0000;
+  }
+  50% {
+    color: #000000;
+  }
+}
+
+.vehicle-tooltip-outbound {
+  .flash-trip-name {
+    animation: flash-trip-name-outbound 1s ease-in-out infinite;
+  }
+
+  .flash-trip-label {
+    animation: flash-trip-label-outbound 1s ease-in-out infinite;
+  }
 }

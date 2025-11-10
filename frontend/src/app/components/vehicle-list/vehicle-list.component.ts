@@ -77,6 +77,19 @@ export class VehicleListComponent implements OnInit, OnDestroy {
   selectVehicle(vehicleId: string): void {
     console.log('VehicleListComponent: Vehicle clicked:', vehicleId);
     console.log('VehicleListComponent: Available vehicles:', this.vehicles.map(v => v.vehicleId));
+    console.log('VehicleListComponent: Current selected vehicle:', this.selectedVehicle);
+    
+    // If clicking the same vehicle that's already selected, deselect it
+    if (this.selectedVehicle === vehicleId) {
+      console.log('VehicleListComponent: Deselecting vehicle:', vehicleId);
+      this.vehicleService.selectVehicle(null);
+      // centerOnVehicle will handle stopping tracking
+      this.mapService.centerOnVehicle(vehicleId);
+      console.log('VehicleListComponent: Vehicle deselected');
+      return;
+    }
+    
+    // Select the new vehicle
     console.log('VehicleListComponent: Calling vehicleService.selectVehicle...');
     this.vehicleService.selectVehicle(vehicleId);
     console.log('VehicleListComponent: Calling mapService.centerOnVehicle...');

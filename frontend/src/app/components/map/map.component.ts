@@ -18,6 +18,7 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   private subscriptions: Subscription[] = [];
   private map: any;
   private currentRoute: Route | null = null;
+  private currentRouteId: string | null = null;
   private routeFramed: boolean = false;
 
   constructor(
@@ -101,6 +102,14 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
       try {
         this.map = this.mapService.initializeMap('map');
         console.log('MapComponent: Map initialized successfully:', this.map);
+        
+        // Restore route selection from cookie after map is fully initialized
+        // Wait longer to ensure map bounds restoration completes and map is ready
+        // This ensures the map is ready to display route shapes and vehicles
+        setTimeout(() => {
+          console.log('MapComponent: Restoring route from cookie after map initialization');
+          this.vehicleService.restoreRouteFromCookie();
+        }, 800);
       } catch (error) {
         console.error('MapComponent: Error initializing map:', error);
       }
@@ -117,21 +126,33 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (vehicles.length === 0) {
       console.log('MapComponent: No vehicles to display');
+      // Still pass route ID even if no vehicles
+      this.mapService.updateVehicleMarkers(vehicles, this.currentRouteId);
       return;
     }
 
-    console.log('MapComponent: Calling mapService.updateVehicleMarkers');
-    this.mapService.updateVehicleMarkers(vehicles);
+    // Get route ID from vehicles if not set (should all be same route)
+    const routeIdFromVehicles = vehicles[0]?.routeId;
+    
+    console.log('MapComponent: Calling mapService.updateVehicleMarkers with route ID:', this.currentRouteId || routeIdFromVehicles);
+    this.mapService.updateVehicleMarkers(vehicles, this.currentRouteId || routeIdFromVehicles);
     console.log('MapComponent: Vehicle markers update call completed');
     // DO NOT call fitBoundsToVehicles() - keep current map view
   }
 
   private handleRouteSelection(routeId: string | null): void {
+    // Stop vehicle tracking silently when route changes to prevent false dialog
+    console.log('MapComponent: Stopping vehicle tracking due to route change');
+    this.mapService.stopVehicleTrackingSilently();
+
     // Always clear existing route data first
     console.log('MapComponent: Clearing previous route data');
     this.mapService.clearRouteLayers();
     this.mapService.clearStationMarkers();
     this.routeFramed = false;  // Reset framing flag
+
+    // Update current route ID
+    this.currentRouteId = routeId;
 
     if (!routeId) {
       this.currentRoute = null;
@@ -163,12 +184,16 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private fitBoundsToRouteAndStations(): void {
     // Only frame once when route is first loaded
-    if (!this.routeFramed && this.map) {
+    // Skip framing if bounds were restored from cookies (user preference)
+    if (!this.routeFramed && this.map && !this.mapService.wereBoundsRestored()) {
       setTimeout(() => {
         console.log('MapComponent: Framing route to fit window');
         this.mapService.fitBoundsToRoute();
         this.routeFramed = true;
       }, 200); // Delay to ensure shapes and stations are rendered
+    } else if (this.mapService.wereBoundsRestored()) {
+      console.log('MapComponent: Skipping route framing because bounds were restored from cookies');
+      this.routeFramed = true; // Mark as framed to prevent future framing
     }
   }
 }

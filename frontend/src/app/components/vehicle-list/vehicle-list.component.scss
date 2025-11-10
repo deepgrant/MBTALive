@@ -1,6 +1,13 @@
+.vehicle-list-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 .vehicle-list-header {
   padding: 8px;
   border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
 }
 
 .vehicle-list-title {
@@ -11,8 +18,9 @@
 }
 
 .vehicle-list-content {
-  height: calc(100vh - 200px);
+  flex: 1;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .vehicle-item {
@@ -28,7 +36,35 @@
 
   &.selected {
     background-color: #e3f2fd;
-    border-left: 4px solid #003DA5;
+    border: 3px solid #DA291C !important;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(218, 41, 28, 0.3);
+
+    // Shimmer effect overlay
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.5) 50%,
+        transparent 100%
+      );
+      animation: shimmer 2.5s ease-in-out infinite;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    // Ensure content is above shimmer
+    .vehicle-info {
+      position: relative;
+      z-index: 2;
+    }
   }
 
   // Color coding based on delay status
@@ -73,6 +109,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
+
+  .trip-name {
+    font-weight: normal;
+    font-size: 14px;
+    color: #666;
+    margin-left: 4px;
+  }
 }
 
 .delay-indicator {
@@ -88,6 +131,15 @@
   0% { opacity: 1; }
   50% { opacity: 0.7; }
   100% { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
 }
 
 .vehicle-type-icon {
@@ -166,11 +218,12 @@
 
 .vehicle-list-empty,
 .vehicle-list-no-route {
+  flex: 1;
   padding: 16px;
-  height: calc(100vh - 200px);
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 0;
 }
 
 .empty-state-card,

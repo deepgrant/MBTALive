@@ -1,0 +1,40 @@
+<div class="dialog-overlay" (click)="onClose()">
+  <div class="dialog-container" (click)="$event.stopPropagation()">
+    <mat-card class="dialog-card">
+      <mat-card-content>
+        <h2 class="dialog-title">Vehicle Tracking Complete</h2>
+        
+        <div class="dialog-content">
+          <div class="info-row">
+            <strong>Vehicle ID:</strong> {{ vehicleId }}
+          </div>
+          
+          <div class="info-row">
+            <strong>Route ID:</strong> {{ routeId }}
+          </div>
+
+          <div class="message-row" *ngIf="completedNormally">
+            <p>The vehicle has completed its route.</p>
+          </div>
+
+          <div class="message-row" *ngIf="!completedNormally">
+            <p class="warning-message">⚠ Vehicle tracking ceased prematurely. The vehicle may still be in service.</p>
+          </div>
+
+          <div class="info-row" *ngIf="finalArrivalTime">
+            <strong>Final Arrival Time:</strong> {{ formatTime(finalArrivalTime) }}
+          </div>
+
+          <div class="info-row">
+            <strong>Last Update Received:</strong> {{ formatTime(lastUpdateTime) }}
+          </div>
+        </div>
+
+        <div class="dialog-actions">
+          <button mat-raised-button color="primary" (click)="onClose()">OK</button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>
+
