@@ -24,7 +24,7 @@ A modern full-stack application for tracking MBTA commuter rail vehicles in real
 - **Scalafix** - Linting (OrganizeImports, RemoveUnused, DisableSyntax, RedundantSyntax, etc.)
 
 ### Frontend (Angular)
-- **Angular 19** - Framework and Angular Material
+- **Angular 20** - Framework and Angular Material
 - **TypeScript 5.8** - Type-safe JavaScript
 - **Leaflet 1.9** - Interactive maps
 - **RxJS 7.8** - Reactive programming
@@ -109,7 +109,7 @@ A modern full-stack application for tracking MBTA commuter rail vehicles in real
 - In-memory caching for performance
 
 ### Frontend Development
-- **Angular 19**, **TypeScript 5.8**, **Leaflet 1.9**
+- **Angular 20**, **TypeScript 5.8**, **Leaflet 1.9**
 - SCSS for styling with MBTA theme
 
 ## Architecture

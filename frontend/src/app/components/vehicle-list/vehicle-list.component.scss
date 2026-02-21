@@ -21,6 +21,20 @@
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+
+  // Let list items size to content so full vehicle details are visible (Material default is 48px)
+  mat-list-item,
+  .mat-mdc-list-item {
+    height: auto !important;
+    min-height: 48px;
+
+    .mat-list-item-content,
+    .mat-mdc-list-item-content {
+      height: auto !important;
+      min-height: 48px;
+      padding: 0;
+    }
+  }
 }
 
 .vehicle-item {
@@ -29,6 +43,7 @@
   transition: all 0.2s;
   padding: 12px 16px;
   position: relative;
+  min-height: 80px;
 
   &:hover {
     background-color: #f5f5f5;
@@ -157,7 +172,7 @@
 
 .detail-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   font-size: 13px;
   color: #666;
@@ -166,14 +181,16 @@
     font-size: 16px;
     width: 16px;
     height: 16px;
+    min-width: 16px;
     color: #999;
+    margin-top: 2px;
   }
 
   span {
     flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    min-width: 0;
+    overflow-wrap: break-word;
+    white-space: normal;
   }
 }
 
