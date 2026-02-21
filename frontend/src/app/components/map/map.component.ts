@@ -8,11 +8,10 @@ import { VehicleService } from '../../services/vehicle.service';
 import { MapService } from '../../services/map.service';
 
 @Component({
-  selector: 'app-map',
-  standalone: true,
-  imports: [CommonModule],
-  templateUrl: './map.component.html',
-  styleUrls: ['./map.component.scss']
+    selector: 'app-map',
+    imports: [CommonModule],
+    templateUrl: './map.component.html',
+    styleUrls: ['./map.component.scss']
 })
 export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   private subscriptions: Subscription[] = [];

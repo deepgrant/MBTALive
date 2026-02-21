@@ -9,16 +9,15 @@ import { VehicleService } from '../../services/vehicle.service';
 import { MapService } from '../../services/map.service';
 
 @Component({
-  selector: 'app-vehicle-list',
-  standalone: true,
-  imports: [
-    CommonModule,
-    MatListModule,
-    MatCardModule,
-    MatIconModule
-  ],
-  templateUrl: './vehicle-list.component.html',
-  styleUrls: ['./vehicle-list.component.scss']
+    selector: 'app-vehicle-list',
+    imports: [
+        CommonModule,
+        MatListModule,
+        MatCardModule,
+        MatIconModule
+    ],
+    templateUrl: './vehicle-list.component.html',
+    styleUrls: ['./vehicle-list.component.scss']
 })
 export class VehicleListComponent implements OnInit, OnDestroy {
   vehicles: Vehicle[] = [];

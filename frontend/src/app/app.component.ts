@@ -13,20 +13,19 @@ import { CookieService } from './services/cookie.service';
 import { Subscription } from 'rxjs';
 
 @Component({
-  selector: 'app-root',
-  standalone: true,
-  imports: [
-    CommonModule,
-    MatToolbarModule,
-    MatButtonModule,
-    MatIconModule,
-    RoutesComponent,
-    MapComponent,
-    VehicleListComponent,
-    VehicleCompletionDialogComponent
-  ],
-  templateUrl: './app.component.html',
-  styleUrls: ['./app.component.scss']
+    selector: 'app-root',
+    imports: [
+        CommonModule,
+        MatToolbarModule,
+        MatButtonModule,
+        MatIconModule,
+        RoutesComponent,
+        MapComponent,
+        VehicleListComponent,
+        VehicleCompletionDialogComponent
+    ],
+    templateUrl: './app.component.html',
+    styleUrls: ['./app.component.scss']
 })
 export class AppComponent implements OnInit, OnDestroy {
   title = 'MBTA Tracker';
