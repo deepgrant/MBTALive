@@ -85,4 +85,24 @@ export class AppComponent implements OnInit, OnDestroy {
   onDialogClose(): void {
     this.dialogService.closeDialog();
   }
+
+  resetToInitialState(): void {
+    console.log('AppComponent: Resetting to initial state');
+    
+    // Delete the settings cookie
+    this.cookieService.deleteSettingsCookie();
+    console.log('AppComponent: Deleted settings cookie');
+    
+    // Clear selected route
+    this.vehicleService.selectRoute(null, true); // Skip cookie save since we just deleted it
+    console.log('AppComponent: Cleared selected route');
+    
+    // Clear selected vehicle
+    this.vehicleService.selectVehicle(null);
+    console.log('AppComponent: Cleared selected vehicle');
+    
+    // Reset routes panel visibility to default (true)
+    this.routesPanelVisible = true;
+    console.log('AppComponent: Reset routes panel visibility to default');
+  }
 }

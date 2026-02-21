@@ -20,6 +20,7 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   private currentRoute: Route | null = null;
   private currentRouteId: string | null = null;
   private routeFramed: boolean = false;
+  private isInitialRouteLoad: boolean = true;
 
   constructor(
     private vehicleService: VehicleService,
@@ -145,6 +146,9 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
     console.log('MapComponent: Stopping vehicle tracking due to route change');
     this.mapService.stopVehicleTrackingSilently();
 
+    // Check if this is a route change (not initial load)
+    const isRouteChange = this.currentRouteId !== null && this.currentRouteId !== routeId;
+    
     // Always clear existing route data first
     console.log('MapComponent: Clearing previous route data');
     this.mapService.clearRouteLayers();
@@ -164,6 +168,14 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
       if (route) {
         console.log('MapComponent: Loading new route:', route.id);
         this.currentRoute = route;
+        
+        // If this is a route change (user manually selected a different route),
+        // we should always frame the route, regardless of saved bounds
+        if (isRouteChange) {
+          console.log('MapComponent: Route changed, will frame new route');
+          // Reset initial load flag so route will be framed
+          this.isInitialRouteLoad = false;
+        }
       }
     });
   }
@@ -184,16 +196,25 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private fitBoundsToRouteAndStations(): void {
     // Only frame once when route is first loaded
-    // Skip framing if bounds were restored from cookies (user preference)
-    if (!this.routeFramed && this.map && !this.mapService.wereBoundsRestored()) {
-      setTimeout(() => {
-        console.log('MapComponent: Framing route to fit window');
-        this.mapService.fitBoundsToRoute();
-        this.routeFramed = true;
-      }, 200); // Delay to ensure shapes and stations are rendered
-    } else if (this.mapService.wereBoundsRestored()) {
-      console.log('MapComponent: Skipping route framing because bounds were restored from cookies');
-      this.routeFramed = true; // Mark as framed to prevent future framing
+    // Skip framing on initial load if bounds were restored from cookies (user preference)
+    // But always frame when user manually changes routes
+    if (!this.routeFramed && this.map) {
+      const shouldSkipFraming = this.isInitialRouteLoad && this.mapService.wereBoundsRestored();
+      
+      if (!shouldSkipFraming) {
+        setTimeout(() => {
+          console.log('MapComponent: Framing route to fit window');
+          this.mapService.fitBoundsToRoute();
+          this.routeFramed = true;
+          // After first route is framed, mark that initial load is complete
+          this.isInitialRouteLoad = false;
+        }, 200); // Delay to ensure shapes and stations are rendered
+      } else {
+        console.log('MapComponent: Skipping route framing on initial load because bounds were restored from cookies');
+        this.routeFramed = true; // Mark as framed to prevent future framing
+        // Mark initial load as complete after skipping
+        this.isInitialRouteLoad = false;
+      }
     }
   }
 }
