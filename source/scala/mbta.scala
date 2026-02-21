@@ -4,8 +4,6 @@ import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import org.apache.pekko
 import spray.json._
-import pekko.http.scaladsl.marshalling.Marshaller
-import pekko.http.scaladsl.unmarshalling.Unmarshaller
 
 import scala.concurrent.Future
 import scala.concurrent.Promise
@@ -15,8 +13,9 @@ import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 
+import pekko.http.scaladsl.marshalling.Marshaller
+import pekko.http.scaladsl.unmarshalling.Unmarshaller
 import pekko.actor._
-import pekko.Done
 import pekko.http.scaladsl.Http
 import pekko.http.scaladsl.model.{
   HttpRequest,
@@ -202,7 +201,7 @@ class MBTAService extends Actor with ActorLogging {
     val route = createApiRoutes()
     val binding = Http().newServerAt("0.0.0.0", 8080).bind(route)
     binding.onComplete {
-      case Success(binding) => log.info(s"Server online at http://0.0.0.0:8080/")
+      case Success(binding) => log.info("Server online at http://0.0.0.0:8080/")
       case Failure(exception) => log.error(s"Failed to bind HTTP server: ${exception}")
     }
   }

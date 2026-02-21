@@ -4,15 +4,14 @@ import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 
 @Component({
-  selector: 'app-vehicle-completion-dialog',
-  standalone: true,
-  imports: [
-    CommonModule,
-    MatCardModule,
-    MatButtonModule
-  ],
-  templateUrl: './vehicle-completion-dialog.component.html',
-  styleUrls: ['./vehicle-completion-dialog.component.scss']
+    selector: 'app-vehicle-completion-dialog',
+    imports: [
+        CommonModule,
+        MatCardModule,
+        MatButtonModule
+    ],
+    templateUrl: './vehicle-completion-dialog.component.html',
+    styleUrls: ['./vehicle-completion-dialog.component.scss']
 })
 export class VehicleCompletionDialogComponent {
   @Input() vehicleId: string = '';

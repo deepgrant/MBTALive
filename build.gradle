@@ -1,12 +1,18 @@
+buildscript {
+  repositories { mavenCentral() }
+  dependencies {
+    classpath 'com.palantir.gradle.docker:gradle-docker:0.37.0'
+  }
+}
 
 plugins {
   id 'scala'
-  id "com.palantir.docker" version "0.36.0"
-  id 'io.github.cosmicsilence.scalafix' version '0.2.4'
+  id 'io.github.cosmicsilence.scalafix' version '0.2.6'
 }
+apply plugin: 'com.palantir.docker'
 
-configurations {
-  all*.exclude group: 'org.bytedeco', module: 'javacpp-presets'
+configurations.all {
+  exclude group: 'org.bytedeco', module: 'javacpp-presets'
 }
 
 apply from: "$projectDir/gradle/dependencies.gradle"
@@ -46,6 +52,7 @@ sourceSets {
     scala.srcDir "source/scala"
     compileClasspath += files("source/scala", "build/classes/macros")
     resources.srcDirs = files("source/resources")
+    ext.set('allScala', scala)  // scalafix plugin expects allScala (Gradle 9 / Scala plugin compatibility)
   }
 }
 
@@ -74,7 +81,7 @@ task printClasspath {
 }
 
 task run(type: JavaExec, dependsOn: classes) {
-  main = 'mbta.actor.MBTAMain'
+  mainClass = 'mbta.actor.MBTAMain'
   classpath sourceSets.main.runtimeClasspath
   classpath configurations.runtimeClasspath
 }

@@ -10,18 +10,17 @@ import { Route } from '../../models/route.model';
 import { VehicleService } from '../../services/vehicle.service';
 
 @Component({
-  selector: 'app-routes',
-  standalone: true,
-  imports: [
-    CommonModule,
-    MatListModule,
-    MatCardModule,
-    MatButtonModule,
-    MatIconModule,
-    MatButtonToggleModule
-  ],
-  templateUrl: './routes.component.html',
-  styleUrls: ['./routes.component.scss']
+    selector: 'app-routes',
+    imports: [
+        CommonModule,
+        MatListModule,
+        MatCardModule,
+        MatButtonModule,
+        MatIconModule,
+        MatButtonToggleModule
+    ],
+    templateUrl: './routes.component.html',
+    styleUrls: ['./routes.component.scss']
 })
 export class RoutesComponent implements OnInit, OnDestroy {
   routes: Route[] = [];
