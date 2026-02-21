@@ -15,23 +15,25 @@ A modern full-stack application for tracking MBTA commuter rail vehicles in real
 ## Technology Stack
 
 ### Backend (Scala 3)
-- **Scala 3.3.4** - Modern Scala with latest language features
-- **Pekko HTTP** - HTTP server and client
-- **Spray JSON** - JSON serialization
-- **Apache Pekko** - Actor system and streams
+- **Gradle 9.3.1** - Build tool
+- **Scala 3.3.7 LTS** - Language and stdlib
+- **Apache Pekko 1.4.0** - Actor system and streams
+- **Pekko HTTP 1.3.0** - HTTP server and client
+- **Spray JSON 1.3.6** - JSON serialization
+- **ScalaTest 3.2.19**, **scala-xml 2.4.0**, **scala-collection-compat 2.12.0**
+- **Scalafix** - Linting (OrganizeImports, RemoveUnused, DisableSyntax, RedundantSyntax, etc.)
 
-### Frontend (Angular 18)
-- **Angular 18** - Latest Angular framework
-- **Angular Material** - UI components
-- **Leaflet** - Interactive maps
-- **RxJS** - Reactive programming
-- **TypeScript** - Type-safe JavaScript
+### Frontend (Angular)
+- **Angular 18** - Framework and Angular Material
+- **TypeScript 5.4** - Type-safe JavaScript
+- **Leaflet 1.9** - Interactive maps
+- **RxJS 7.8** - Reactive programming
 
 ## Getting Started
 
 ### Prerequisites
 
-- **Java 21** for Scala backend
+- **Java 21** for Scala backend (Gradle 9 requires JVM 17+)
 - **Node.js 18+** and **npm** for Angular frontend
 - **MBTA API Key** (optional, for higher rate limits)
 
@@ -69,6 +71,11 @@ A modern full-stack application for tracking MBTA commuter rail vehicles in real
 - **Frontend**: http://localhost:4200
 - **Backend API**: http://localhost:8080/api
 
+### Build and Lint
+
+- **Backend**: `./gradlew build` (compile, test, check Scalafix)
+- **Lint only**: `./gradlew checkScalafixMain` (fail if fixes needed) or `./gradlew applyScalafixMain` (apply fixes)
+
 ## API Endpoints
 
 - `GET /api/routes` - Get all commuter rail routes
@@ -96,16 +103,14 @@ A modern full-stack application for tracking MBTA commuter rail vehicles in real
 ## Development
 
 ### Backend Development
-- Uses Gradle for build management
-- Scala 3 with modern syntax
-- Pekko HTTP for REST API
+- **Gradle 9.3.1** for build management (`./gradlew build`, `./gradlew run`)
+- **Scala 3.3.7 LTS**, **Pekko 1.4.0**, **Pekko HTTP 1.3.0**
+- **Scalafix** for linting: `./gradlew checkScalafixMain` or `./gradlew applyScalafixMain`
 - In-memory caching for performance
 
 ### Frontend Development
-- Angular 18 with standalone components
-- TypeScript for type safety
+- **Angular 18**, **TypeScript 5.4**, **Leaflet 1.9**
 - SCSS for styling with MBTA theme
-- Leaflet for interactive maps
 
 ## Architecture
 
