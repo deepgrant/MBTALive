@@ -12,7 +12,7 @@
 <div class="route-type-filter">
   <mat-button-toggle-group
     [value]="routeTypeFilter"
-    (change)="setRouteTypeFilter($event.value)"
+    (change)="routeTypeFilter = $event.value"
     aria-label="Route type filter">
     <mat-button-toggle value="all">
       <mat-icon>all_inclusive</mat-icon>

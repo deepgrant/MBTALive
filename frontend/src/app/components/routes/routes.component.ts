@@ -9,126 +9,73 @@ import { Subscription } from 'rxjs';
 import { Route } from '../../models/route.model';
 import { VehicleService } from '../../services/vehicle.service';
 
+const ROUTE_TYPE_META: Record<number, { icon: string; label: string }> = {
+  0: { icon: 'tram',          label: 'Light Rail' },
+  1: { icon: 'train',         label: 'Heavy Rail' },
+  2: { icon: 'train',         label: 'Commuter Rail' },
+  3: { icon: 'directions_bus', label: 'Bus' }
+};
+
 @Component({
-    selector: 'app-routes',
-    imports: [
-        CommonModule,
-        MatListModule,
-        MatCardModule,
-        MatButtonModule,
-        MatIconModule,
-        MatButtonToggleModule
-    ],
-    templateUrl: './routes.component.html',
-    styleUrls: ['./routes.component.scss']
+  selector: 'app-routes',
+  imports: [
+    CommonModule,
+    MatListModule,
+    MatCardModule,
+    MatButtonModule,
+    MatIconModule,
+    MatButtonToggleModule
+  ],
+  templateUrl: './routes.component.html',
+  styleUrls: ['./routes.component.scss']
 })
 export class RoutesComponent implements OnInit, OnDestroy {
   routes: Route[] = [];
   selectedRoute: string | null = null;
-  isRefreshing: boolean = false;
-  routeTypeFilter: string = 'all';
+  isRefreshing = false;
+  routeTypeFilter = 'all';
   private subscriptions: Subscription[] = [];
 
   constructor(private vehicleService: VehicleService) { }
 
   ngOnInit(): void {
-    console.log('RoutesComponent: Initializing...');
-
-    // Subscribe to routes
-    const routesSub = this.vehicleService.routes$.subscribe({
-      next: (routes) => {
-        console.log('RoutesComponent: Routes received:', routes);
-        console.log('RoutesComponent: Routes length:', routes.length);
-        this.routes = routes;
-      },
-      error: (error) => {
-        console.error('RoutesComponent: Error receiving routes:', error);
-      }
-    });
-
-    // Subscribe to selected route
-    const selectedRouteSub = this.vehicleService.selectedRoute$.subscribe({
-      next: (route) => {
-        console.log('RoutesComponent: Selected route changed:', route);
-        this.selectedRoute = route;
-      },
-      error: (error) => {
-        console.error('RoutesComponent: Error receiving selected route:', error);
-      }
-    });
-
-    this.subscriptions.push(routesSub, selectedRouteSub);
+    this.subscriptions.push(
+      this.vehicleService.routes$.subscribe({
+        next: routes => { this.routes = routes; },
+        error: error => console.error('RoutesComponent: Error receiving routes:', error)
+      }),
+      this.vehicleService.selectedRoute$.subscribe({
+        next: route => { this.selectedRoute = route; },
+        error: error => console.error('RoutesComponent: Error receiving selected route:', error)
+      })
+    );
   }
 
   ngOnDestroy(): void {
-    this.subscriptions.forEach(sub => sub.unsubscribe());
+    this.subscriptions.forEach(s => s.unsubscribe());
   }
 
   selectRoute(routeId: string): void {
-    console.log('RoutesComponent: Route clicked:', routeId, 'currently selected:', this.selectedRoute);
-    if (this.selectedRoute === routeId) {
-      // Deselect if already selected
-      console.log('RoutesComponent: Deselecting route');
-      this.vehicleService.selectRoute(null);
-    } else {
-      console.log('RoutesComponent: Selecting new route:', routeId);
-      this.vehicleService.selectRoute(routeId);
-    }
+    this.vehicleService.selectRoute(this.selectedRoute === routeId ? null : routeId);
   }
 
-  getRouteColor(route: Route): string {
-    return `#${route.color}`;
-  }
+  getRouteColor(route: Route): string { return `#${route.color}`; }
+  getTextColor(route: Route): string  { return `#${route.text_color}`; }
 
-  getTextColor(route: Route): string {
-    return `#${route.text_color}`;
-  }
+  getRouteTypeIcon(route: Route): string  { return ROUTE_TYPE_META[route.route_type]?.icon  ?? 'help'; }
+  getRouteTypeLabel(route: Route): string { return ROUTE_TYPE_META[route.route_type]?.label ?? 'Unknown'; }
 
   refreshRoutes(): void {
-    console.log('RoutesComponent: Refreshing routes...');
     this.isRefreshing = true;
-
     this.vehicleService.refreshRoutes();
-
-    // Reset after animation completes
-    setTimeout(() => {
-      this.isRefreshing = false;
-    }, 500);
+    setTimeout(() => { this.isRefreshing = false; }, 500);
   }
 
   getFilteredRoutes(): Route[] {
-    if (this.routeTypeFilter === 'all') {
-      return this.routes;
-    } else if (this.routeTypeFilter === 'rail') {
-      return this.routes.filter(route => route.route_type <= 2);
-    } else if (this.routeTypeFilter === 'bus') {
-      return this.routes.filter(route => route.route_type === 3);
-    }
-    return this.routes;
-  }
-
-  setRouteTypeFilter(type: string): void {
-    console.log('RoutesComponent: Setting route type filter to:', type);
-    this.routeTypeFilter = type;
-  }
-
-  getRouteTypeIcon(route: Route): string {
-    switch (route.route_type) {
-      case 0: return 'tram'; // Light Rail
-      case 1: return 'train'; // Heavy Rail
-      case 2: return 'train'; // Commuter Rail
-      case 3: return 'directions_bus'; // Bus
-      default: return 'help';
-    }
-  }
-
-  getRouteTypeLabel(route: Route): string {
-    switch (route.route_type) {
-      case 0: return 'Light Rail';
-      case 1: return 'Heavy Rail';
-      case 2: return 'Commuter Rail';
-      case 3: return 'Bus';
-      default: return 'Unknown';
+    switch (this.routeTypeFilter) {
+      case 'rail': return this.routes.filter(r => r.route_type <= 2);
+      case 'bus':  return this.routes.filter(r => r.route_type === 3);
+      default:     return this.routes;
     }
   }
 }

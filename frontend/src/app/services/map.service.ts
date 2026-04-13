@@ -6,29 +6,31 @@ import { Route, Shape } from '../models/route.model';
 import { Station } from '../models/station.model';
 import { VehicleCompletionDialogService } from './vehicle-completion-dialog.service';
 import { CookieService } from './cookie.service';
+import { getDelayStatus } from '../utils/vehicle-utils';
 
 @Injectable({
   providedIn: 'root'
 })
 export class MapService {
-  private map: L.Map | null = null;
-  private vehicleMarkers: Map<string, L.Marker> = new Map();
-  private routeLayers: Map<string, L.Polyline> = new Map();
-  private stationMarkers: Map<string, L.Marker> = new Map();
+  private map:                  L.Map | null = null;
+  private vehicleMarkers:       Map<string, L.Marker> = new Map();
+  private routeLayers:          Map<string, L.Polyline> = new Map();
+  private stationMarkers:       Map<string, L.Marker> = new Map();
   private selectedVehicleMarker: L.Marker | null = null;
-  private vehicleData: Map<string, Vehicle> = new Map();
-  private originalIcons: Map<string, any> = new Map();
-  private highlightOverlay: L.Marker | null = null;
-  private trackedVehicleId: string | null = null;
-  private trackedVehicleRouteId: string | null = null; // Route ID when tracking started
-  private previousView: { center: L.LatLngLiteral; zoom: number } | null = null;
-  private trackingInterval: any = null;
-  private routeBounds: L.LatLngBounds | null = null;
+  private vehicleData:          Map<string, Vehicle> = new Map();
+  private originalIcons:        Map<string, L.DivIcon> = new Map();
+  private highlightOverlay:     L.Marker | null = null;
+  private trackedVehicleId:     string | null = null;
+  private trackedVehicleRouteId: string | null = null;
+  private previousView:         { center: L.LatLngLiteral; zoom: number } | null = null;
+  private trackingInterval:     ReturnType<typeof setInterval> | null = null;
+  private routeBounds:          L.LatLngBounds | null = null;
   private lastTrackedVehicleData: Vehicle | null = null;
-  private isTrackingActive: boolean = false;
-  private boundsSaveTimeout: any = null;
-  private readonly BOUNDS_SAVE_DELAY = 2500; // 2.5 seconds
-  private boundsRestored: boolean = false;
+  private isTrackingActive:     boolean = false;
+  private boundsSaveTimeout:    ReturnType<typeof setTimeout> | null = null;
+  private boundsRestored:       boolean = false;
+
+  private readonly BOUNDS_SAVE_DELAY = 2500;
 
   constructor(
     private dialogService: VehicleCompletionDialogService,
@@ -36,31 +38,22 @@ export class MapService {
   ) { }
 
   initializeMap(containerId: string): L.Map {
-    console.log('MapService: Initializing map with container:', containerId);
-
-    // Clear any existing map
     if (this.map) {
-      console.log('MapService: Removing existing map');
       this.map.remove();
     }
 
-    // Check if container exists
     const container = document.getElementById(containerId);
     if (!container) {
-      console.error('MapService: Container not found:', containerId);
-      throw new Error(`Map container with id '${containerId}' not found`);
+      throw new Error(`Map container '${containerId}' not found`);
     }
 
-    console.log('MapService: Creating new map instance');
     this.map = L.map(containerId, {
-      center: [42.3601, -71.0589], // Boston coordinates
+      center: [42.3601, -71.0589],
       zoom: 10,
       zoomControl: true,
       preferCanvas: false
     });
 
-    console.log('MapService: Adding tile layer');
-    // Add OpenStreetMap tiles with proper configuration
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
       maxZoom: 19,
@@ -69,21 +62,10 @@ export class MapService {
       zoomOffset: 0
     }).addTo(this.map);
 
-    console.log('MapService: Map initialized successfully');
-
-    // Restore map bounds from cookie after initialization
     this.restoreMapBounds();
-
-    // Set up event listeners for map bounds saving (debounced)
     this.setupMapBoundsSaving();
 
-    // Force a resize after a short delay to ensure proper rendering
-    setTimeout(() => {
-      if (this.map) {
-        console.log('MapService: Invalidating map size');
-        this.map.invalidateSize();
-      }
-    }, 200);
+    setTimeout(() => this.map?.invalidateSize(), 200);
 
     return this.map;
   }
@@ -93,24 +75,15 @@ export class MapService {
   }
 
   addVehicleMarker(vehicle: Vehicle): void {
-    if (!this.map) {
-      console.log('MapService: Cannot add vehicle marker - map not initialized');
-      return;
-    }
+    if (!this.map) return;
 
-    console.log('MapService: Adding vehicle marker for vehicle:', vehicle.vehicleId, 'at', vehicle.latitude, vehicle.longitude);
     const markerId = vehicle.vehicleId;
-
-    // Store vehicle data for highlighting
     this.vehicleData.set(markerId, vehicle);
 
-    // Remove existing marker if it exists
     if (this.vehicleMarkers.has(markerId)) {
-      console.log('MapService: Removing existing marker for vehicle:', markerId);
       this.map.removeLayer(this.vehicleMarkers.get(markerId)!);
     }
 
-    // Create custom icon for vehicle with direction
     const vehicleIcon = L.divIcon({
       className: 'vehicle-marker',
       html: this.createVehicleMarkerHtml(vehicle, false),
@@ -118,57 +91,26 @@ export class MapService {
       iconAnchor: [10, 10]
     });
 
-    // Store original icon for restoration
     this.originalIcons.set(markerId, vehicleIcon);
 
-    console.log('MapService: Creating marker at coordinates:', [vehicle.latitude, vehicle.longitude]);
     const marker = L.marker([vehicle.latitude, vehicle.longitude], {
       icon: vehicleIcon,
       zIndexOffset: 1000
     }).addTo(this.map);
 
-    console.log('MapService: Marker added to map successfully');
+    const isOutbound    = vehicle.direction === 'Outbound';
+    const delaySeconds  = vehicle.delaySeconds ?? 0;
+    const hasSevereDelay  = delaySeconds >= 1800;
+    const hasCriticalDelay = delaySeconds > 900;
 
-    // Check if marker is within current map bounds
-    if (this.map) {
-      const bounds = this.map.getBounds();
-      const markerLatLng = L.latLng(vehicle.latitude, vehicle.longitude);
-      const isInBounds = bounds.contains(markerLatLng);
-      console.log('MapService: Marker is within current map bounds:', isInBounds);
-      console.log('MapService: Current map bounds:', bounds);
-      console.log('MapService: Marker position:', markerLatLng);
+    const tripNameClass  = hasSevereDelay || hasCriticalDelay ? 'flash-trip-name' : '';
+    const tripLabelClass = hasSevereDelay ? 'flash-trip-label' : '';
 
-      // If marker is not in bounds, log a warning
-      if (!isInBounds) {
-        console.warn('MapService: Vehicle marker is OUTSIDE current map bounds!');
-        console.warn('MapService: Vehicle coordinates:', vehicle.latitude, vehicle.longitude);
-        console.warn('MapService: Map center:', this.map.getCenter());
-        console.warn('MapService: Map zoom:', this.map.getZoom());
-      }
-    }
-
-    // Add permanent tooltip with vehicle number and trip name
-    // Set tooltip style based on direction
-    const isOutbound = vehicle.direction === 'Outbound';
-    const delaySeconds = vehicle.delaySeconds || 0;
-    const hasCriticalDelay = delaySeconds > 900; // 15 minutes
-    const hasSevereDelay = delaySeconds >= 1800; // >= 30 minutes
-    
-    let tripNameClass = '';
-    let tripLabelClass = '';
-    if (hasSevereDelay) {
-      // Flash both trip name and label for severe delays (>30 min)
-      tripNameClass = 'flash-trip-name';
-      tripLabelClass = 'flash-trip-label';
-    } else if (hasCriticalDelay) {
-      // Flash trip name only for critical delays (>15 min)
-      tripNameClass = 'flash-trip-name';
-    }
-    
-    const tooltipText = vehicle.tripName 
+    const tooltipHtml = vehicle.tripName
       ? `<div><strong>ID:</strong> ${vehicle.vehicleId}</div><div><strong class="${tripLabelClass}">Trip:</strong> <span class="${tripNameClass}">${vehicle.tripName}</span></div>`
       : `<div><strong>ID:</strong> ${vehicle.vehicleId}</div>`;
-    marker.bindTooltip(tooltipText, {
+
+    marker.bindTooltip(tooltipHtml, {
       permanent: true,
       direction: isOutbound ? 'bottom' : 'top',
       className: isOutbound ? 'vehicle-tooltip-outbound' : 'vehicle-tooltip',
@@ -177,174 +119,91 @@ export class MapService {
     });
 
     this.vehicleMarkers.set(markerId, marker);
-    console.log('MapService: Vehicle marker stored in markers map');
   }
 
   updateVehicleMarkers(vehicles: Vehicle[], currentRouteId?: string | null): void {
-    if (!this.map) {
-      console.log('MapService: Cannot update vehicle markers - map not initialized');
-      return;
-    }
+    if (!this.map) return;
 
-    console.log('MapService: Updating vehicle markers with', vehicles.length, 'vehicles');
-    console.log('MapService: Vehicle data:', vehicles);
-    console.log('MapService: Current route ID:', currentRouteId);
-    console.log('MapService: Tracked vehicle route ID:', this.trackedVehicleRouteId);
+    const previouslyHighlighted = this.selectedVehicleMarker
+      ? Array.from(this.vehicleMarkers.entries()).find(([, m]) => m === this.selectedVehicleMarker)?.[0]
+      : null;
 
-    // Store which vehicle was highlighted before clearing
-    const previouslyHighlightedVehicle = this.selectedVehicleMarker ?
-      Array.from(this.vehicleMarkers.entries()).find(([id, marker]) => marker === this.selectedVehicleMarker)?.[0] : null;
+    const currentlyTracked      = this.trackedVehicleId;
+    const trackedVehicleInList  = currentlyTracked ? vehicles.find(v => v.vehicleId === currentlyTracked) : undefined;
+    // Bug fix: find() returns undefined (not null) when not found
+    const trackedVehicleExists  = trackedVehicleInList !== undefined;
 
-    // Store tracked vehicle ID to check if it still exists
-    const currentlyTrackedVehicle = this.trackedVehicleId;
-    const trackedVehicleInList = currentlyTrackedVehicle ? 
-      vehicles.find(v => v.vehicleId === currentlyTrackedVehicle) : null;
-    const trackedVehicleStillExists = trackedVehicleInList !== null;
-
-    // Check if tracked vehicle disappeared or changed routes
-    if (currentlyTrackedVehicle && !trackedVehicleStillExists && this.isTrackingActive) {
-      // Vehicle is missing from the current list
-      // Check if user switched routes (current route != tracked route) - don't show dialog
-      // Or if vehicle left the tracked route (current route == tracked route) - show dialog
+    if (currentlyTracked && !trackedVehicleExists && this.isTrackingActive) {
       if (currentRouteId && this.trackedVehicleRouteId && currentRouteId === this.trackedVehicleRouteId) {
-        // Still viewing the same route, vehicle left/completed the route - show dialog
-        console.log('MapService: Tracked vehicle left route:', currentlyTrackedVehicle, 'from route:', this.trackedVehicleRouteId);
         this.handleVehicleDisappeared(true);
-      } else if (currentRouteId && this.trackedVehicleRouteId && currentRouteId !== this.trackedVehicleRouteId) {
-        // User switched routes - tracking should have been stopped silently, but clean up just in case
-        console.log('MapService: User switched routes, tracked vehicle missing from new route:', currentlyTrackedVehicle);
-        // Don't show dialog - user intentionally switched routes
-      } else {
-        // Route info not available or tracking not active - check if tracking is still active
-        if (this.isTrackingActive) {
-          console.log('MapService: Tracked vehicle disappeared (route context unclear):', currentlyTrackedVehicle);
-          this.handleVehicleDisappeared(true);
-        }
+      } else if (this.isTrackingActive) {
+        this.handleVehicleDisappeared(true);
       }
-    } else if (trackedVehicleInList && this.trackedVehicleRouteId && trackedVehicleInList.routeId !== this.trackedVehicleRouteId) {
-      // Vehicle exists in list but on different route - vehicle changed routes
-      console.log('MapService: Tracked vehicle changed routes:', currentlyTrackedVehicle, 
-        'from', this.trackedVehicleRouteId, 'to', trackedVehicleInList.routeId);
+    } else if (trackedVehicleInList && this.trackedVehicleRouteId &&
+               trackedVehicleInList.routeId !== this.trackedVehicleRouteId) {
       this.handleVehicleDisappeared(true);
     }
 
-    // Clear existing highlight overlay
     if (this.selectedVehicleMarker) {
-      console.log('MapService: Clearing highlight overlay due to polling update');
       this.map.removeLayer(this.selectedVehicleMarker);
       this.selectedVehicleMarker = null;
     }
 
-    // Clear existing markers
-    console.log('MapService: Clearing', this.vehicleMarkers.size, 'existing markers');
-    this.vehicleMarkers.forEach(marker => this.map!.removeLayer(marker));
+    this.vehicleMarkers.forEach(m => this.map!.removeLayer(m));
     this.vehicleMarkers.clear();
     this.vehicleData.clear();
     this.originalIcons.clear();
 
-    // Add new markers
-    vehicles.forEach((vehicle, index) => {
-      console.log(`MapService: Processing vehicle ${index + 1}/${vehicles.length}:`, vehicle);
+    for (const vehicle of vehicles) {
       this.addVehicleMarker(vehicle);
-      
-      // Update last tracked vehicle data if this is the tracked vehicle
       if (this.trackedVehicleId === vehicle.vehicleId) {
         this.lastTrackedVehicleData = { ...vehicle };
       }
-    });
-
-    // Re-apply highlighting if there was a previously highlighted vehicle
-    if (previouslyHighlightedVehicle) {
-      console.log('MapService: Re-applying highlight to vehicle after update:', previouslyHighlightedVehicle);
-      setTimeout(() => {
-        this.highlightVehicleMarker(previouslyHighlightedVehicle);
-      }, 100);
     }
 
-    // Continue tracking if vehicle still exists (marker will be updated in tracking interval)
-    if (currentlyTrackedVehicle && trackedVehicleStillExists) {
-      console.log('MapService: Tracking continues for vehicle:', currentlyTrackedVehicle);
-      // Update vehicle data for tracking
-      const trackedVehicle = vehicles.find(v => v.vehicleId === currentlyTrackedVehicle);
-      if (trackedVehicle) {
-        this.lastTrackedVehicleData = { ...trackedVehicle };
-      }
+    if (previouslyHighlighted) {
+      setTimeout(() => this.highlightVehicleMarker(previouslyHighlighted), 100);
     }
 
-    console.log('MapService: Vehicle markers update complete');
+    if (currentlyTracked && trackedVehicleExists) {
+      const tracked = vehicles.find(v => v.vehicleId === currentlyTracked);
+      if (tracked) this.lastTrackedVehicleData = { ...tracked };
+    }
   }
 
   addRouteLayer(route: Route, shapes: Shape[]): void {
-    if (!this.map) {
-      console.error('MapService: Cannot add route layer - map not initialized');
-      return;
-    }
+    if (!this.map) return;
 
-    console.log('MapService: Adding route layer for route:', route.id, 'with', shapes.length, 'shapes');
     const routeId = route.id;
-
-    // Remove existing route if it exists
     if (this.routeLayers.has(routeId)) {
-      console.log('MapService: Removing existing route layer');
       this.map.removeLayer(this.routeLayers.get(routeId)!);
     }
 
-    // Decode polylines and create route layer
-    shapes.forEach((shape, index) => {
-      console.log(`MapService: Processing shape ${index + 1}/${shapes.length}:`, shape.id);
+    for (const shape of shapes) {
       const coordinates = this.decodePolyline(shape.polyline);
-      console.log('MapService: Decoded coordinates:', coordinates.length, 'points');
+      if (coordinates.length === 0) continue;
 
-      if (coordinates.length > 0) {
-        // Create enhanced styling for all route types
-        console.log('MapService: Creating enhanced route styling for route type:', route.route_type);
+      const glowPolyline = L.polyline(coordinates, { color: '#ffffff', weight: 10, opacity: 0.6 }).addTo(this.map);
+      const routePolyline = L.polyline(coordinates, { color: `#${route.color}`, weight: 6, opacity: 0.9 }).addTo(this.map);
 
-        // Bottom layer: white glow effect
-        const glowPolyline = L.polyline(coordinates, {
-          color: '#ffffff',
-          weight: 10,
-          opacity: 0.6
-        }).addTo(this.map!);
-
-        // Top layer: colored route line with increased weight
-        const routePolyline = L.polyline(coordinates, {
-          color: `#${route.color}`,
-          weight: 6,
-          opacity: 0.9
-        }).addTo(this.map!);
-
-        // Store both layers
-        this.routeLayers.set(`${routeId}-${shape.id}-glow`, glowPolyline);
-        this.routeLayers.set(`${routeId}-${shape.id}`, routePolyline);
-
-        console.log('MapService: Added polyline to map');
-      } else {
-        console.warn('MapService: No coordinates decoded for shape:', shape.id);
-      }
-    });
-
-    console.log('MapService: Route layer added successfully');
+      this.routeLayers.set(`${routeId}-${shape.id}-glow`, glowPolyline);
+      this.routeLayers.set(`${routeId}-${shape.id}`, routePolyline);
+    }
   }
 
   clearRouteLayers(): void {
     if (!this.map) return;
-
-    // Remove all route layers including glow layers
-    this.routeLayers.forEach(polyline => this.map!.removeLayer(polyline));
+    this.routeLayers.forEach(l => this.map!.removeLayer(l));
     this.routeLayers.clear();
   }
 
   addStationMarker(station: Station): void {
     if (!this.map) return;
 
-    const markerId = station.id;
-
-    // Remove existing marker if it exists
-    if (this.stationMarkers.has(markerId)) {
-      this.map.removeLayer(this.stationMarkers.get(markerId)!);
+    if (this.stationMarkers.has(station.id)) {
+      this.map.removeLayer(this.stationMarkers.get(station.id)!);
     }
 
-    // Create custom icon for station with label
     const stationIcon = L.divIcon({
       className: 'station-marker',
       html: this.createStationMarkerHtml(station),
@@ -357,45 +216,21 @@ export class MapService {
       zIndexOffset: 0
     }).addTo(this.map);
 
-    // Add popup with station information
-    marker.bindPopup(`
-      <div>
-        <strong>${station.name}</strong><br>
-        Station ID: ${station.id}
-      </div>
-    `);
-
-    this.stationMarkers.set(markerId, marker);
+    marker.bindPopup(`<div><strong>${station.name}</strong><br>Station ID: ${station.id}</div>`);
+    this.stationMarkers.set(station.id, marker);
   }
 
   updateStationMarkers(stations: Station[]): void {
     if (!this.map) return;
-
-    // Clear existing markers
-    this.stationMarkers.forEach(marker => this.map!.removeLayer(marker));
+    this.stationMarkers.forEach(m => this.map!.removeLayer(m));
     this.stationMarkers.clear();
-
-    // Add new markers
-    stations.forEach(station => {
-      this.addStationMarker(station);
-    });
+    stations.forEach(s => this.addStationMarker(s));
   }
 
   clearStationMarkers(): void {
     if (!this.map) return;
-
-    this.stationMarkers.forEach(marker => this.map!.removeLayer(marker));
+    this.stationMarkers.forEach(m => this.map!.removeLayer(m));
     this.stationMarkers.clear();
-  }
-
-  fitBoundsToVehicles(vehicles: Vehicle[]): void {
-    if (!this.map || vehicles.length === 0) return;
-
-    const bounds = L.latLngBounds(
-      vehicles.map(vehicle => [vehicle.latitude, vehicle.longitude])
-    );
-
-    this.map.fitBounds(bounds, { padding: [20, 20] });
   }
 
   fitBoundsToRoute(): void {
@@ -404,48 +239,181 @@ export class MapService {
     const bounds = L.latLngBounds([]);
     let hasContent = false;
 
-    // Add all route polyline points to bounds
-    this.routeLayers.forEach(polyline => {
-      const layerBounds = polyline.getBounds();
-      if (layerBounds.isValid()) {
-        bounds.extend(layerBounds);
-        hasContent = true;
-      }
+    this.routeLayers.forEach(l => {
+      const b = l.getBounds();
+      if (b.isValid()) { bounds.extend(b); hasContent = true; }
     });
 
-    // Add all station markers to bounds
-    this.stationMarkers.forEach(marker => {
-      bounds.extend(marker.getLatLng());
-      hasContent = true;
-    });
+    this.stationMarkers.forEach(m => { bounds.extend(m.getLatLng()); hasContent = true; });
 
-    // Fit map to calculated bounds and store for tracking
     if (hasContent) {
       this.routeBounds = bounds;
       this.map.fitBounds(bounds, { padding: [50, 50] });
     }
   }
 
-  private createVehicleMarkerHtml(vehicle: Vehicle, isHighlighted: boolean = false): string {
-    const rotation = vehicle.bearing || 0;
-    const speed = vehicle.speed || 0;
-    const isBus = vehicle.routeType === 3;
-    const size = isHighlighted ? 24 : 20;
+  centerOnVehicle(vehicleId: string): void {
+    if (!this.map) return;
+
+    if (this.trackedVehicleId === vehicleId) {
+      this.stopVehicleTracking();
+      return;
+    }
+
+    if (this.trackedVehicleId !== null) {
+      this.stopVehicleTracking();
+    }
+
+    this.startVehicleTracking(vehicleId);
+  }
+
+  stopVehicleTrackingSilently(): void {
+    this.isTrackingActive = false;
+    if (this.trackingInterval) {
+      clearInterval(this.trackingInterval);
+      this.trackingInterval = null;
+    }
+    this.trackedVehicleId      = null;
+    this.trackedVehicleRouteId  = null;
+    this.lastTrackedVehicleData = null;
+  }
+
+  highlightVehicleMarker(vehicleId: string): void {
+    if (!this.map) return;
+
+    if (this.highlightOverlay) {
+      this.map.removeLayer(this.highlightOverlay);
+      this.highlightOverlay = null;
+    }
+
+    const marker = this.vehicleMarkers.get(vehicleId);
+    if (!marker || !this.getVehicleById(vehicleId)) {
+      console.warn('MapService: Marker or vehicle data not found for:', vehicleId);
+      return;
+    }
+
+    const highlightIcon = L.divIcon({
+      className: 'vehicle-highlight-overlay',
+      html: '<div class="highlight-ring"></div>',
+      iconSize: [40, 40],
+      iconAnchor: [20, 20]
+    });
+
+    this.highlightOverlay = L.marker(marker.getLatLng(), {
+      icon: highlightIcon,
+      interactive: false,
+      zIndexOffset: 2000
+    }).addTo(this.map);
+
+    // Auto-remove after 2 seconds as a fallback
+    setTimeout(() => {
+      if (this.highlightOverlay) {
+        this.map!.removeLayer(this.highlightOverlay);
+        this.highlightOverlay = null;
+      }
+    }, 2000);
+  }
+
+  wereBoundsRestored(): boolean {
+    return this.boundsRestored;
+  }
+
+  private startVehicleTracking(vehicleId: string): void {
+    if (!this.map) return;
+
+    const marker = this.vehicleMarkers.get(vehicleId);
+    if (!marker) {
+      console.warn('MapService: Cannot track — marker not found:', vehicleId);
+      return;
+    }
+
+    const center = this.map.getCenter();
+    this.previousView = { center: { lat: center.lat, lng: center.lng }, zoom: this.map.getZoom() };
+
+    const vehicle = this.vehicleData.get(vehicleId);
+    if (vehicle) {
+      this.lastTrackedVehicleData = { ...vehicle };
+      this.trackedVehicleRouteId = vehicle.routeId;
+    }
+
+    this.trackedVehicleId  = vehicleId;
+    this.isTrackingActive  = true;
+    this.map.setView(marker.getLatLng(), 15);
+
+    this.trackingInterval = setInterval(() => {
+      if (!this.map || !this.trackedVehicleId || !this.isTrackingActive) return;
+
+      const trackedMarker = this.vehicleMarkers.get(this.trackedVehicleId);
+      if (trackedMarker) {
+        const currentVehicle = this.vehicleData.get(this.trackedVehicleId);
+        if (currentVehicle) this.lastTrackedVehicleData = { ...currentVehicle };
+        this.map.setView(trackedMarker.getLatLng(), 15, { animate: true, duration: 1.0 });
+      } else {
+        this.handleVehicleDisappeared(false);
+      }
+    }, 2000);
+  }
+
+  private stopVehicleTracking(): void {
+    this.isTrackingActive = false;
+
+    if (this.trackingInterval) {
+      clearInterval(this.trackingInterval);
+      this.trackingInterval = null;
+    }
+
+    if (this.map && this.previousView) {
+      this.map.setView(this.previousView.center, this.previousView.zoom, { animate: true });
+    }
+
+    this.trackedVehicleId       = null;
+    this.trackedVehicleRouteId  = null;
+    this.previousView           = null;
+    this.lastTrackedVehicleData = null;
+  }
+
+  private handleVehicleDisappeared(premature: boolean): void {
+    if (!this.isTrackingActive || !this.trackedVehicleId || !this.lastTrackedVehicleData) return;
+
+    const trackedData       = { ...this.lastTrackedVehicleData };
+    const vehicleId         = this.trackedVehicleId;
+    const finalArrivalTime  = trackedData.predictedArrivalTime ?? trackedData.scheduledArrivalTime;
+    const lastUpdateTime    = trackedData.updatedAt ?? new Date().toISOString();
+
+    this.stopVehicleTracking();
+
+    if (this.routeBounds && this.map) {
+      this.map.fitBounds(this.routeBounds, { padding: [50, 50] });
+    } else {
+      this.fitBoundsToRoute();
+    }
+
+    this.dialogService.showDialog({
+      vehicleId,
+      routeId:          trackedData.routeId,
+      completedNormally: !premature,
+      finalArrivalTime,
+      lastUpdateTime
+    });
+  }
+
+  private createVehicleMarkerHtml(vehicle: Vehicle, isHighlighted = false): string {
+    const rotation    = vehicle.bearing ?? 0;
+    const speed       = vehicle.speed ?? 0;
+    const isBus       = vehicle.routeType === 3;
+    const size        = isHighlighted ? 24 : 20;
     const borderWidth = isHighlighted ? 3 : 2;
     const borderColor = isHighlighted ? '#FF5722' : '#ffffff';
 
-    // Get delay status
-    const delayStatus = this.getDelayStatus(vehicle.delaySeconds);
-
-    // Determine marker styling based on delay
-    let markerBackgroundColor = '#2196F3'; // Default blue
+    const delayStatus = getDelayStatus(vehicle.delaySeconds);
+    let markerColor   = '#2196F3';
     let delayIndicator = '';
 
     if (delayStatus.severity === 'minor-delay') {
-      markerBackgroundColor = '#ffc107'; // Yellow/Orange
+      markerColor    = '#ffc107';
       delayIndicator = '<div class="delay-indicator minor-delay" title="Minor Delay"></div>';
     } else if (delayStatus.severity === 'major-delay') {
-      markerBackgroundColor = '#dc3545'; // Red
+      markerColor    = '#dc3545';
       delayIndicator = '<div class="delay-indicator major-delay" title="Major Delay"></div>';
     }
 
@@ -454,7 +422,7 @@ export class MapService {
         <div class="vehicle-marker-circle" style="
           width: ${size}px;
           height: ${size}px;
-          background-color: ${markerBackgroundColor};
+          background-color: ${markerColor};
           border: ${borderWidth}px solid ${borderColor};
           ${isHighlighted ? 'box-shadow: 0 0 10px rgba(255, 87, 34, 0.8);' : ''}
         ">
@@ -470,532 +438,78 @@ export class MapService {
   private createStationMarkerHtml(station: Station): string {
     return `
       <div style="
-        width: 24px;
-        height: 24px;
+        width: 24px; height: 24px;
         background: rgba(108, 117, 125, 0.7);
         border: 2px solid white;
         border-radius: 50%;
         box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        display: flex; align-items: center; justify-content: center;
         position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
       ">
         <div style="
-          position: absolute;
-          bottom: -8px;
-          left: 50%;
+          position: absolute; bottom: -8px; left: 50%;
           transform: translateX(-50%);
-          font-size: 8px;
-          color: #6c757d;
-          font-weight: bold;
-          background: white;
-          padding: 1px 2px;
-          border-radius: 2px;
-          white-space: nowrap;
-          max-width: 60px;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          font-size: 8px; color: #6c757d; font-weight: bold;
+          background: white; padding: 1px 2px; border-radius: 2px;
+          white-space: nowrap; max-width: 60px;
+          overflow: hidden; text-overflow: ellipsis;
         ">${station.name}</div>
       </div>
     `;
   }
 
-  private formatVehicleStatus(status: string, stopName?: string): string {
-    if (!status) return 'Unknown';
-
-    const stop = stopName && stopName !== 'Unknown' ? stopName : 'next stop';
-
-    switch (status.toUpperCase()) {
-      case 'IN_TRANSIT_TO':
-        return `In transit to ${stop}`;
-      case 'STOPPED_AT':
-        return `Stopped at ${stop}`;
-      case 'INCOMING_AT':
-        return `Incoming at ${stop}`;
-      default:
-        // Convert underscores to spaces and title case
-        return status.replace(/_/g, ' ')
-          .split(' ')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(' ');
-    }
-  }
-
-  centerOnVehicle(vehicleId: string): void {
-    if (!this.map) {
-      console.log('MapService: Cannot center on vehicle - map not initialized');
-      return;
-    }
-
-    // If clicking the same vehicle that's being tracked, stop tracking
-    if (this.trackedVehicleId === vehicleId) {
-      console.log('MapService: Stopping tracking for vehicle:', vehicleId);
-      this.stopVehicleTracking();
-      return;
-    }
-
-    // If tracking a different vehicle, stop tracking that one first
-    if (this.trackedVehicleId !== null) {
-      console.log('MapService: Stopping tracking for previous vehicle:', this.trackedVehicleId);
-      this.stopVehicleTracking();
-    }
-
-    // Start tracking the new vehicle
-    console.log('MapService: Starting tracking for vehicle:', vehicleId);
-    this.startVehicleTracking(vehicleId);
-  }
-
-  private startVehicleTracking(vehicleId: string): void {
-    if (!this.map) {
-      console.log('MapService: Cannot start tracking - map not initialized');
-      return;
-    }
-
-    const marker = this.vehicleMarkers.get(vehicleId);
-    if (!marker) {
-      console.warn('MapService: Cannot start tracking - vehicle marker not found:', vehicleId);
-      return;
-    }
-
-    // Save current map view
-    const center = this.map.getCenter();
-    this.previousView = {
-      center: { lat: center.lat, lng: center.lng },
-      zoom: this.map.getZoom()
-    };
-
-    // Get vehicle data and store for tracking
-    const vehicle = this.vehicleData.get(vehicleId);
-    if (vehicle) {
-      this.lastTrackedVehicleData = { ...vehicle };
-      // Store the route ID when tracking starts
-      this.trackedVehicleRouteId = vehicle.routeId;
-      console.log('MapService: Tracking vehicle on route:', this.trackedVehicleRouteId);
-    }
-
-    // Set tracked vehicle ID
-    this.trackedVehicleId = vehicleId;
-    this.isTrackingActive = true;
-
-    // Zoom in on vehicle
-    const latLng = marker.getLatLng();
-    this.map.setView(latLng, 15);
-    console.log('MapService: Started tracking vehicle:', vehicleId);
-
-    // Start continuous tracking interval (update every 2 seconds)
-    this.trackingInterval = setInterval(() => {
-      if (!this.map || !this.trackedVehicleId || !this.isTrackingActive) {
-        return;
-      }
-
-      const trackedMarker = this.vehicleMarkers.get(this.trackedVehicleId);
-      if (trackedMarker) {
-        const position = trackedMarker.getLatLng();
-        // Update vehicle data if available
-        const currentVehicle = this.vehicleData.get(this.trackedVehicleId);
-        if (currentVehicle) {
-          this.lastTrackedVehicleData = { ...currentVehicle };
-        }
-        // Smoothly pan to vehicle position
-        this.map.setView(position, 15, { animate: true, duration: 1.0 });
-      } else {
-        // Vehicle disappeared, stop tracking and show dialog
-        console.log('MapService: Tracked vehicle disappeared:', this.trackedVehicleId);
-        this.handleVehicleDisappeared(false);
-      }
-    }, 2000);
-  }
-
-  private stopVehicleTracking(): void {
-    this.isTrackingActive = false;
-
-    if (this.trackingInterval) {
-      clearInterval(this.trackingInterval);
-      this.trackingInterval = null;
-    }
-
-    if (this.map && this.previousView) {
-      // Restore previous map view exactly
-      this.map.setView(this.previousView.center, this.previousView.zoom, { animate: true });
-    }
-
-    this.trackedVehicleId = null;
-    this.trackedVehicleRouteId = null;
-    this.previousView = null;
-    this.lastTrackedVehicleData = null;
-    console.log('MapService: Stopped vehicle tracking');
-  }
-
-  stopVehicleTrackingSilently(): void {
-    // Stop tracking without showing the completion dialog
-    // Used when route changes to prevent false dialog appearance
-    this.isTrackingActive = false;
-
-    if (this.trackingInterval) {
-      clearInterval(this.trackingInterval);
-      this.trackingInterval = null;
-    }
-
-    // Clear tracked vehicle ID to prevent updateVehicleMarkers from triggering dialog
-    this.trackedVehicleId = null;
-    this.trackedVehicleRouteId = null;
-    this.lastTrackedVehicleData = null;
-    
-    // Don't restore previous view when stopping silently (route change handles view)
-    // Don't clear previousView - may be needed if user wants to go back
-    
-    console.log('MapService: Stopped vehicle tracking silently (route change)');
-  }
-
-  private handleVehicleDisappeared(premature: boolean): void {
-    if (!this.isTrackingActive || !this.trackedVehicleId || !this.lastTrackedVehicleData) {
-      return;
-    }
-
-    const vehicleId = this.trackedVehicleId;
-    const trackedData = { ...this.lastTrackedVehicleData };
-    const routeId = trackedData.routeId;
-    const lastUpdateTime = trackedData.updatedAt || new Date().toISOString();
-    const finalArrivalTime = trackedData.predictedArrivalTime || 
-                            trackedData.scheduledArrivalTime;
-
-    // Stop tracking
-    this.stopVehicleTracking();
-
-    // Zoom back to route-wide view
-    if (this.routeBounds && this.map) {
-      this.map.fitBounds(this.routeBounds, { padding: [50, 50] });
-    } else {
-      this.fitBoundsToRoute();
-    }
-
-    // Show completion dialog
-    this.showVehicleCompletionDialog(vehicleId, routeId, premature, finalArrivalTime, lastUpdateTime);
-  }
-
-  private showVehicleCompletionDialog(
-    vehicleId: string,
-    routeId: string,
-    premature: boolean,
-    finalArrivalTime: string | undefined,
-    lastUpdateTime: string
-  ): void {
-    this.dialogService.showDialog({
-      vehicleId,
-      routeId,
-      completedNormally: !premature,
-      finalArrivalTime,
-      lastUpdateTime
-    });
-  }
-
-  highlightVehicleMarker(vehicleId: string): void {
-    if (!this.map) {
-      console.log('MapService: Cannot highlight - map not initialized');
-      return;
-    }
-
-    console.log('MapService: Attempting to highlight vehicle:', vehicleId);
-    console.log('MapService: Available vehicle markers:', Array.from(this.vehicleMarkers.keys()));
-    console.log('MapService: Available vehicle data:', Array.from(this.vehicleData.keys()));
-
-    // Remove previous highlight
-    if (this.highlightOverlay) {
-      console.log('MapService: Removing previous highlight overlay');
-      this.map.removeLayer(this.highlightOverlay);
-      this.highlightOverlay = null;
-    }
-
-    const marker = this.vehicleMarkers.get(vehicleId);
-    if (marker) {
-      console.log('MapService: Marker found for vehicle:', vehicleId);
-
-      // Get vehicle data for highlighting
-      const vehicle = this.getVehicleById(vehicleId);
-      if (vehicle) {
-        console.log('MapService: Creating highlight overlay');
-
-        // Create a separate highlight overlay at the same position
-        const highlightIcon = L.divIcon({
-          className: 'vehicle-highlight-overlay',
-          html: '<div class="highlight-ring"></div>',
-          iconSize: [40, 40],
-          iconAnchor: [20, 20]
-        });
-
-        const latLng = marker.getLatLng();
-        this.highlightOverlay = L.marker(latLng, {
-          icon: highlightIcon,
-          interactive: false,
-          zIndexOffset: 2000
-        }).addTo(this.map);
-
-        console.log('MapService: Highlight overlay created at:', latLng);
-
-        // Auto-remove highlight after 2 seconds (fallback)
-        setTimeout(() => {
-          if (this.highlightOverlay) {
-            console.log('MapService: Auto-removing highlight overlay after 2 seconds');
-            this.map!.removeLayer(this.highlightOverlay);
-            this.highlightOverlay = null;
-          }
-        }, 2000);
-
-        console.log('MapService: Highlight will also be removed on next polling update');
-      } else {
-        console.warn('MapService: Vehicle data not found for highlighting:', vehicleId);
-      }
-    } else {
-      console.warn('MapService: Marker not found for vehicle:', vehicleId);
-      console.warn('MapService: Available markers:', this.vehicleMarkers);
-    }
-  }
-
-  private restoreOriginalMarker(marker: L.Marker): void {
-    // Find the vehicle ID for this marker
-    let vehicleId: string | null = null;
-    for (const [id, m] of this.vehicleMarkers.entries()) {
-      if (m === marker) {
-        vehicleId = id;
-        break;
-      }
-    }
-
-    if (vehicleId) {
-      const originalIcon = this.originalIcons.get(vehicleId);
-      if (originalIcon) {
-        marker.setIcon(originalIcon);
-      }
-    }
-
-    marker.setOpacity(1);
-    marker.setZIndexOffset(0);
-
-    // Remove pulsing animation
-    const element = marker.getElement();
-    if (element) {
-      element.style.animation = '';
-    }
-
-    this.selectedVehicleMarker = null;
-  }
-
   private getVehicleById(vehicleId: string): Vehicle | null {
-    return this.vehicleData.get(vehicleId) || null;
-  }
-
-  private addPulsingEffect(marker: L.Marker): void {
-    const element = marker.getElement();
-    if (element) {
-      element.style.animation = 'vehicle-pulse 1.5s ease-in-out infinite';
-    }
-  }
-
-  // Simple test method to verify highlighting works
-  testHighlighting(): void {
-    console.log('MapService: Testing highlighting...');
-    console.log('MapService: Available markers:', Array.from(this.vehicleMarkers.keys()));
-
-    if (this.vehicleMarkers.size > 0) {
-      const firstVehicleId = Array.from(this.vehicleMarkers.keys())[0];
-      console.log('MapService: Testing with first vehicle:', firstVehicleId);
-
-      // SIMPLE TEST: Just make the marker very obvious
-      const marker = this.vehicleMarkers.get(firstVehicleId);
-      if (marker) {
-        console.log('MapService: Found marker, applying SIMPLE highlight');
-
-        // Make it very obvious
-        marker.setOpacity(0.3); // Very transparent
-        marker.setZIndexOffset(9999); // On top
-
-        // Try to get the element and make it huge and red
-        setTimeout(() => {
-          const element = marker.getElement();
-          if (element) {
-            console.log('MapService: Element found, making it HUGE and RED');
-            element.style.width = '50px';
-            element.style.height = '50px';
-            element.style.backgroundColor = 'red';
-            element.style.border = '5px solid yellow';
-            element.style.borderRadius = '50%';
-            element.style.position = 'relative';
-            element.style.zIndex = '9999';
-            console.log('MapService: Applied HUGE RED styling');
-          } else {
-            console.log('MapService: Element not found');
-          }
-        }, 100);
-
-        // Reset after 3 seconds
-        setTimeout(() => {
-          console.log('MapService: Resetting test highlight');
-          marker.setOpacity(1);
-          marker.setZIndexOffset(0);
-          const element = marker.getElement();
-          if (element) {
-            element.style.width = '';
-            element.style.height = '';
-            element.style.backgroundColor = '';
-            element.style.border = '';
-            element.style.borderRadius = '';
-            element.style.position = '';
-            element.style.zIndex = '';
-          }
-        }, 3000);
-      } else {
-        console.log('MapService: Marker not found for testing');
-      }
-    } else {
-      console.log('MapService: No markers available for testing');
-    }
+    return this.vehicleData.get(vehicleId) ?? null;
   }
 
   private decodePolyline(encoded: string): L.LatLngExpression[] {
     try {
-      console.log('MapService: Decoding polyline, length:', encoded.length);
-      const coordinates = polyline.decode(encoded);
-      console.log('MapService: Decoded', coordinates.length, 'coordinates');
-      const result = coordinates.map((coord: [number, number]) => [coord[0], coord[1]] as L.LatLngExpression);
-      console.log('MapService: First few coordinates:', result.slice(0, 3));
-      return result;
+      return polyline.decode(encoded).map(([lat, lng]: [number, number]) => [lat, lng] as L.LatLngExpression);
     } catch (error) {
       console.error('MapService: Error decoding polyline:', error);
       return [];
     }
   }
 
-  /**
-   * Get delay status for a vehicle based on delay seconds
-   * @param delaySeconds - Delay in seconds (positive = late, negative = early)
-   * @returns Object with color, label, and severity information
-   */
-  getDelayStatus(delaySeconds?: number): { color: string; label: string; severity: 'on-time' | 'minor-delay' | 'major-delay' } {
-    if (!delaySeconds || delaySeconds < 300) { // Less than 5 minutes
-      return {
-        color: '#28a745', // Green
-        label: 'On Time',
-        severity: 'on-time'
-      };
-    } else if (delaySeconds < 600) { // 5-10 minutes
-      return {
-        color: '#ffc107', // Yellow/Orange
-        label: `${Math.round(delaySeconds / 60)} min delay`,
-        severity: 'minor-delay'
-      };
-    } else { // More than 10 minutes
-      return {
-        color: '#dc3545', // Red
-        label: `${Math.round(delaySeconds / 60)} min delay`,
-        severity: 'major-delay'
-      };
-    }
-  }
-
-  /**
-   * Set up event listeners for map bounds saving with debouncing
-   */
   private setupMapBoundsSaving(): void {
     if (!this.map) return;
-
-    // Listen to map move and zoom events
-    this.map.on('moveend', () => {
-      this.debouncedSaveMapBounds();
-    });
-
-    this.map.on('zoomend', () => {
-      this.debouncedSaveMapBounds();
-    });
+    this.map.on('moveend', () => this.debouncedSaveMapBounds());
+    this.map.on('zoomend', () => this.debouncedSaveMapBounds());
   }
 
-  /**
-   * Debounced method to save map bounds to cookies
-   */
   private debouncedSaveMapBounds(): void {
-    // Clear existing timeout
-    if (this.boundsSaveTimeout) {
-      clearTimeout(this.boundsSaveTimeout);
-    }
-
-    // Set new timeout to save after inactivity period
-    this.boundsSaveTimeout = setTimeout(() => {
-      this.saveMapBounds();
-    }, this.BOUNDS_SAVE_DELAY);
+    if (this.boundsSaveTimeout) clearTimeout(this.boundsSaveTimeout);
+    this.boundsSaveTimeout = setTimeout(() => this.saveMapBounds(), this.BOUNDS_SAVE_DELAY);
   }
 
-  /**
-   * Save current map bounds to settings cookie
-   */
   private saveMapBounds(): void {
     if (!this.map) return;
-
     const center = this.map.getCenter();
-    const zoom = this.map.getZoom();
-
-    console.log('MapService: Saving map bounds to settings cookie', { lat: center.lat, lng: center.lng, zoom });
-
-    // Get current settings and update map bounds
-    const currentSettings = this.cookieService.getSettingsCookie() || {};
-    currentSettings.mapCenter = { lat: center.lat, lng: center.lng };
-    currentSettings.mapZoom = zoom;
-    this.cookieService.setSettingsCookie(currentSettings);
+    this.cookieService.patchSettingsCookie({
+      mapCenter: { lat: center.lat, lng: center.lng },
+      mapZoom: this.map.getZoom()
+    });
   }
 
-  /**
-   * Restore map bounds from settings cookie
-   */
   private restoreMapBounds(): void {
     if (!this.map) return;
 
     const settings = this.cookieService.getSettingsCookie();
-    const mapCenter = settings?.mapCenter;
-    const mapZoom = settings?.mapZoom;
+    const { mapCenter, mapZoom } = settings ?? {};
 
-    if (mapCenter && mapZoom !== undefined) {
-      const lat = mapCenter.lat;
-      const lng = mapCenter.lng;
-      const zoom = mapZoom;
+    if (!mapCenter || mapZoom === undefined) return;
 
-      // Validate values
-      if (
-        !isNaN(lat) && !isNaN(lng) && !isNaN(zoom) &&
-        lat >= -90 && lat <= 90 &&
-        lng >= -180 && lng <= 180 &&
-        zoom >= 0 && zoom <= 19
-      ) {
-        console.log('MapService: Restoring map bounds from settings cookie', { lat, lng, zoom });
-        this.boundsRestored = true;
-        
-        // Set map view after a short delay to ensure map is fully initialized
-        setTimeout(() => {
-          if (this.map) {
-            this.map.setView([lat, lng], zoom);
-          }
-        }, 300);
-      } else {
-        console.log('MapService: Invalid saved map bounds, clearing from settings');
-        this.clearMapBoundsCookies();
-      }
+    const { lat, lng } = mapCenter;
+    const isValid =
+      !isNaN(lat) && !isNaN(lng) && !isNaN(mapZoom) &&
+      lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 &&
+      mapZoom >= 0 && mapZoom <= 19;
+
+    if (isValid) {
+      this.boundsRestored = true;
+      setTimeout(() => this.map?.setView([lat, lng], mapZoom), 300);
     } else {
-      console.log('MapService: No saved map bounds found, using defaults');
+      this.cookieService.patchSettingsCookie({ mapCenter: undefined, mapZoom: undefined });
     }
-  }
-
-  /**
-   * Clear map bounds from settings cookie
-   */
-  private clearMapBoundsCookies(): void {
-    const currentSettings = this.cookieService.getSettingsCookie() || {};
-    delete currentSettings.mapCenter;
-    delete currentSettings.mapZoom;
-    this.cookieService.setSettingsCookie(currentSettings);
-  }
-
-  /**
-   * Check if map bounds were restored from cookies
-   */
-  wereBoundsRestored(): boolean {
-    return this.boundsRestored;
   }
 }
