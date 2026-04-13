@@ -4,11 +4,7 @@ package mbta.actor
 
 sealed trait VehicleMsg
 
-case class VehicleRoute(
-  route            : String,
-  directionNames   : Vector[String],
-  destinationNames : Vector[String],
-) extends VehicleMsg
+case class VehicleRoute(route: String) extends VehicleMsg
 
 case class VehiclesPerRouteRaw(
   route       : VehicleRoute,

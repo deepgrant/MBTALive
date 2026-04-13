@@ -26,9 +26,9 @@ class MBTAAccess(implicit system: ActorSystem, log: LoggingAdapter) {
   private implicit val mat: Materializer    = SystemMaterializer(system).materializer
 
   private val transportSettings: ConnectionPoolSettings = ConnectionPoolSettings(system)
-    .withMaxConnections(4)
+    .withMaxConnections(8)
     .withMaxOpenRequests(256)
-    .withPipeliningLimit(64)
+    .withPipeliningLimit(1)
 
   private var queue: Option[SourceQueueWithComplete[(HttpRequest, Promise[HttpResponse])]] = None
 
