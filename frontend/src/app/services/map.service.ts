@@ -434,18 +434,15 @@ export class MapService {
     const borderWidth = isHighlighted ? 3 : 2;
     const borderColor = isHighlighted ? '#FF5722' : '#ffffff';
 
-    // Get delay status
-    const delayStatus = this.getDelayStatus(vehicle.delaySeconds);
-
-    // Determine marker styling based on delay
+    // Determine marker styling based on delay status from backend
     let markerBackgroundColor = '#2196F3'; // Default blue
     let delayIndicator = '';
 
-    if (delayStatus.severity === 'minor-delay') {
-      markerBackgroundColor = '#ffc107'; // Yellow/Orange
+    if (vehicle.delayStatus === 'minor-delay') {
+      markerBackgroundColor = '#ffc107';
       delayIndicator = '<div class="delay-indicator minor-delay" title="Minor Delay"></div>';
-    } else if (delayStatus.severity === 'major-delay') {
-      markerBackgroundColor = '#dc3545'; // Red
+    } else if (vehicle.delayStatus === 'major-delay') {
+      markerBackgroundColor = '#dc3545';
       delayIndicator = '<div class="delay-indicator major-delay" title="Major Delay"></div>';
     }
 
@@ -499,27 +496,6 @@ export class MapService {
         ">${station.name}</div>
       </div>
     `;
-  }
-
-  private formatVehicleStatus(status: string, stopName?: string): string {
-    if (!status) return 'Unknown';
-
-    const stop = stopName && stopName !== 'Unknown' ? stopName : 'next stop';
-
-    switch (status.toUpperCase()) {
-      case 'IN_TRANSIT_TO':
-        return `In transit to ${stop}`;
-      case 'STOPPED_AT':
-        return `Stopped at ${stop}`;
-      case 'INCOMING_AT':
-        return `Incoming at ${stop}`;
-      default:
-        // Convert underscores to spaces and title case
-        return status.replace(/_/g, ' ')
-          .split(' ')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(' ');
-    }
   }
 
   centerOnVehicle(vehicleId: string): void {
@@ -863,33 +839,6 @@ export class MapService {
     } catch (error) {
       console.error('MapService: Error decoding polyline:', error);
       return [];
-    }
-  }
-
-  /**
-   * Get delay status for a vehicle based on delay seconds
-   * @param delaySeconds - Delay in seconds (positive = late, negative = early)
-   * @returns Object with color, label, and severity information
-   */
-  getDelayStatus(delaySeconds?: number): { color: string; label: string; severity: 'on-time' | 'minor-delay' | 'major-delay' } {
-    if (!delaySeconds || delaySeconds < 300) { // Less than 5 minutes
-      return {
-        color: '#28a745', // Green
-        label: 'On Time',
-        severity: 'on-time'
-      };
-    } else if (delaySeconds < 600) { // 5-10 minutes
-      return {
-        color: '#ffc107', // Yellow/Orange
-        label: `${Math.round(delaySeconds / 60)} min delay`,
-        severity: 'minor-delay'
-      };
-    } else { // More than 10 minutes
-      return {
-        color: '#dc3545', // Red
-        label: `${Math.round(delaySeconds / 60)} min delay`,
-        severity: 'major-delay'
-      };
     }
   }
 

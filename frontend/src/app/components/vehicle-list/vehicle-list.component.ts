@@ -109,71 +109,16 @@ export class VehicleListComponent implements OnInit, OnDestroy {
     return new Date(timestamp).toLocaleTimeString();
   }
 
-  formatStatus(status: string, stopName?: string): string {
-    if (!status) return 'Unknown';
-
-    const stop = stopName && stopName !== 'Unknown' ? stopName : 'next stop';
-
-    switch (status.toUpperCase()) {
-      case 'IN_TRANSIT_TO':
-        return `In transit to ${stop}`;
-      case 'STOPPED_AT':
-        return `Stopped at ${stop}`;
-      case 'INCOMING_AT':
-        return `Incoming at ${stop}`;
-      default:
-        // Convert underscores to spaces and title case
-        return status.replace(/_/g, ' ')
-          .split(' ')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(' ');
-    }
-  }
-
   isBus(vehicle: Vehicle): boolean {
     return vehicle.routeType === 3;
   }
 
-  /**
-   * Get delay status for a vehicle based on delay seconds
-   * @param delaySeconds - Delay in seconds (positive = late, negative = early)
-   * @returns Object with color, label, and severity information
-   */
-  getDelayStatus(delaySeconds?: number): { color: string; label: string; severity: 'on-time' | 'minor-delay' | 'major-delay' | 'ahead-of-schedule' } {
-    if (!delaySeconds) {
-      return {
-        color: '#28a745', // Green
-        label: 'On Time',
-        severity: 'on-time'
-      };
-    }
-
-    if (delaySeconds < 0) {
-      // Vehicle is ahead of schedule
-      const minutesAhead = Math.abs(Math.round(delaySeconds / 60));
-      return {
-        color: '#17a2b8', // Blue
-        label: `Ahead by ${minutesAhead} min`,
-        severity: 'ahead-of-schedule'
-      };
-    } else if (delaySeconds < 300) { // Less than 5 minutes
-      return {
-        color: '#28a745', // Green
-        label: 'On Time',
-        severity: 'on-time'
-      };
-    } else if (delaySeconds < 600) { // 5-10 minutes
-      return {
-        color: '#ffc107', // Yellow/Orange
-        label: `${Math.round(delaySeconds / 60)} min delay`,
-        severity: 'minor-delay'
-      };
-    } else { // More than 10 minutes
-      return {
-        color: '#dc3545', // Red
-        label: `${Math.round(delaySeconds / 60)} min delay`,
-        severity: 'major-delay'
-      };
+  getDelayColor(delayStatus?: string): string {
+    switch (delayStatus) {
+      case 'ahead':       return '#17a2b8';
+      case 'minor-delay': return '#ffc107';
+      case 'major-delay': return '#dc3545';
+      default:            return '#28a745';
     }
   }
 

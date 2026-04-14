@@ -33,7 +33,35 @@ class MBTAService extends Actor with ActorLogging {
     implicit val routeInfoFormat:   RootJsonFormat[RouteInfo]   = jsonFormat6(RouteInfo.apply)
     implicit val stopInfoFormat:    RootJsonFormat[StopInfo]    = jsonFormat4(StopInfo.apply)
     implicit val shapeInfoFormat:   RootJsonFormat[ShapeInfo]   = jsonFormat2(ShapeInfo.apply)
-    implicit val vehicleDataFormat: RootJsonFormat[VehicleData] = jsonFormat22(VehicleData.apply)
+    implicit val vehicleDataFormat: RootJsonFormat[VehicleData] = new RootJsonFormat[VehicleData] {
+      def write(v: VehicleData): JsValue = JsObject(
+        "routeId"              -> v.routeId.toJson,
+        "vehicleId"            -> v.vehicleId.toJson,
+        "stopId"               -> v.stopId.toJson,
+        "tripId"               -> v.tripId.toJson,
+        "tripName"             -> v.tripName.toJson,
+        "bearing"              -> v.bearing.toJson,
+        "directionId"          -> v.directionId.toJson,
+        "currentStatus"        -> v.currentStatus.toJson,
+        "currentStopSequence"  -> v.currentStopSequence.toJson,
+        "latitude"             -> v.latitude.toJson,
+        "longitude"            -> v.longitude.toJson,
+        "speed"                -> v.speed.toJson,
+        "updatedAt"            -> v.updatedAt.toJson,
+        "stopName"             -> v.stopName.toJson,
+        "stopPlatformName"     -> v.stopPlatformName.toJson,
+        "stopZone"             -> v.stopZone.toJson,
+        "timeStamp"            -> v.timeStamp.toJson,
+        "direction"            -> v.direction.toJson,
+        "destination"          -> v.destination.toJson,
+        "predictedArrivalTime" -> v.predictedArrivalTime.toJson,
+        "scheduledArrivalTime" -> v.scheduledArrivalTime.toJson,
+        "delaySeconds"         -> v.delaySeconds.toJson,
+        "formattedStatus"      -> v.formattedStatus.toJson,
+        "delayStatus"          -> v.delayStatus.toJson,
+      )
+      def read(json: JsValue): VehicleData = deserializationError("VehicleData read not supported")
+    }
 
     private def jsonMarshaller[A: JsonFormat]: Marshaller[Vector[A], HttpEntity.Strict] =
       Marshaller.withFixedContentType(ContentTypes.`application/json`) { xs =>

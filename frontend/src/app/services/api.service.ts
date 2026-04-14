@@ -69,7 +69,9 @@ export class ApiService {
             predictedArrivalTime: vehicle.predictedArrivalTime,
             scheduledArrivalTime: vehicle.scheduledArrivalTime,
             delaySeconds: vehicle.delaySeconds,
-            tripName: vehicle.tripName
+            tripName: vehicle.tripName,
+            formattedStatus: vehicle.formattedStatus,
+            delayStatus: vehicle.delayStatus
           }));
           console.log('ApiService: Mapped vehicle data:', mappedVehicles);
           return mappedVehicles;

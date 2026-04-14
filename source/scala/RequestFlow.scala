@@ -23,6 +23,7 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
 
   private val PredictionBatchSize:  Int  = 10
   private val StopCacheTtlMillis:   Long = 60L * 60L * 1000L  // 1 hour
+  private val VehicleCacheTtlMillis: Long = 8L * 1000L         // 8 s (just under client poll)
 
   // ── Internal types ────────────────────────────────────────────────────────
 
@@ -34,9 +35,11 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
     delaySeconds         : Option[Int],
   )
 
-  // ── Stop cache (thread-safe; stops are stable within a transit day) ───────
+  // ── Caches (thread-safe) ──────────────────────────────────────────────────
 
-  private val stopCache: TrieMap[String, (StopDetails, Long)] = TrieMap.empty
+  private val stopCache:      TrieMap[String, (StopDetails, Long)]              = TrieMap.empty
+  private val vehicleCache:   TrieMap[String, (Vector[VehicleData], Long)]      = TrieMap.empty
+  private val vehicleInflight: TrieMap[String, Future[Vector[VehicleData]]]     = TrieMap.empty
 
   // ── Stream Flows ──────────────────────────────────────────────────────────
 
@@ -253,15 +256,34 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
 
   // ── Merge (stop fields + prediction fields are disjoint) ─────────────────
 
+  private def computeFormattedStatus(status: Option[String], stopName: Option[String]): Option[String] =
+    status.map {
+      case "IN_TRANSIT_TO"  => s"In transit to ${stopName.getOrElse("next stop")}"
+      case "STOPPED_AT"     => s"Stopped at ${stopName.getOrElse("stop")}"
+      case "INCOMING_AT"    => s"Incoming at ${stopName.getOrElse("next stop")}"
+      case raw              => raw.replace('_', ' ').toLowerCase.capitalize
+    }
+
+  private def computeDelayStatus(delaySeconds: Option[Int]): Option[String] =
+    delaySeconds.map {
+      case d if d < -60  => "ahead"
+      case d if d < 300  => "on-time"
+      case d if d < 600  => "minor-delay"
+      case _             => "major-delay"
+    }
+
   private def mergeEnrichments(
     withStops: Vector[VehicleData],
     withPreds: Vector[VehicleData],
   ): Vector[VehicleData] =
     withStops.zip(withPreds).map { case (s, p) =>
+      val delay = p.delaySeconds
       s.copy(
         predictedArrivalTime = p.predictedArrivalTime,
         scheduledArrivalTime = p.scheduledArrivalTime,
-        delaySeconds         = p.delaySeconds,
+        delaySeconds         = delay,
+        formattedStatus      = computeFormattedStatus(s.currentStatus, s.stopName),
+        delayStatus          = computeDelayStatus(delay),
       )
     }
 
@@ -277,7 +299,8 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
 
   // ── Public API ────────────────────────────────────────────────────────────
 
-  def fetchVehiclesForRoute(routeId: String, sortBy: String = "vehicleId", sortOrder: String = "asc"): Future[Vector[VehicleData]] =
+  private def fetchFromMbta(routeId: String): Future[Vector[VehicleData]] = {
+    val now = java.time.Instant.now().toEpochMilli()
     Source.single[VehicleMsg](VehicleRoute(routeId))
       .via(vehiclesPerRouteRawFlow)
       .via(vehiclesPerRouteFlow)
@@ -292,7 +315,26 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
           mergeEnrichments(withStops, withPreds)
         }
       }
-      .map(sortVehicles(_, sortBy, sortOrder))
+      .andThen { case _ =>
+        vehicleInflight.remove(routeId)
+      }
+      .map { vehicles =>
+        vehicleCache.update(routeId, (vehicles, now + VehicleCacheTtlMillis))
+        vehicles
+      }
+  }
+
+  def fetchVehiclesForRoute(routeId: String, sortBy: String = "vehicleId", sortOrder: String = "asc"): Future[Vector[VehicleData]] = {
+    val now = java.time.Instant.now().toEpochMilli()
+    val base: Future[Vector[VehicleData]] =
+      vehicleCache.get(routeId) match {
+        case Some((vehicles, expiry)) if expiry > now =>
+          Future.successful(vehicles)
+        case _ =>
+          vehicleInflight.getOrElseUpdate(routeId, fetchFromMbta(routeId))
+      }
+    base.map(sortVehicles(_, sortBy, sortOrder))
+  }
 
   def fetchStops(routeId: String): Future[Vector[StopInfo]] =
     access.queueRequest(

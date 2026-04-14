@@ -8,14 +8,14 @@
     <mat-list-item *ngFor="let vehicle of vehicles"
                    (click)="selectVehicle(vehicle.vehicleId)"
                    [class.selected]="selectedVehicle === vehicle.vehicleId"
-                   [class]="'vehicle-item ' + getDelayStatus(vehicle.delaySeconds).severity">
+                   [class]="'vehicle-item ' + (vehicle.delayStatus || 'on-time')">
       <div class="vehicle-info">
         <div class="vehicle-header">
           <span class="vehicle-id">{{vehicle.vehicleId}}</span>
           <div class="vehicle-status-indicators">
             <div class="delay-indicator"
-                 [style.background-color]="getDelayStatus(vehicle.delaySeconds).color"
-                 [title]="getDelayStatus(vehicle.delaySeconds).label">
+                 [style.background-color]="getDelayColor(vehicle.delayStatus)"
+                 [title]="formatDelayTime(vehicle.delaySeconds)">
             </div>
             <mat-icon class="vehicle-type-icon">{{isBus(vehicle) ? 'directions_bus' : 'train'}}</mat-icon>
             <span *ngIf="vehicle.tripName" class="trip-name">{{vehicle.tripName}}</span>
@@ -38,10 +38,10 @@
             <span>{{formatSpeed(vehicle.speed)}}</span>
           </div>
 
-          <div class="detail-row delay-info" [ngClass]="getDelayStatus(vehicle.delaySeconds).severity">
+          <div class="detail-row delay-info" [ngClass]="vehicle.delayStatus || 'on-time'">
             <mat-icon>schedule</mat-icon>
-            <span [style.color]="getDelayStatus(vehicle.delaySeconds).color">
-              {{getDelayStatus(vehicle.delaySeconds).label}}
+            <span [style.color]="getDelayColor(vehicle.delayStatus)">
+              {{formatDelayTime(vehicle.delaySeconds)}}
             </span>
           </div>
 
@@ -59,7 +59,7 @@
 
           <div class="detail-row">
             <mat-icon>info</mat-icon>
-            <span>{{formatStatus(vehicle.currentStatus, vehicle.stopName)}}</span>
+            <span>{{vehicle.formattedStatus || vehicle.currentStatus || 'Unknown'}}</span>
           </div>
 
           <div class="detail-row">

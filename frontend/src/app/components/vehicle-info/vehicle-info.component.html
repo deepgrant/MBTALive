@@ -28,7 +28,7 @@
 
       <div class="detail-row">
         <mat-icon>info</mat-icon>
-        <span>{{formatStatus(selectedVehicle.currentStatus, selectedVehicle.stopName)}}</span>
+        <span>{{selectedVehicle.formattedStatus || selectedVehicle.currentStatus || 'Unknown'}}</span>
       </div>
 
       <div class="detail-row">
@@ -36,10 +36,10 @@
         <span>{{formatTime(selectedVehicle.updatedAt)}}</span>
       </div>
 
-      <div class="detail-row delay-info" [ngClass]="getDelayStatus(selectedVehicle.delaySeconds).severity">
+      <div class="detail-row delay-info" [ngClass]="selectedVehicle.delayStatus || 'on-time'">
         <mat-icon>schedule</mat-icon>
-        <span [style.color]="getDelayStatus(selectedVehicle.delaySeconds).color">
-          {{getDelayStatus(selectedVehicle.delaySeconds).label}}
+        <span [style.color]="getDelayColor(selectedVehicle.delayStatus)">
+          {{formatDelayTime(selectedVehicle.delaySeconds)}}
         </span>
       </div>
 

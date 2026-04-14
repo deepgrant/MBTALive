@@ -35,6 +35,8 @@ case class VehicleData(
   predictedArrivalTime : Option[String] = None,
   scheduledArrivalTime : Option[String] = None,
   delaySeconds         : Option[Int]    = None,
+  formattedStatus      : Option[String] = None,
+  delayStatus          : Option[String] = None,
 ) extends VehicleMsg
 
 // ── API response models ───────────────────────────────────────────────────────
