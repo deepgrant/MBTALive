@@ -31,42 +31,20 @@ export class VehicleListComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit(): void {
-    console.log('VehicleListComponent: Initializing...');
-
-    // Subscribe to filtered vehicles
-    const vehiclesSub = this.vehicleService.filteredVehicles$.subscribe({
-      next: (vehicles) => {
-        console.log('VehicleListComponent: Vehicles received:', vehicles);
-        this.vehicles = vehicles;
-      },
-      error: (error) => {
-        console.error('VehicleListComponent: Error receiving vehicles:', error);
-      }
-    });
-
-    // Subscribe to selected route
-    const selectedRouteSub = this.vehicleService.selectedRoute$.subscribe({
-      next: (route) => {
-        console.log('VehicleListComponent: Selected route changed:', route);
-        this.selectedRoute = route;
-      },
-      error: (error) => {
-        console.error('VehicleListComponent: Error receiving selected route:', error);
-      }
-    });
-
-    // Subscribe to selected vehicle
-    const selectedVehicleSub = this.vehicleService.selectedVehicle$.subscribe({
-      next: (vehicleId) => {
-        console.log('VehicleListComponent: Selected vehicle changed:', vehicleId);
-        this.selectedVehicle = vehicleId;
-      },
-      error: (error) => {
-        console.error('VehicleListComponent: Error receiving selected vehicle:', error);
-      }
-    });
-
-    this.subscriptions.push(vehiclesSub, selectedRouteSub, selectedVehicleSub);
+    this.subscriptions.push(
+      this.vehicleService.filteredVehicles$.subscribe({
+        next: (vehicles) => { this.vehicles = vehicles; },
+        error: (error) => { console.error('VehicleListComponent: Error receiving vehicles:', error); }
+      }),
+      this.vehicleService.selectedRoute$.subscribe({
+        next: (route) => { this.selectedRoute = route; },
+        error: (error) => { console.error('VehicleListComponent: Error receiving selected route:', error); }
+      }),
+      this.vehicleService.selectedVehicle$.subscribe({
+        next: (vehicleId) => { this.selectedVehicle = vehicleId; },
+        error: (error) => { console.error('VehicleListComponent: Error receiving selected vehicle:', error); }
+      })
+    );
   }
 
   ngOnDestroy(): void {
@@ -74,31 +52,13 @@ export class VehicleListComponent implements OnInit, OnDestroy {
   }
 
   selectVehicle(vehicleId: string): void {
-    console.log('VehicleListComponent: Vehicle clicked:', vehicleId);
-    console.log('VehicleListComponent: Available vehicles:', this.vehicles.map(v => v.vehicleId));
-    console.log('VehicleListComponent: Current selected vehicle:', this.selectedVehicle);
-    
-    // If clicking the same vehicle that's already selected, deselect it
     if (this.selectedVehicle === vehicleId) {
-      console.log('VehicleListComponent: Deselecting vehicle:', vehicleId);
       this.vehicleService.selectVehicle(null);
-      // centerOnVehicle will handle stopping tracking
       this.mapService.centerOnVehicle(vehicleId);
-      console.log('VehicleListComponent: Vehicle deselected');
       return;
     }
-    
-    // Select the new vehicle
-    console.log('VehicleListComponent: Calling vehicleService.selectVehicle...');
     this.vehicleService.selectVehicle(vehicleId);
-    console.log('VehicleListComponent: Calling mapService.centerOnVehicle...');
     this.mapService.centerOnVehicle(vehicleId);
-    console.log('VehicleListComponent: Vehicle selection complete');
-  }
-
-  testHighlighting(): void {
-    console.log('VehicleListComponent: Testing highlighting...');
-    this.mapService.testHighlighting();
   }
 
   formatSpeed(speed: number): string {
@@ -122,11 +82,6 @@ export class VehicleListComponent implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * Format delay time for display
-   * @param delaySeconds - Delay in seconds
-   * @returns Formatted delay string
-   */
   formatDelayTime(delaySeconds?: number): string {
     if (!delaySeconds) return 'On Time';
 
