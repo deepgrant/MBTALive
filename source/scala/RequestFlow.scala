@@ -1,5 +1,7 @@
 package mbta.actor
 
+import mbta.actor.ModelAPIResponse._
+import mbta.actor.ModelData._
 import org.apache.pekko
 
 import scala.collection.concurrent.TrieMap
