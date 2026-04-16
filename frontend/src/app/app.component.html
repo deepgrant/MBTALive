@@ -1,11 +1,15 @@
 <div class="app-container">
-  <div class="routes-panel" *ngIf="routesPanelVisible">
-    <app-routes></app-routes>
-  </div>
+  @if (routesPanelVisible) {
+    <div class="routes-panel">
+      <app-routes></app-routes>
+    </div>
+  }
 
-  <div class="vehicle-panel" *ngIf="selectedRoute">
-    <app-vehicle-list></app-vehicle-list>
-  </div>
+  @if (selectedRoute) {
+    <div class="vehicle-panel">
+      <app-vehicle-list></app-vehicle-list>
+    </div>
+  }
 
   <div class="main-content">
     <mat-toolbar color="primary">
@@ -34,13 +38,14 @@
     </div>
   </div>
 
-  <app-vehicle-completion-dialog
-    *ngIf="dialogData"
-    [vehicleId]="dialogData.vehicleId"
-    [routeId]="dialogData.routeId"
-    [completedNormally]="dialogData.completedNormally"
-    [finalArrivalTime]="dialogData.finalArrivalTime"
-    [lastUpdateTime]="dialogData.lastUpdateTime"
-    (closed)="onDialogClose()">
-  </app-vehicle-completion-dialog>
+  @if (dialogData) {
+    <app-vehicle-completion-dialog
+      [vehicleId]="dialogData.vehicleId"
+      [routeId]="dialogData.routeId"
+      [completedNormally]="dialogData.completedNormally"
+      [finalArrivalTime]="dialogData.finalArrivalTime"
+      [lastUpdateTime]="dialogData.lastUpdateTime"
+      (closed)="onDialogClose()">
+    </app-vehicle-completion-dialog>
+  }
 </div>

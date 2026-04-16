@@ -1,10 +1,11 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, interval, switchMap, startWith, map, catchError } from 'rxjs';
 import { of } from 'rxjs';
 import { Vehicle, VehicleResponse } from '../models/vehicle.model';
 import { Route, RouteResponse, Shape, ShapeResponse } from '../models/route.model';
 import { Station, StationResponse } from '../models/station.model';
+import { Alert } from '../models/alert.model';
 
 @Injectable({
   providedIn: 'root'
@@ -16,21 +17,19 @@ export class ApiService {
 
   getRoutes(typeFilter?: string): Observable<Route[]> {
     const url = typeFilter ? `${this.baseUrl}/routes?type=${typeFilter}` : `${this.baseUrl}/routes`;
-    console.log('Fetching routes from:', url);
     return this.http.get<RouteResponse[]>(url)
       .pipe(
-        map((routes: RouteResponse[]) => {
-          console.log('Raw routes response:', routes);
-          return routes.map(route => ({
+        map((routes: RouteResponse[]) =>
+          routes.map(route => ({
             id: route.id,
             long_name: route.long_name,
             short_name: route.short_name,
             color: route.color,
             text_color: route.text_color,
             route_type: route.route_type
-          }));
-        }),
-        catchError((error: any) => {
+          }))
+        ),
+        catchError((error: HttpErrorResponse) => {
           console.error('Error fetching routes:', error);
           return of([]);
         })
@@ -47,34 +46,31 @@ export class ApiService {
   }
 
   getVehiclesByRoute(routeId: string): Observable<Vehicle[]> {
-    console.log('ApiService: Getting vehicles for route:', routeId);
-    // Directly fetch vehicle data from the route endpoint
     return this.http.get<VehicleResponse[]>(`${this.baseUrl}/route/${routeId}/vehicles`)
       .pipe(
-        map((vehicles: VehicleResponse[]) => {
-          console.log('ApiService: Got vehicle data:', vehicles);
-          const mappedVehicles = vehicles.map(vehicle => ({
+        map((vehicles: VehicleResponse[]) =>
+          vehicles.map(vehicle => ({
             routeId: vehicle.routeId,
-            vehicleId: vehicle.vehicleId || 'unknown',
-            latitude: vehicle.latitude || 0,
-            longitude: vehicle.longitude || 0,
-            bearing: vehicle.bearing || 0,
-            speed: vehicle.speed || 0,
-            direction: vehicle.direction || 'Unknown',
-            destination: vehicle.destination || 'Unknown',
-            currentStatus: vehicle.currentStatus || 'Unknown',
-            stopName: vehicle.stopName || 'Unknown',
-            updatedAt: vehicle.updatedAt || new Date().toISOString(),
+            vehicleId: vehicle.vehicleId ?? 'unknown',
+            latitude: vehicle.latitude ?? 0,
+            longitude: vehicle.longitude ?? 0,
+            bearing: vehicle.bearing ?? 0,
+            speed: vehicle.speed ?? 0,
+            direction: vehicle.direction ?? 'Unknown',
+            destination: vehicle.destination ?? 'Unknown',
+            currentStatus: vehicle.currentStatus ?? 'Unknown',
+            stopName: vehicle.stopName ?? 'Unknown',
+            updatedAt: vehicle.updatedAt ?? new Date().toISOString(),
             routeType: vehicle.routeType,
             predictedArrivalTime: vehicle.predictedArrivalTime,
             scheduledArrivalTime: vehicle.scheduledArrivalTime,
             delaySeconds: vehicle.delaySeconds,
-            tripName: vehicle.tripName
-          }));
-          console.log('ApiService: Mapped vehicle data:', mappedVehicles);
-          return mappedVehicles;
-        }),
-        catchError(error => {
+            tripName: vehicle.tripName,
+            formattedStatus: vehicle.formattedStatus,
+            delayStatus: vehicle.delayStatus
+          }))
+        ),
+        catchError((error: HttpErrorResponse) => {
           console.error('ApiService: Error fetching vehicles for route:', routeId, error);
           return of([]);
         })
@@ -99,14 +95,10 @@ export class ApiService {
   }
 
   getRealTimeVehiclesByRoute(routeId: string, intervalMs: number = 10000): Observable<Vehicle[]> {
-    console.log('ApiService: Starting real-time vehicle polling for route:', routeId, 'interval:', intervalMs);
     return interval(intervalMs)
       .pipe(
         startWith(0),
-        switchMap(() => {
-          console.log('ApiService: Polling vehicles for route:', routeId, 'at', new Date().toLocaleTimeString());
-          return this.getVehiclesByRoute(routeId);
-        })
+        switchMap(() => this.getVehiclesByRoute(routeId))
       );
   }
 
@@ -133,6 +125,26 @@ export class ApiService {
             longitude: stop.longitude
           }))
         )
+      );
+  }
+
+  getAlertsForRoute(routeId: string): Observable<Alert[]> {
+    return this.http.get<Alert[]>(`${this.baseUrl}/route/${routeId}/alerts`)
+      .pipe(
+        catchError((error: HttpErrorResponse) => {
+          console.error('ApiService: Error fetching alerts for route:', routeId, error);
+          return of([]);
+        })
+      );
+  }
+
+  getAlertsGlobal(): Observable<Alert[]> {
+    return this.http.get<Alert[]>(`${this.baseUrl}/alerts`)
+      .pipe(
+        catchError((error: HttpErrorResponse) => {
+          console.error('ApiService: Error fetching global alerts:', error);
+          return of([]);
+        })
       );
   }
 }

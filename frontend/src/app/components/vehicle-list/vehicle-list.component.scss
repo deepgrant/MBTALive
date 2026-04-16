@@ -97,7 +97,7 @@
     background-color: #ffebee;
   }
 
-  &.ahead-of-schedule {
+  &.ahead {
     border-left: 3px solid #17a2b8;
     background-color: #e0f7fa;
   }
@@ -213,7 +213,7 @@
     }
   }
 
-  &.ahead-of-schedule {
+  &.ahead {
     mat-icon {
       color: #17a2b8;
     }

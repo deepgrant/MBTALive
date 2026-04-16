@@ -1,5 +1,4 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { MatListModule } from '@angular/material/list';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -7,12 +6,12 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { Subscription } from 'rxjs';
 import { Route } from '../../models/route.model';
+import { Alert, AlertSeverityLevel, alertSeverityLevel } from '../../models/alert.model';
 import { VehicleService } from '../../services/vehicle.service';
 
 @Component({
     selector: 'app-routes',
     imports: [
-        CommonModule,
         MatListModule,
         MatCardModule,
         MatButtonModule,
@@ -24,6 +23,7 @@ import { VehicleService } from '../../services/vehicle.service';
 })
 export class RoutesComponent implements OnInit, OnDestroy {
   routes: Route[] = [];
+  allAlerts: Alert[] = [];
   selectedRoute: string | null = null;
   isRefreshing: boolean = false;
   routeTypeFilter: string = 'all';
@@ -32,32 +32,20 @@ export class RoutesComponent implements OnInit, OnDestroy {
   constructor(private vehicleService: VehicleService) { }
 
   ngOnInit(): void {
-    console.log('RoutesComponent: Initializing...');
-
-    // Subscribe to routes
-    const routesSub = this.vehicleService.routes$.subscribe({
-      next: (routes) => {
-        console.log('RoutesComponent: Routes received:', routes);
-        console.log('RoutesComponent: Routes length:', routes.length);
-        this.routes = routes;
-      },
-      error: (error) => {
-        console.error('RoutesComponent: Error receiving routes:', error);
-      }
-    });
-
-    // Subscribe to selected route
-    const selectedRouteSub = this.vehicleService.selectedRoute$.subscribe({
-      next: (route) => {
-        console.log('RoutesComponent: Selected route changed:', route);
-        this.selectedRoute = route;
-      },
-      error: (error) => {
-        console.error('RoutesComponent: Error receiving selected route:', error);
-      }
-    });
-
-    this.subscriptions.push(routesSub, selectedRouteSub);
+    this.subscriptions.push(
+      this.vehicleService.routes$.subscribe({
+        next: (routes) => { this.routes = routes; },
+        error: (error) => { console.error('RoutesComponent: Error receiving routes:', error); }
+      }),
+      this.vehicleService.selectedRoute$.subscribe({
+        next: (route) => { this.selectedRoute = route; },
+        error: (error) => { console.error('RoutesComponent: Error receiving selected route:', error); }
+      }),
+      this.vehicleService.allAlerts$.subscribe({
+        next: (alerts) => { this.allAlerts = alerts; },
+        error: (error) => { console.error('RoutesComponent: Error receiving global alerts:', error); }
+      })
+    );
   }
 
   ngOnDestroy(): void {
@@ -65,13 +53,9 @@ export class RoutesComponent implements OnInit, OnDestroy {
   }
 
   selectRoute(routeId: string): void {
-    console.log('RoutesComponent: Route clicked:', routeId, 'currently selected:', this.selectedRoute);
     if (this.selectedRoute === routeId) {
-      // Deselect if already selected
-      console.log('RoutesComponent: Deselecting route');
       this.vehicleService.selectRoute(null);
     } else {
-      console.log('RoutesComponent: Selecting new route:', routeId);
       this.vehicleService.selectRoute(routeId);
     }
   }
@@ -85,15 +69,10 @@ export class RoutesComponent implements OnInit, OnDestroy {
   }
 
   refreshRoutes(): void {
-    console.log('RoutesComponent: Refreshing routes...');
     this.isRefreshing = true;
-
     this.vehicleService.refreshRoutes();
-
     // Reset after animation completes
-    setTimeout(() => {
-      this.isRefreshing = false;
-    }, 500);
+    setTimeout(() => { this.isRefreshing = false; }, 500);
   }
 
   getFilteredRoutes(): Route[] {
@@ -108,16 +87,15 @@ export class RoutesComponent implements OnInit, OnDestroy {
   }
 
   setRouteTypeFilter(type: string): void {
-    console.log('RoutesComponent: Setting route type filter to:', type);
     this.routeTypeFilter = type;
   }
 
   getRouteTypeIcon(route: Route): string {
     switch (route.route_type) {
-      case 0: return 'tram'; // Light Rail
-      case 1: return 'train'; // Heavy Rail
-      case 2: return 'train'; // Commuter Rail
-      case 3: return 'directions_bus'; // Bus
+      case 0: return 'tram';
+      case 1: return 'train';
+      case 2: return 'train';
+      case 3: return 'directions_bus';
       default: return 'help';
     }
   }
@@ -130,5 +108,14 @@ export class RoutesComponent implements OnInit, OnDestroy {
       case 3: return 'Bus';
       default: return 'Unknown';
     }
+  }
+
+  getAlertLevel(routeId: string): AlertSeverityLevel | null {
+    const routeAlerts = this.allAlerts.filter(a => a.routeIds?.includes(routeId));
+    if (routeAlerts.length === 0) return null;
+    const levels = routeAlerts.map(alertSeverityLevel);
+    if (levels.includes('critical')) return 'critical';
+    if (levels.includes('warning'))  return 'warning';
+    return 'info';
   }
 }

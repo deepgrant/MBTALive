@@ -1,7 +1,21 @@
-.map-container {
+.map-wrapper {
+  position: relative;
+  width: 100%;
   height: calc(100vh - 64px);
+}
+
+.map-container {
+  height: 100%;
   width: 100%;
   position: relative;
+}
+
+.ticker-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 500;
 }
 
 // Vehicle marker styles

@@ -30,21 +30,26 @@
 </div>
 
 <mat-list>
-  <mat-list-item *ngFor="let route of getFilteredRoutes()"
-                 (click)="selectRoute(route.id)"
-                 [class.selected]="selectedRoute === route.id"
-                 class="route-item">
-    <div class="route-info">
-      <div class="route-header">
-        <span class="route-short-name"
-              [style.background-color]="getRouteColor(route)"
-              [style.color]="getTextColor(route)">
-          {{route.short_name}}
-        </span>
-        <span class="route-long-name">{{route.long_name}}</span>
-        <mat-icon class="route-type-icon">{{getRouteTypeIcon(route)}}</mat-icon>
+  @for (route of getFilteredRoutes(); track route.id) {
+    <mat-list-item
+                   (click)="selectRoute(route.id)"
+                   [class.selected]="selectedRoute === route.id"
+                   class="route-item">
+      <div class="route-info">
+        <div class="route-header">
+          <span class="route-short-name"
+                [style.background-color]="getRouteColor(route)"
+                [style.color]="getTextColor(route)">
+            {{route.short_name}}
+          </span>
+          <span class="route-long-name">{{route.long_name}}</span>
+          <mat-icon class="route-type-icon">{{getRouteTypeIcon(route)}}</mat-icon>
+          @if (getAlertLevel(route.id); as level) {
+            <span class="route-alert-dot" [class]="'alert-' + level" [title]="level + ' alert'"></span>
+          }
+        </div>
+        <div class="route-type-label">{{getRouteTypeLabel(route)}}</div>
       </div>
-      <div class="route-type-label">{{getRouteTypeLabel(route)}}</div>
-    </div>
-  </mat-list-item>
+    </mat-list-item>
+  }
 </mat-list>

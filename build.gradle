@@ -74,6 +74,14 @@ jar {
   }
 }
 
+task cleanFrontend(type: Delete) {
+  delete "$projectDir/frontend/dist"
+}
+
+task cleanAll(dependsOn: [clean, cleanFrontend]) {
+  description = 'Clean Scala build output and Angular frontend dist'
+}
+
 task printClasspath {
   doLast {
     configurations.runtimeClasspath.each { println it }

@@ -1,0 +1,15 @@
+@if (alerts.length > 0) {
+  <div class="ticker-bar">
+    <div class="ticker-label" [class]="'severity-' + severityLevel">
+      MBTA ALERTS
+    </div>
+    <div class="ticker-track">
+      <div class="ticker-scroll" [style.animation-duration]="animationDuration">
+        <span class="ticker-segment">{{ tickerText }}</span>
+        <img src="assets/favicon.svg" class="ticker-logo" alt="MBTA">
+        <span class="ticker-segment">{{ tickerText }}</span>
+        <img src="assets/favicon.svg" class="ticker-logo" alt="MBTA">
+      </div>
+    </div>
+  </div>
+}

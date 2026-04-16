@@ -1,0 +1,19 @@
+@if (alerts.length > 0) {
+  <div class="alert-banner">
+    <div class="alert-banner-header" (click)="toggleExpanded()" (keydown.enter)="toggleExpanded()" tabindex="0" role="button" [attr.aria-expanded]="expanded">
+      <mat-icon class="alert-icon">warning</mat-icon>
+      <span class="alert-count">{{ alerts.length }} Active Alert{{ alerts.length > 1 ? 's' : '' }}</span>
+      <mat-icon class="expand-icon">{{ expanded ? 'expand_less' : 'expand_more' }}</mat-icon>
+    </div>
+    @if (expanded) {
+      <div class="alert-list">
+        @for (alert of alerts; track alert.id) {
+          <div class="alert-item">
+            <span class="alert-effect" [class.severe]="isSevere(alert)">{{ formatEffect(alert.effect) }}</span>
+            <span class="alert-header">{{ alert.header }}</span>
+          </div>
+        }
+      </div>
+    }
+  </div>
+}

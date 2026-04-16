@@ -1,0 +1,61 @@
+.ticker-bar {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  background-color: #80276c;
+  color: #ffffff;
+  overflow: hidden;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.ticker-label {
+  flex-shrink: 0;
+  padding: 0 12px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+
+  &.severity-critical { background-color: #8b0000; }
+  &.severity-warning  { background-color: #b8860b; }
+  &.severity-info     { background-color: #003da5; }
+}
+
+.ticker-track {
+  flex: 1;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+// Two copies of the content side-by-side. Animating by exactly -50% moves
+// the container by one copy width, placing the second copy where the first
+// started — seamless loop with no gap or pause.
+.ticker-scroll {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  animation: ticker-scroll linear infinite;
+}
+
+.ticker-segment {
+  padding: 0 24px;
+}
+
+.ticker-logo {
+  height: 22px;
+  width: auto;
+  flex-shrink: 0;
+  margin: 0 8px;
+}
+
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}

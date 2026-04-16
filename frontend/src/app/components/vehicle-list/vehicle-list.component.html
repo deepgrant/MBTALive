@@ -1,98 +1,119 @@
 <div class="vehicle-list-container">
-  <div class="vehicle-list-header" *ngIf="selectedRoute">
-    <h2 class="vehicle-list-title">Vehicles on Route {{selectedRoute}}</h2>
-  </div>
+  @if (selectedRoute) {
+    <app-alert-banner [alerts]="alerts"></app-alert-banner>
+    <div class="vehicle-list-header">
+      <h2 class="vehicle-list-title">Vehicles on Route {{selectedRoute}}</h2>
+    </div>
+  }
 
-  <div class="vehicle-list-content" *ngIf="selectedRoute && vehicles.length > 0">
-  <mat-list>
-    <mat-list-item *ngFor="let vehicle of vehicles"
-                   (click)="selectVehicle(vehicle.vehicleId)"
-                   [class.selected]="selectedVehicle === vehicle.vehicleId"
-                   [class]="'vehicle-item ' + getDelayStatus(vehicle.delaySeconds).severity">
-      <div class="vehicle-info">
-        <div class="vehicle-header">
-          <span class="vehicle-id">{{vehicle.vehicleId}}</span>
-          <div class="vehicle-status-indicators">
-            <div class="delay-indicator"
-                 [style.background-color]="getDelayStatus(vehicle.delaySeconds).color"
-                 [title]="getDelayStatus(vehicle.delaySeconds).label">
+  @if (selectedRoute && vehicles.length > 0) {
+    <div class="vehicle-list-content">
+      <mat-list>
+        @for (vehicle of vehicles; track vehicle.vehicleId) {
+          <mat-list-item
+                         (click)="selectVehicle(vehicle.vehicleId)"
+                         [class.selected]="selectedVehicle === vehicle.vehicleId"
+                         [class]="'vehicle-item ' + (vehicle.delayStatus || 'on-time')">
+            <div class="vehicle-info">
+              <div class="vehicle-header">
+                <span class="vehicle-id">{{vehicle.vehicleId}}</span>
+                <div class="vehicle-status-indicators">
+                  <div class="delay-indicator"
+                       [style.background-color]="getDelayColor(vehicle.delayStatus)"
+                       [title]="formatDelayTime(vehicle.delaySeconds)">
+                  </div>
+                  <mat-icon class="vehicle-type-icon">{{isBus(vehicle) ? 'directions_bus' : 'train'}}</mat-icon>
+                  @if (vehicle.tripName) {
+                    <span class="trip-name">{{vehicle.tripName}}</span>
+                  }
+                </div>
+              </div>
+
+              <div class="vehicle-details">
+                <div class="detail-row">
+                  <mat-icon>directions</mat-icon>
+                  <span>{{vehicle.direction}}</span>
+                </div>
+
+                <div class="detail-row">
+                  <mat-icon>place</mat-icon>
+                  <span>{{vehicle.destination}}</span>
+                </div>
+
+                @if (!isBus(vehicle)) {
+                  <div class="detail-row">
+                    <mat-icon>speed</mat-icon>
+                    <span>{{formatSpeed(vehicle.speed)}}</span>
+                  </div>
+                }
+
+                <div class="detail-row delay-info" [ngClass]="vehicle.delayStatus || 'on-time'">
+                  <mat-icon>schedule</mat-icon>
+                  <span [style.color]="getDelayColor(vehicle.delayStatus)">
+                    {{formatDelayTime(vehicle.delaySeconds)}}
+                  </span>
+                </div>
+
+                @if (vehicle.predictedArrivalTime || vehicle.scheduledArrivalTime) {
+                  <div class="detail-row">
+                    <mat-icon>access_time</mat-icon>
+                    <span>
+                      @if (vehicle.scheduledArrivalTime) {
+                        <div class="time-info">
+                          <strong>Scheduled:</strong> {{formatTime(vehicle.scheduledArrivalTime)}}
+                        </div>
+                      }
+                      @if (vehicle.predictedArrivalTime) {
+                        <div class="time-info">
+                          <strong>Predicted:</strong> {{formatTime(vehicle.predictedArrivalTime)}}
+                        </div>
+                      }
+                    </span>
+                  </div>
+                }
+
+                <div class="detail-row">
+                  <mat-icon>info</mat-icon>
+                  <span>{{vehicle.formattedStatus || vehicle.currentStatus || 'Unknown'}}</span>
+                </div>
+
+                <div class="detail-row">
+                  <mat-icon>update</mat-icon>
+                  <span>{{formatTime(vehicle.updatedAt)}}</span>
+                </div>
+              </div>
             </div>
-            <mat-icon class="vehicle-type-icon">{{isBus(vehicle) ? 'directions_bus' : 'train'}}</mat-icon>
-            <span *ngIf="vehicle.tripName" class="trip-name">{{vehicle.tripName}}</span>
+          </mat-list-item>
+        }
+      </mat-list>
+    </div>
+  }
+
+  @if (selectedRoute && vehicles.length === 0) {
+    <div class="vehicle-list-empty">
+      <mat-card class="empty-state-card">
+        <mat-card-content>
+          <div class="empty-state-content">
+            <mat-icon class="empty-icon">directions_bus</mat-icon>
+            <h3>No Vehicles Found</h3>
+            <p>No vehicles are currently active on this route.</p>
           </div>
-        </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+  }
 
-        <div class="vehicle-details">
-          <div class="detail-row">
-            <mat-icon>directions</mat-icon>
-            <span>{{vehicle.direction}}</span>
+  @if (!selectedRoute) {
+    <div class="vehicle-list-no-route">
+      <mat-card class="no-route-card">
+        <mat-card-content>
+          <div class="no-route-content">
+            <mat-icon class="no-route-icon">route</mat-icon>
+            <h3>Select a Route</h3>
+            <p>Choose a route from the left panel to view its vehicles.</p>
           </div>
-
-          <div class="detail-row">
-            <mat-icon>place</mat-icon>
-            <span>{{vehicle.destination}}</span>
-          </div>
-
-          <div class="detail-row" *ngIf="!isBus(vehicle)">
-            <mat-icon>speed</mat-icon>
-            <span>{{formatSpeed(vehicle.speed)}}</span>
-          </div>
-
-          <div class="detail-row delay-info" [ngClass]="getDelayStatus(vehicle.delaySeconds).severity">
-            <mat-icon>schedule</mat-icon>
-            <span [style.color]="getDelayStatus(vehicle.delaySeconds).color">
-              {{getDelayStatus(vehicle.delaySeconds).label}}
-            </span>
-          </div>
-
-          <div class="detail-row" *ngIf="vehicle.predictedArrivalTime || vehicle.scheduledArrivalTime">
-            <mat-icon>access_time</mat-icon>
-            <span>
-              <div *ngIf="vehicle.scheduledArrivalTime" class="time-info">
-                <strong>Scheduled:</strong> {{formatTime(vehicle.scheduledArrivalTime)}}
-              </div>
-              <div *ngIf="vehicle.predictedArrivalTime" class="time-info">
-                <strong>Predicted:</strong> {{formatTime(vehicle.predictedArrivalTime)}}
-              </div>
-            </span>
-          </div>
-
-          <div class="detail-row">
-            <mat-icon>info</mat-icon>
-            <span>{{formatStatus(vehicle.currentStatus, vehicle.stopName)}}</span>
-          </div>
-
-          <div class="detail-row">
-            <mat-icon>update</mat-icon>
-            <span>{{formatTime(vehicle.updatedAt)}}</span>
-          </div>
-        </div>
-      </div>
-    </mat-list-item>
-  </mat-list>
-  </div>
-
-  <div class="vehicle-list-empty" *ngIf="selectedRoute && vehicles.length === 0">
-  <mat-card class="empty-state-card">
-    <mat-card-content>
-      <div class="empty-state-content">
-        <mat-icon class="empty-icon">directions_bus</mat-icon>
-        <h3>No Vehicles Found</h3>
-        <p>No vehicles are currently active on this route.</p>
-      </div>
-    </mat-card-content>
-  </mat-card>
-  </div>
-
-  <div class="vehicle-list-no-route" *ngIf="!selectedRoute">
-  <mat-card class="no-route-card">
-    <mat-card-content>
-      <div class="no-route-content">
-        <mat-icon class="no-route-icon">route</mat-icon>
-        <h3>Select a Route</h3>
-        <p>Choose a route from the left panel to view its vehicles.</p>
-      </div>
-    </mat-card-content>
-  </mat-card>
-  </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+  }
 </div>
