@@ -5,6 +5,7 @@ import { of } from 'rxjs';
 import { Vehicle, VehicleResponse } from '../models/vehicle.model';
 import { Route, RouteResponse, Shape, ShapeResponse } from '../models/route.model';
 import { Station, StationResponse } from '../models/station.model';
+import { Alert } from '../models/alert.model';
 
 @Injectable({
   providedIn: 'root'
@@ -124,6 +125,26 @@ export class ApiService {
             longitude: stop.longitude
           }))
         )
+      );
+  }
+
+  getAlertsForRoute(routeId: string): Observable<Alert[]> {
+    return this.http.get<Alert[]>(`${this.baseUrl}/route/${routeId}/alerts`)
+      .pipe(
+        catchError((error: HttpErrorResponse) => {
+          console.error('ApiService: Error fetching alerts for route:', routeId, error);
+          return of([]);
+        })
+      );
+  }
+
+  getAlertsGlobal(): Observable<Alert[]> {
+    return this.http.get<Alert[]>(`${this.baseUrl}/alerts`)
+      .pipe(
+        catchError((error: HttpErrorResponse) => {
+          console.error('ApiService: Error fetching global alerts:', error);
+          return of([]);
+        })
       );
   }
 }

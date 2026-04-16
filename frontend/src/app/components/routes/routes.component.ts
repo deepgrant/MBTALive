@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { Subscription } from 'rxjs';
 import { Route } from '../../models/route.model';
+import { Alert, AlertSeverityLevel, alertSeverityLevel } from '../../models/alert.model';
 import { VehicleService } from '../../services/vehicle.service';
 
 @Component({
@@ -22,6 +23,7 @@ import { VehicleService } from '../../services/vehicle.service';
 })
 export class RoutesComponent implements OnInit, OnDestroy {
   routes: Route[] = [];
+  allAlerts: Alert[] = [];
   selectedRoute: string | null = null;
   isRefreshing: boolean = false;
   routeTypeFilter: string = 'all';
@@ -38,6 +40,10 @@ export class RoutesComponent implements OnInit, OnDestroy {
       this.vehicleService.selectedRoute$.subscribe({
         next: (route) => { this.selectedRoute = route; },
         error: (error) => { console.error('RoutesComponent: Error receiving selected route:', error); }
+      }),
+      this.vehicleService.allAlerts$.subscribe({
+        next: (alerts) => { this.allAlerts = alerts; },
+        error: (error) => { console.error('RoutesComponent: Error receiving global alerts:', error); }
       })
     );
   }
@@ -102,5 +108,14 @@ export class RoutesComponent implements OnInit, OnDestroy {
       case 3: return 'Bus';
       default: return 'Unknown';
     }
+  }
+
+  getAlertLevel(routeId: string): AlertSeverityLevel | null {
+    const routeAlerts = this.allAlerts.filter(a => a.routeIds?.includes(routeId));
+    if (routeAlerts.length === 0) return null;
+    const levels = routeAlerts.map(alertSeverityLevel);
+    if (levels.includes('critical')) return 'critical';
+    if (levels.includes('warning'))  return 'warning';
+    return 'info';
   }
 }

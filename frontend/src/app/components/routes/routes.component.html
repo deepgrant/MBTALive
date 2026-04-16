@@ -44,6 +44,9 @@
           </span>
           <span class="route-long-name">{{route.long_name}}</span>
           <mat-icon class="route-type-icon">{{getRouteTypeIcon(route)}}</mat-icon>
+          @if (getAlertLevel(route.id); as level) {
+            <span class="route-alert-dot" [class]="'alert-' + level" [title]="level + ' alert'"></span>
+          }
         </div>
         <div class="route-type-label">{{getRouteTypeLabel(route)}}</div>
       </div>

@@ -22,8 +22,9 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
   // ── Constants ─────────────────────────────────────────────────────────────
 
   private val PredictionBatchSize:  Int  = 10
-  private val StopCacheTtlMillis:   Long = 60L * 60L * 1000L  // 1 hour
+  private val StopCacheTtlMillis:    Long = 60L * 60L * 1000L  // 1 hour
   private val VehicleCacheTtlMillis: Long = 8L * 1000L         // 8 s (just under client poll)
+  private val AlertCacheTtlMillis:   Long = 2L * 60L * 1000L  // 2 minutes
 
   // ── Internal types ────────────────────────────────────────────────────────
 
@@ -37,9 +38,11 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
 
   // ── Caches (thread-safe) ──────────────────────────────────────────────────
 
-  private val stopCache:      TrieMap[String, (StopDetails, Long)]              = TrieMap.empty
-  private val vehicleCache:   TrieMap[String, (Vector[VehicleData], Long)]      = TrieMap.empty
-  private val vehicleInflight: TrieMap[String, Future[Vector[VehicleData]]]     = TrieMap.empty
+  private val stopCache:         TrieMap[String, (StopDetails, Long)]          = TrieMap.empty
+  private val vehicleCache:     TrieMap[String, (Vector[VehicleData], Long)]   = TrieMap.empty
+  private val vehicleInflight:  TrieMap[String, Future[Vector[VehicleData]]]   = TrieMap.empty
+  private val alertByRouteCache: TrieMap[String, (Vector[AlertInfo], Long)]    = TrieMap.empty
+  private val alertGlobalCache:  TrieMap[String, (Vector[AlertInfo], Long)]    = TrieMap.empty
 
   // ── Stream Flows ──────────────────────────────────────────────────────────
 
@@ -409,4 +412,87 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
         entity.discardBytes()
         Future.successful(Vector.empty)
     }
+
+  def fetchAlertsForRoute(routeId: String): Future[Vector[AlertInfo]] = {
+    val now = System.currentTimeMillis()
+    alertByRouteCache.get(routeId) match {
+      case Some((alerts, expiry)) if expiry > now => Future.successful(alerts)
+      case _ =>
+        val nowIso = java.time.Instant.now().toString
+        access.queueRequest(
+          HttpRequest(uri = access.mbtaUri(
+            path  = "/alerts",
+            query = access.mbtaQuery(Map(
+              "filter[route]"    -> routeId,
+              "filter[activity]" -> "BOARD,EXIT,RIDE",
+              "filter[datetime]" -> nowIso,
+            ))
+          ))
+        ).flatMap {
+          case HttpResponse(StatusCodes.OK, _, entity, _) =>
+            access.parseMbtaResponse(entity).map { response =>
+              val alerts = response.getObjectList("data").asScala.toVector.map { item =>
+                parseAlertInfo(item.toConfig, includeRoutes = false)
+              }
+              alertByRouteCache.put(routeId, (alerts, now + AlertCacheTtlMillis))
+              alerts
+            }
+          case HttpResponse(code, _, entity, _) =>
+            log.error("fetchAlertsForRoute({}) unexpected status: {}", routeId, code)
+            entity.discardBytes()
+            Future.successful(Vector.empty)
+        }
+    }
+  }
+
+  def fetchAlertsGlobal(): Future[Vector[AlertInfo]] = {
+    val now = System.currentTimeMillis()
+    alertGlobalCache.get("global") match {
+      case Some((alerts, expiry)) if expiry > now => Future.successful(alerts)
+      case _ =>
+        val nowIso = java.time.Instant.now().toString
+        access.queueRequest(
+          HttpRequest(uri = access.mbtaUri(
+            path  = "/alerts",
+            query = access.mbtaQuery(Map(
+              "filter[activity]" -> "BOARD,EXIT,RIDE",
+              "filter[datetime]" -> nowIso,
+            ))
+          ))
+        ).flatMap {
+          case HttpResponse(StatusCodes.OK, _, entity, _) =>
+            access.parseMbtaResponse(entity).map { response =>
+              val alerts = response.getObjectList("data").asScala.toVector.map { item =>
+                parseAlertInfo(item.toConfig, includeRoutes = true)
+              }
+              alertGlobalCache.put("global", (alerts, now + AlertCacheTtlMillis))
+              alerts
+            }
+          case HttpResponse(code, _, entity, _) =>
+            log.error("fetchAlertsGlobal unexpected status: {}", code)
+            entity.discardBytes()
+            Future.successful(Vector.empty)
+        }
+    }
+  }
+
+  private def parseAlertInfo(r: com.typesafe.config.Config, includeRoutes: Boolean): AlertInfo = {
+    val routeIds: Vector[String] =
+      if (!includeRoutes) Vector.empty
+      else
+        Try(r.getObjectList("relationships.routes.data").asScala.toVector)
+          .getOrElse(Vector.empty)
+          .flatMap(obj => Try(obj.toConfig.getString("id")).toOption)
+    AlertInfo(
+      id          = r.getString("id"),
+      header      = Try(r.getString("attributes.header")).getOrElse(""),
+      effect      = Try(r.getString("attributes.effect")).getOrElse("UNKNOWN"),
+      severity    = Try(r.getInt("attributes.severity")).getOrElse(1),
+      lifecycle   = Try(r.getString("attributes.lifecycle")).getOrElse("ONGOING"),
+      updatedAt   = Try(r.getString("attributes.updated_at")).getOrElse(""),
+      description = Try(r.getString("attributes.description")).toOption,
+      cause       = Try(r.getString("attributes.cause")).toOption,
+      routeIds    = routeIds,
+    )
+  }
 }

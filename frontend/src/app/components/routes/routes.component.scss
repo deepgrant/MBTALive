@@ -103,3 +103,15 @@
   margin-top: 4px;
   font-style: italic;
 }
+
+.route-alert-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-left: 4px;
+
+  &.alert-critical { background-color: #c62828; }
+  &.alert-warning  { background-color: #f9a825; }
+  &.alert-info     { background-color: #1565c0; }
+}

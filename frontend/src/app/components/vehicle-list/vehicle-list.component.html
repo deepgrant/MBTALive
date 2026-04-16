@@ -1,5 +1,6 @@
 <div class="vehicle-list-container">
   @if (selectedRoute) {
+    <app-alert-banner [alerts]="alerts"></app-alert-banner>
     <div class="vehicle-list-header">
       <h2 class="vehicle-list-title">Vehicles on Route {{selectedRoute}}</h2>
     </div>

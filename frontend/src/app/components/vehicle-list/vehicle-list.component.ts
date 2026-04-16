@@ -5,8 +5,10 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { Subscription } from 'rxjs';
 import { Vehicle } from '../../models/vehicle.model';
+import { Alert } from '../../models/alert.model';
 import { VehicleService } from '../../services/vehicle.service';
 import { MapService } from '../../services/map.service';
+import { AlertBannerComponent } from '../alert-banner/alert-banner.component';
 
 @Component({
     selector: 'app-vehicle-list',
@@ -14,13 +16,15 @@ import { MapService } from '../../services/map.service';
         CommonModule,
         MatListModule,
         MatCardModule,
-        MatIconModule
+        MatIconModule,
+        AlertBannerComponent
     ],
     templateUrl: './vehicle-list.component.html',
     styleUrls: ['./vehicle-list.component.scss']
 })
 export class VehicleListComponent implements OnInit, OnDestroy {
   vehicles: Vehicle[] = [];
+  alerts: Alert[] = [];
   selectedRoute: string | null = null;
   selectedVehicle: string | null = null;
   private subscriptions: Subscription[] = [];
@@ -43,6 +47,10 @@ export class VehicleListComponent implements OnInit, OnDestroy {
       this.vehicleService.selectedVehicle$.subscribe({
         next: (vehicleId) => { this.selectedVehicle = vehicleId; },
         error: (error) => { console.error('VehicleListComponent: Error receiving selected vehicle:', error); }
+      }),
+      this.vehicleService.selectedRouteAlerts$.subscribe({
+        next: (alerts) => { this.alerts = alerts; },
+        error: (error) => { console.error('VehicleListComponent: Error receiving alerts:', error); }
       })
     );
   }

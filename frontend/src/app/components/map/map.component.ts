@@ -4,12 +4,14 @@ import * as L from 'leaflet';
 import { Vehicle } from '../../models/vehicle.model';
 import { Route, Shape } from '../../models/route.model';
 import { Station } from '../../models/station.model';
+import { Alert } from '../../models/alert.model';
 import { VehicleService } from '../../services/vehicle.service';
 import { MapService } from '../../services/map.service';
+import { AlertTickerComponent } from '../alert-ticker/alert-ticker.component';
 
 @Component({
     selector: 'app-map',
-    imports: [],
+    imports: [AlertTickerComponent],
     templateUrl: './map.component.html',
     styleUrls: ['./map.component.scss']
 })
@@ -20,6 +22,7 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   private currentRouteId: string | null = null;
   private routeFramed: boolean = false;
   private isInitialRouteLoad: boolean = true;
+  alerts: Alert[] = [];
 
   constructor(
     private vehicleService: VehicleService,
@@ -52,6 +55,10 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
           }
         },
         error: (error) => { console.error('MapComponent: Error receiving selected vehicle:', error); }
+      }),
+      this.vehicleService.selectedRouteAlerts$.subscribe({
+        next: (alerts) => { this.alerts = alerts; },
+        error: (error) => { console.error('MapComponent: Error receiving alerts:', error); }
       })
     );
   }

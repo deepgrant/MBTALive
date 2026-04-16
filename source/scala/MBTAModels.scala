@@ -44,3 +44,15 @@ case class VehicleData(
 case class RouteInfo(id: String, long_name: String, short_name: String, color: String, text_color: String, route_type: Int)
 case class StopInfo(id: String, name: String, latitude: Double, longitude: Double)
 case class ShapeInfo(id: String, polyline: String)
+
+case class AlertInfo(
+  id          : String,
+  header      : String,
+  effect      : String,
+  severity    : Int,
+  lifecycle   : String,
+  updatedAt   : String,
+  description : Option[String]  = None,
+  cause       : Option[String]  = None,
+  routeIds    : Vector[String]  = Vector.empty,
+)

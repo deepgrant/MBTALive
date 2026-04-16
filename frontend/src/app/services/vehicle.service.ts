@@ -1,9 +1,10 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, EMPTY, of } from 'rxjs';
-import { map, switchMap, catchError, take } from 'rxjs/operators';
+import { BehaviorSubject, Observable, EMPTY, of, timer } from 'rxjs';
+import { map, switchMap, catchError, take, shareReplay } from 'rxjs/operators';
 import { Vehicle } from '../models/vehicle.model';
 import { Route, Shape } from '../models/route.model';
 import { Station } from '../models/station.model';
+import { Alert } from '../models/alert.model';
 import { ApiService } from './api.service';
 import { CookieService } from './cookie.service';
 
@@ -24,6 +25,8 @@ export class VehicleService {
   public filteredVehicles$: Observable<Vehicle[]>;
   public selectedRouteStations$: Observable<Station[]>;
   public selectedRouteShapes$: Observable<Shape[]>;
+  public selectedRouteAlerts$: Observable<Alert[]>;
+  public allAlerts$: Observable<Alert[]>;
 
   constructor(
     private apiService: ApiService,
@@ -66,6 +69,24 @@ export class VehicleService {
         return this.apiService.getRouteShapes(routeId);
       }),
       catchError(() => EMPTY)
+    );
+
+    // Route-specific alerts — re-fetched on route change, refreshed every 90 s
+    this.selectedRouteAlerts$ = this.selectedRoute$.pipe(
+      switchMap(routeId => {
+        if (!routeId) return of([]);
+        return timer(0, 90000).pipe(
+          switchMap(() => this.apiService.getAlertsForRoute(routeId)),
+          catchError(() => of([]))
+        );
+      })
+    );
+
+    // Global alerts for route-list badges — refreshed every 90 s
+    this.allAlerts$ = timer(0, 90000).pipe(
+      switchMap(() => this.apiService.getAlertsGlobal()),
+      catchError(() => of([])),
+      shareReplay(1)
     );
   }
 

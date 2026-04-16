@@ -68,11 +68,14 @@ class MBTAService extends Actor with ActorLogging {
         HttpEntity(ContentTypes.`application/json`, xs.toJson.compactPrint)
       }
 
+    implicit val alertInfoFormat: RootJsonFormat[AlertInfo] = jsonFormat9(AlertInfo.apply)
+
     implicit val routeInfoListMarshaller:   Marshaller[Vector[RouteInfo],   HttpEntity.Strict] = jsonMarshaller[RouteInfo]
     implicit val stopInfoListMarshaller:    Marshaller[Vector[StopInfo],    HttpEntity.Strict] = jsonMarshaller[StopInfo]
     implicit val shapeInfoListMarshaller:   Marshaller[Vector[ShapeInfo],   HttpEntity.Strict] = jsonMarshaller[ShapeInfo]
     implicit val stringListMarshaller:      Marshaller[Vector[String],      HttpEntity.Strict] = jsonMarshaller[String]
     implicit val vehicleDataListMarshaller: Marshaller[Vector[VehicleData], HttpEntity.Strict] = jsonMarshaller[VehicleData]
+    implicit val alertInfoListMarshaller:   Marshaller[Vector[AlertInfo],   HttpEntity.Strict] = jsonMarshaller[AlertInfo]
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -128,6 +131,16 @@ class MBTAService extends Actor with ActorLogging {
             path("route" / Segment / "shapes") { routeId =>
               get {
                 onSuccess(flow.fetchShapes(routeId)) { complete(_) }
+              }
+            },
+            path("route" / Segment / "alerts") { routeId =>
+              get {
+                onSuccess(flow.fetchAlertsForRoute(routeId)) { complete(_) }
+              }
+            },
+            path("alerts") {
+              get {
+                onSuccess(flow.fetchAlertsGlobal()) { complete(_) }
               }
             },
           )
