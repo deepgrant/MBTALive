@@ -192,7 +192,27 @@ export class MapService {
       this.map.removeLayer(existingLayer);
     }
 
-    shapes.forEach(shape => {
+    // 1. Drop negative-priority shapes (bus bridges, shuttles, road detours on roads).
+    const validShapes = shapes.filter(s => s.priority >= 0);
+
+    // 2. Prefer canonical shapes when the API provides them — they are the MBTA's
+    //    designated display shapes and avoid re-drawing legacy/variant duplicates.
+    const canonicalShapes = validShapes.filter(s => s.id.startsWith('canonical-'));
+    const candidates = canonicalShapes.length > 0 ? canonicalShapes : validShapes;
+
+    // 3. Find the maximum priority per direction_id, then keep ALL shapes that tie
+    //    at that maximum. Keeping all ties (not just one) ensures branch routes like
+    //    CR-NewBedford show every branch when they share direction_id and priority.
+    const maxPriority = new Map<number, number>();
+    for (const shape of candidates) {
+      const current = maxPriority.get(shape.directionId) ?? -Infinity;
+      if (shape.priority > current) maxPriority.set(shape.directionId, shape.priority);
+    }
+    const shapesToDraw = candidates.filter(
+      s => s.priority === maxPriority.get(s.directionId)
+    );
+
+    shapesToDraw.forEach(shape => {
       const coordinates = this.decodePolyline(shape.polyline);
       if (coordinates.length === 0) return;
 

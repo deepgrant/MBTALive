@@ -108,7 +108,9 @@ export class ApiService {
         map((shapes: ShapeResponse[]) =>
           shapes.map(shape => ({
             id: shape.id,
-            polyline: shape.polyline
+            polyline: shape.polyline,
+            priority: shape.priority ?? 0,
+            directionId: shape.directionId ?? 0,
           }))
         )
       );
