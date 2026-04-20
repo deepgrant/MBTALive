@@ -74,6 +74,12 @@ jar {
   }
 }
 
+task copyRuntimeDeps(type: Copy, dependsOn: jar) {
+  description = 'Copy all runtime JARs (app + deps) into build/libs for Docker multi-stage builds'
+  from configurations.runtimeClasspath
+  into "$buildDir/libs"
+}
+
 task cleanFrontend(type: Delete) {
   delete "$projectDir/frontend/dist"
 }
@@ -97,7 +103,11 @@ task run(type: JavaExec, dependsOn: classes) {
 docker {
   name "mbtalive:2.0"
   dockerfile file('Dockerfile')
-  files tasks.jar, 'docker-run.sh'
-  copySpec.from(configurations.runtimeClasspath)
+  files 'docker-run.sh'
+  copySpec.from("$buildDir/libs") { into 'libs' }
   pull true
+}
+
+tasks.named('dockerPrepare') {
+  dependsOn copyRuntimeDeps
 }

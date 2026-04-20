@@ -87,11 +87,13 @@ class MBTAService extends Actor with ActorLogging {
     startHttpServer()
   }
 
-  private def startHttpServer(): Unit =
-    Http().newServerAt("0.0.0.0", 8080).bind(createApiRoutes()).onComplete {
-      case Success(_)         => log.info("Server online at http://0.0.0.0:8080/")
+  private def startHttpServer(): Unit = {
+    val port = sys.env.getOrElse("PORT", "8080").toInt
+    Http().newServerAt("0.0.0.0", port).bind(createApiRoutes()).onComplete {
+      case Success(_)         => log.info("Server online at http://0.0.0.0:{}/", port)
       case Failure(exception) => log.error("Failed to bind HTTP server: {}", exception)
     }
+  }
 
   // ── HTTP routes ───────────────────────────────────────────────────────────
 
@@ -107,6 +109,9 @@ class MBTAService extends Actor with ActorLogging {
     respondWithHeaders(corsHeaders) {
       concat(
         options { complete(StatusCodes.OK) },
+        path("health") {
+          get { complete(StatusCodes.OK) }
+        },
         pathPrefix("api") {
           concat(
             path("routes") {

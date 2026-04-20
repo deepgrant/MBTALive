@@ -1,6 +1,7 @@
-FROM ubuntu:22.04
-RUN apt update && apt install -y openjdk-17-jdk-headless
-COPY docker-run.sh /root/
-RUN chmod 755 /root/docker-run.sh
-COPY *.jar /root/
-CMD ["/root/docker-run.sh"]
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
+COPY libs /app/lib/
+COPY docker-run.sh /app/
+RUN chmod 755 /app/docker-run.sh
+ENV PORT=8080
+CMD ["/app/docker-run.sh"]
