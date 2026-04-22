@@ -1,16 +1,21 @@
-output "lb_ip" {
-  value       = google_compute_global_address.lb_ip.address
-  description = "Set a DNS A record: ${var.domain} → this IP, then run: ./gradlew checkCert"
+output "app_url" {
+  value       = "https://${var.domain}/MBTA/"
+  description = "Public URL for the MBTA Tracker app"
 }
 
-output "cloud_run_url" {
-  value       = google_cloud_run_v2_service.backend.uri
-  description = "Direct Cloud Run URL — internal use only; all public traffic goes through the LB"
+output "api_gateway_domain" {
+  value       = aws_apigatewayv2_domain_name.main.domain_name_configuration[0].target_domain_name
+  description = "API Gateway regional domain name (aliased by Route 53)"
 }
 
-output "frontend_bucket" {
-  value       = google_storage_bucket.frontend.name
-  description = "GCS bucket serving the Angular SPA"
+output "alb_dns" {
+  value       = aws_lb.main.dns_name
+  description = "ALB DNS — receives traffic from API Gateway only; not publicly advertised"
+}
+
+output "ecr_repository_url" {
+  value       = aws_ecr_repository.app.repository_url
+  description = "ECR repository URL for image pushes"
 }
 
 output "image_deployed" {

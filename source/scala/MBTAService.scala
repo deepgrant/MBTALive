@@ -26,8 +26,9 @@ class MBTAService extends Actor with ActorLogging {
   implicit val logger:  LoggingAdapter = log
   implicit val timeout: Timeout        = 30.seconds
 
-  private val access = new MBTAAccess()
-  private val flow   = new RequestFlow(access)
+  private val access    = new MBTAAccess()
+  private val flow      = new RequestFlow(access)
+  private val staticDir = sys.env.getOrElse("STATIC_DIR", "/app/static")
 
   // ── JSON serialization ────────────────────────────────────────────────────
 
@@ -151,7 +152,11 @@ class MBTAService extends Actor with ActorLogging {
               }
             },
           )
-        }
+        },
+        // Serve Angular SPA static files; unknown paths fall back to index.html
+        // so the Angular router can handle client-side navigation.
+        getFromDirectory(staticDir),
+        get { getFromFile(s"$staticDir/index.html") }
       )
     }
   }

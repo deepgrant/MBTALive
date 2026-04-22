@@ -1,236 +1,354 @@
-# ── APIs ──────────────────────────────────────────────────────────────────────
+# ── Data sources ───────────────────────────────────────────────────────────────
 
-resource "google_project_service" "apis" {
-  for_each = toset([
-    "run.googleapis.com",
-    "artifactregistry.googleapis.com",
-    "compute.googleapis.com",
-    "certificatemanager.googleapis.com",
-    "storage.googleapis.com",
-    "secretmanager.googleapis.com",
-  ])
-  service            = each.key
-  disable_on_destroy = false
+data "aws_vpc" "default" {
+  default = true
 }
 
-# ── Artifact Registry ─────────────────────────────────────────────────────────
-
-resource "google_artifact_registry_repository" "docker" {
-  depends_on    = [google_project_service.apis]
-  repository_id = var.repo_name
-  location      = var.region
-  format        = "DOCKER"
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
 }
 
-# ── Secret Manager ────────────────────────────────────────────────────────────
+data "aws_route53_zone" "main" {
+  name = var.domain
+}
+
+# ── ECR ────────────────────────────────────────────────────────────────────────
+
+resource "aws_ecr_repository" "app" {
+  name                 = "${var.repo_name}/${var.service_name}"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+# ── Secrets Manager ────────────────────────────────────────────────────────────
 # Manages the secret resource and IAM only. The secret value (MBTA_API_KEY) is
 # seeded separately by the Gradle seedApiKey task and never enters tofu state.
 
-resource "google_secret_manager_secret" "mbta_api_key" {
-  depends_on = [google_project_service.apis]
-  secret_id  = "mbta-api-key"
-  replication {
-    auto {}
+resource "aws_secretsmanager_secret" "mbta_api_key" {
+  name = "mbta-api-key"
+}
+
+# ── IAM ────────────────────────────────────────────────────────────────────────
+
+resource "aws_iam_role" "ecs_execution" {
+  name = "${var.service_name}-ecs-execution"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_execution_base" {
+  role       = aws_iam_role.ecs_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+# Grants the execution role permission to pull the MBTA API key from Secrets Manager
+resource "aws_iam_role_policy" "ecs_execution_secrets" {
+  name = "secrets-access"
+  role = aws_iam_role.ecs_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = [aws_secretsmanager_secret.mbta_api_key.arn]
+    }]
+  })
+}
+
+resource "aws_iam_role" "ecs_task" {
+  name = "${var.service_name}-ecs-task"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+    }]
+  })
+}
+
+# ── Security groups ────────────────────────────────────────────────────────────
+
+resource "aws_security_group" "alb" {
+  name   = "${var.service_name}-alb"
+  vpc_id = data.aws_vpc.default.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-data "google_compute_default_service_account" "default" {
-  depends_on = [google_project_service.apis]
+resource "aws_security_group" "ecs" {
+  name   = "${var.service_name}-ecs"
+  vpc_id = data.aws_vpc.default.id
+
+  ingress {
+    from_port       = var.container_port
+    to_port         = var.container_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
-resource "google_secret_manager_secret_iam_member" "cr_sa_access" {
-  secret_id = google_secret_manager_secret.mbta_api_key.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${data.google_compute_default_service_account.default.email}"
+# ── ALB (HTTP only — TLS terminates at API Gateway) ───────────────────────────
+
+resource "aws_lb" "main" {
+  name               = "${var.service_name}-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = data.aws_subnets.default.ids
 }
 
-# ── Cloud Run service ─────────────────────────────────────────────────────────
+resource "aws_lb_target_group" "app" {
+  name        = "${var.service_name}-tg"
+  port        = var.container_port
+  protocol    = "HTTP"
+  vpc_id      = data.aws_vpc.default.id
+  target_type = "ip"
 
-resource "google_cloud_run_v2_service" "backend" {
-  depends_on = [
-    google_artifact_registry_repository.docker,
-    google_secret_manager_secret_iam_member.cr_sa_access,
-  ]
-  name     = var.service_name
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  health_check {
+    path                = "/health"
+    interval            = 30
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+  }
+}
 
-  template {
-    scaling {
-      min_instance_count = var.min_scale
-      max_instance_count = var.max_scale
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app.arn
+  }
+}
+
+# ── ECS Fargate ───────────────────────────────────────────────────────────────
+
+resource "aws_ecs_cluster" "main" {
+  name = var.service_name
+}
+
+resource "aws_cloudwatch_log_group" "ecs" {
+  name              = "/ecs/${var.service_name}"
+  retention_in_days = 7
+}
+
+resource "aws_ecs_task_definition" "app" {
+  family                   = var.service_name
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = var.cpu
+  memory                   = var.memory
+  execution_role_arn       = aws_iam_role.ecs_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([{
+    name  = var.service_name
+    image = var.image_url
+
+    portMappings = [{
+      containerPort = var.container_port
+      protocol      = "tcp"
+    }]
+
+    environment = [{
+      name  = "PORT"
+      value = tostring(var.container_port)
+    }]
+
+    secrets = [{
+      name      = "MBTA_API_KEY"
+      valueFrom = aws_secretsmanager_secret.mbta_api_key.arn
+    }]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "ecs"
+      }
     }
-    max_instance_request_concurrency = var.concurrency
-    timeout                          = "${var.timeout_seconds}s"
 
-    containers {
-      image = var.image_url
+    healthCheck = {
+      command     = ["CMD-SHELL", "curl -f http://localhost:${var.container_port}/health || exit 1"]
+      interval    = 30
+      timeout     = 5
+      retries     = 3
+      startPeriod = 15
+    }
+  }])
+}
 
-      ports {
-        container_port = 8080
-      }
+resource "aws_ecs_service" "app" {
+  name            = var.service_name
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.app.arn
+  desired_count   = var.min_tasks
+  launch_type     = "FARGATE"
 
-      env {
-        name = "MBTA_API_KEY"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.mbta_api_key.secret_id
-            version = "latest"
-          }
-        }
-      }
+  network_configuration {
+    subnets          = data.aws_subnets.default.ids
+    security_groups  = [aws_security_group.ecs.id]
+    assign_public_ip = true
+  }
 
-      resources {
-        limits = {
-          cpu    = var.cpu
-          memory = var.memory
-        }
-        startup_cpu_boost = true
-      }
+  load_balancer {
+    target_group_arn = aws_lb_target_group.app.arn
+    container_name   = var.service_name
+    container_port   = var.container_port
+  }
 
-      startup_probe {
-        http_get {
-          path = "/health"
-        }
-        initial_delay_seconds = 10
-        period_seconds        = 5
-        failure_threshold     = 6
-      }
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
+}
 
-      liveness_probe {
-        http_get {
-          path = "/health"
-        }
-        period_seconds = 30
-      }
+# ── API Gateway HTTP API ──────────────────────────────────────────────────────
+# HTTP_PROXY integration forwards requests to the ALB. The api_mapping_key on
+# the custom domain strips the /MBTA (or /mbta) prefix before forwarding, so
+# Pekko sees clean paths (/api/*, /health, /) with no code changes required.
+
+resource "aws_apigatewayv2_api" "backend" {
+  name          = "${var.service_name}-api"
+  protocol_type = "HTTP"
+}
+
+resource "aws_apigatewayv2_integration" "alb" {
+  api_id             = aws_apigatewayv2_api.backend.id
+  integration_type   = "HTTP_PROXY"
+  integration_uri    = "http://${aws_lb.main.dns_name}/{proxy}"
+  integration_method = "ANY"
+}
+
+resource "aws_apigatewayv2_route" "proxy" {
+  api_id    = aws_apigatewayv2_api.backend.id
+  route_key = "ANY /{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.alb.id}"
+}
+
+# Also handle requests to the root after prefix stripping (e.g. critmind.com/MBTA)
+resource "aws_apigatewayv2_route" "root" {
+  api_id    = aws_apigatewayv2_api.backend.id
+  route_key = "ANY /"
+  target    = "integrations/${aws_apigatewayv2_integration.alb.id}"
+}
+
+resource "aws_apigatewayv2_stage" "default" {
+  api_id      = aws_apigatewayv2_api.backend.id
+  name        = "$default"
+  auto_deploy = true
+}
+
+# ── ACM Certificate (regional — same region as API Gateway) ───────────────────
+
+resource "aws_acm_certificate" "main" {
+  domain_name       = var.domain
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_route53_record" "cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.main.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
     }
   }
+
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = each.value.name
+  type    = each.value.type
+  ttl     = 60
+  records = [each.value.record]
 }
 
-resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
-  name     = google_cloud_run_v2_service.backend.name
-  location = var.region
-  role     = "roles/run.invoker"
-  member   = "allUsers"
+resource "aws_acm_certificate_validation" "main" {
+  certificate_arn         = aws_acm_certificate.main.arn
+  validation_record_fqdns = [for r in aws_route53_record.cert_validation : r.fqdn]
 }
 
-# ── Frontend GCS bucket ───────────────────────────────────────────────────────
+# ── API Gateway custom domain ─────────────────────────────────────────────────
+# Regional endpoint: TLS terminates here. The domain_name_configuration uses
+# the validated ACM cert. Route 53 aliases to the regional domain name.
 
-resource "google_storage_bucket" "frontend" {
-  depends_on                  = [google_project_service.apis]
-  name                        = "${var.project_id}-frontend"
-  location                    = var.region
-  uniform_bucket_level_access = true
+resource "aws_apigatewayv2_domain_name" "main" {
+  domain_name = var.domain
 
-  website {
-    main_page_suffix = "index.html"
-    not_found_page   = "index.html"
+  domain_name_configuration {
+    certificate_arn = aws_acm_certificate_validation.main.certificate_arn
+    endpoint_type   = "REGIONAL"
+    security_policy = "TLS_1_2"
   }
 }
 
-resource "google_storage_bucket_iam_member" "public_read" {
-  bucket = google_storage_bucket.frontend.name
-  role   = "roles/storage.objectViewer"
-  member = "allUsers"
+# /MBTA prefix → this API (prefix is stripped before forwarding to ALB)
+resource "aws_apigatewayv2_api_mapping" "mbta_upper" {
+  api_id          = aws_apigatewayv2_api.backend.id
+  domain_name     = aws_apigatewayv2_domain_name.main.id
+  stage           = aws_apigatewayv2_stage.default.id
+  api_mapping_key = "MBTA"
 }
 
-# ── Load balancer ─────────────────────────────────────────────────────────────
-
-resource "google_compute_global_address" "lb_ip" {
-  depends_on = [google_project_service.apis]
-  name       = "mbta-lb-ip"
+# /mbta prefix → same API (case-insensitive alias)
+resource "aws_apigatewayv2_api_mapping" "mbta_lower" {
+  api_id          = aws_apigatewayv2_api.backend.id
+  domain_name     = aws_apigatewayv2_domain_name.main.id
+  stage           = aws_apigatewayv2_stage.default.id
+  api_mapping_key = "mbta"
 }
 
-resource "google_compute_region_network_endpoint_group" "cr_neg" {
-  depends_on            = [google_cloud_run_v2_service.backend]
-  name                  = "${var.service_name}-neg"
-  region                = var.region
-  network_endpoint_type = "SERVERLESS"
+# ── Route 53 ──────────────────────────────────────────────────────────────────
 
-  cloud_run {
-    service = google_cloud_run_v2_service.backend.name
+resource "aws_route53_record" "main" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = var.domain
+  type    = "A"
+
+  alias {
+    name                   = aws_apigatewayv2_domain_name.main.domain_name_configuration[0].target_domain_name
+    zone_id                = aws_apigatewayv2_domain_name.main.domain_name_configuration[0].hosted_zone_id
+    evaluate_target_health = false
   }
-}
-
-resource "google_compute_backend_service" "api" {
-  depends_on            = [google_project_service.apis]
-  name                  = "${var.service_name}-backend"
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-
-  backend {
-    group = google_compute_region_network_endpoint_group.cr_neg.id
-  }
-}
-
-resource "google_compute_backend_bucket" "frontend" {
-  name        = "frontend-backend"
-  bucket_name = google_storage_bucket.frontend.name
-}
-
-resource "google_compute_url_map" "main" {
-  name            = "mbta-url-map"
-  default_service = google_compute_backend_bucket.frontend.id
-
-  host_rule {
-    hosts        = [var.domain]
-    path_matcher = "mbta-paths"
-  }
-
-  path_matcher {
-    name            = "mbta-paths"
-    default_service = google_compute_backend_bucket.frontend.id
-
-    path_rule {
-      paths   = ["/api", "/api/*", "/health"]
-      service = google_compute_backend_service.api.id
-    }
-  }
-}
-
-resource "google_compute_managed_ssl_certificate" "cert" {
-  depends_on = [google_project_service.apis]
-  name       = "mbta-cert"
-
-  managed {
-    domains = [var.domain]
-  }
-}
-
-resource "google_compute_target_https_proxy" "https" {
-  name             = "mbta-https-proxy"
-  url_map          = google_compute_url_map.main.id
-  ssl_certificates = [google_compute_managed_ssl_certificate.cert.id]
-}
-
-resource "google_compute_global_forwarding_rule" "https" {
-  name                  = "mbta-https-rule"
-  ip_address            = google_compute_global_address.lb_ip.address
-  port_range            = "443"
-  target                = google_compute_target_https_proxy.https.id
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-}
-
-# HTTP → HTTPS redirect
-
-resource "google_compute_url_map" "http_redirect" {
-  name = "mbta-http-redirect"
-
-  default_url_redirect {
-    https_redirect         = true
-    redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
-    strip_query            = false
-  }
-}
-
-resource "google_compute_target_http_proxy" "http" {
-  name    = "mbta-http-proxy"
-  url_map = google_compute_url_map.http_redirect.id
-}
-
-resource "google_compute_global_forwarding_rule" "http" {
-  name                  = "mbta-http-rule"
-  ip_address            = google_compute_global_address.lb_ip.address
-  port_range            = "80"
-  target                = google_compute_target_http_proxy.http.id
-  load_balancing_scheme = "EXTERNAL_MANAGED"
 }

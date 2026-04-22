@@ -105,6 +105,7 @@ docker {
   dockerfile file('Dockerfile')
   files 'docker-run.sh'
   copySpec.from("$buildDir/libs") { into 'libs' }
+  copySpec.from("frontend/dist/mbta-tracker-frontend/browser") { into 'static' }
   pull true
 }
 
