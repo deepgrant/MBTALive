@@ -111,3 +111,5 @@ docker {
 tasks.named('dockerPrepare') {
   dependsOn copyRuntimeDeps
 }
+
+apply from: "$projectDir/deploy.gradle"

@@ -1,0 +1,13 @@
+{
+  "region":          "us-east1",
+  "service-name":    "mbta-tracker",
+  "repo-name":       "mbta",
+  "image-name":      "mbtalive",
+  "domain":          "mbta.example.com",
+  "min-scale":       0,
+  "max-scale":       10,
+  "cpu":             "1",
+  "memory":          "512Mi",
+  "concurrency":     80,
+  "timeout-seconds": 60
+}

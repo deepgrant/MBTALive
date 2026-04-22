@@ -1,0 +1,312 @@
+// ── Project ID (only external property) ──────────────────────────────────────
+
+def localProps = new Properties()
+def localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) localProps.load(localPropsFile.newReader())
+
+def projectId = project.findProperty('gcp.projectId')?.toString()
+             ?: localProps.getProperty('gcp.projectId')
+
+def requireProjectId = {
+  if (!projectId) throw new GradleException(
+    "gcp.projectId required — set in local.properties or pass -Pgcp.projectId=YOUR_ID")
+  projectId
+}
+
+// ── OpenTofu toolchain ────────────────────────────────────────────────────────
+
+def tofuVersion  = project.findProperty('tofu.version') ?: '1.8.8'
+def tofuOs       = System.getProperty('os.name').toLowerCase().contains('mac') ? 'darwin' : 'linux'
+def tofuArch     = System.getProperty('os.arch').toLowerCase()
+                     .with { it.contains('aarch64') || it.contains('arm64') ? 'arm64' : 'amd64' }
+def tofuFileName = "tofu_${tofuVersion}_${tofuOs}_${tofuArch}.zip"
+def tofuToolsDir = file("${buildDir}/tools")
+def tofuZip      = file("${tofuToolsDir}/${tofuFileName}")
+def tofuBin      = file("${tofuToolsDir}/tofu")
+
+task downloadTofu(type: Exec) {
+  group       = 'deploy-setup'
+  description = "Download OpenTofu ${tofuVersion} for ${tofuOs}/${tofuArch}"
+  onlyIf      { !tofuZip.exists() }
+  doFirst     { tofuToolsDir.mkdirs() }
+  commandLine 'curl', '-sSL', '-o', tofuZip.absolutePath,
+    "https://github.com/opentofu/opentofu/releases/download/v${tofuVersion}/${tofuFileName}"
+}
+
+task extractTofu(type: Exec) {
+  group       = 'deploy-setup'
+  description = 'Extract OpenTofu binary into build/tools/'
+  dependsOn   downloadTofu
+  onlyIf      { !tofuBin.exists() }
+  commandLine 'unzip', '-o', tofuZip.absolutePath, '-d', tofuToolsDir.absolutePath
+  doLast      { tofuBin.setExecutable(true) }
+}
+
+// ── In-memory config helper ───────────────────────────────────────────────────
+// Fetches JSON from Secret Manager into a ByteArrayOutputStream (never written
+// to disk), parses it with Groovy's built-in JsonSlurper, and returns a Map of
+// OpenTofu variable names → String values.
+
+def fetchVars = {
+  def buf = new ByteArrayOutputStream()
+  exec {
+    commandLine 'gcloud', 'secrets', 'versions', 'access', 'latest',
+      '--secret=mbta-deploy-config',
+      "--project=${requireProjectId()}"
+    standardOutput = buf
+    errorOutput    = System.err
+  }
+  def cfg      = new groovy.json.JsonSlurper().parseText(buf.toString())
+  def pid      = requireProjectId()
+  def region   = cfg['region']
+  def repoName = cfg['repo-name']
+  def imgName  = cfg['image-name']
+  def gitSha   = ['git', 'rev-parse', '--short', 'HEAD'].execute().text.trim()
+  def imageUrl = "${region}-docker.pkg.dev/${pid}/${repoName}/${imgName}:${gitSha}"
+  [
+    project_id:      pid,
+    region:          region,
+    service_name:    cfg['service-name'],
+    repo_name:       repoName,
+    image_url:       imageUrl,
+    domain:          cfg['domain'],
+    min_scale:       cfg['min-scale'],
+    max_scale:       cfg['max-scale'],
+    cpu:             cfg['cpu'],
+    memory:          cfg['memory'],
+    concurrency:     cfg['concurrency'],
+    timeout_seconds: cfg['timeout-seconds'],
+  ]
+}
+
+// Converts vars map to a flat list for tofu: ['-var', 'k=v', '-var', 'k=v', ...]
+def toVarArgs = { Map vars -> vars.collectMany { k, v -> ['-var', "${k}=${v}"] as List } }
+
+// ── Image build and push ──────────────────────────────────────────────────────
+
+task tagImage(type: Exec) {
+  group       = 'deploy'
+  description = 'Tag local image for Artifact Registry with git SHA'
+  dependsOn   'docker'
+  doFirst {
+    def imageUrl = fetchVars().image_url
+    commandLine 'docker', 'tag', 'mbtalive:2.0', imageUrl
+    println "==> Tagged mbtalive:2.0 → ${imageUrl}"
+  }
+}
+
+task pushImage(type: Exec) {
+  group       = 'deploy'
+  description = 'Push SHA-tagged image to Artifact Registry'
+  dependsOn   tagImage
+  doFirst {
+    commandLine 'docker', 'push', fetchVars().image_url
+  }
+}
+
+task pushLatest(type: Exec) {
+  group       = 'deploy'
+  description = 'Also push :latest alias to Artifact Registry'
+  dependsOn   pushImage
+  doFirst {
+    def imageUrl  = fetchVars().image_url
+    def latestUrl = imageUrl.replaceAll(/:[^:]+$/, ':latest')
+    commandLine 'bash', '-c',
+      "docker tag ${imageUrl} ${latestUrl} && docker push ${latestUrl}"
+  }
+}
+
+task buildAndPush {
+  group       = 'deploy'
+  description = 'Build image, tag with git SHA and :latest, push to Artifact Registry'
+  dependsOn   pushLatest
+}
+
+// ── Bootstrap tasks (one-time) ────────────────────────────────────────────────
+
+task enableApis(type: Exec) {
+  group       = 'deploy-setup'
+  description = 'Enable required GCP APIs'
+  doFirst {
+    def pid = requireProjectId()
+    commandLine 'gcloud', 'services', 'enable',
+      'run.googleapis.com',
+      'artifactregistry.googleapis.com',
+      'compute.googleapis.com',
+      'certificatemanager.googleapis.com',
+      'storage.googleapis.com',
+      'secretmanager.googleapis.com',
+      "--project=${pid}"
+  }
+}
+
+task createStateBucket(type: Exec) {
+  group       = 'deploy-setup'
+  description = 'Create GCS bucket for OpenTofu remote state (idempotent)'
+  doFirst {
+    def pid = requireProjectId()
+    commandLine 'bash', '-c', """
+      gsutil ls gs://${pid}-tofu-state &>/dev/null || \
+      gsutil mb -p ${pid} gs://${pid}-tofu-state
+    """.stripIndent()
+  }
+}
+
+task uploadDeployConfig(type: Exec) {
+  group       = 'deploy-setup'
+  description = 'Push deploy.conf to Secret Manager as mbta-deploy-config (create or add new version)'
+  doFirst {
+    def pid      = requireProjectId()
+    def confPath = rootProject.file('deploy.json').absolutePath
+    commandLine 'bash', '-c', """
+      if gcloud secrets describe mbta-deploy-config --project=${pid} &>/dev/null; then
+        gcloud secrets versions add mbta-deploy-config \
+          --data-file=${confPath} \
+          --project=${pid}
+      else
+        gcloud secrets create mbta-deploy-config \
+          --data-file=${confPath} \
+          --project=${pid}
+      fi
+    """.stripIndent()
+  }
+}
+
+task configureDockerAuth(type: Exec) {
+  group       = 'deploy-setup'
+  description = 'Configure Docker credential helper for Artifact Registry'
+  doFirst {
+    def region = fetchVars().region
+    commandLine 'gcloud', 'auth', 'configure-docker', "${region}-docker.pkg.dev", '--quiet'
+  }
+}
+
+task seedApiKey(type: Exec) {
+  group       = 'deploy-setup'
+  description = 'Seed MBTA_API_KEY into Secret Manager (skips if already exists). Set MBTA_API_KEY env var.'
+  doFirst {
+    def pid = requireProjectId()
+    commandLine 'bash', '-c', """
+      if gcloud secrets describe mbta-api-key --project=${pid} &>/dev/null; then
+        echo "Secret mbta-api-key already exists — skipping."
+      else
+        if [ -z "\${MBTA_API_KEY:-}" ]; then
+          echo "ERROR: export MBTA_API_KEY=<value> before running seedApiKey" >&2; exit 1
+        fi
+        echo -n "\$MBTA_API_KEY" | gcloud secrets create mbta-api-key \
+          --data-file=- --project=${pid}
+      fi
+    """.stripIndent()
+  }
+}
+
+// ── OpenTofu init / plan / apply / destroy ────────────────────────────────────
+
+task tofuInit(type: Exec) {
+  group       = 'deploy'
+  description = 'Initialize OpenTofu with GCS remote backend'
+  dependsOn   extractTofu, createStateBucket
+  workingDir  = file('infra')
+  doFirst {
+    def pid = requireProjectId()
+    commandLine tofuBin.absolutePath, 'init',
+      "-backend-config=bucket=${pid}-tofu-state",
+      '-backend-config=prefix=mbta-tracker',
+      '-reconfigure'
+  }
+}
+
+task tofuPlan(type: Exec) {
+  group       = 'deploy'
+  description = 'Show OpenTofu execution plan (stdout only, nothing written to disk)'
+  dependsOn   tofuInit
+  workingDir  = file('infra')
+  doFirst {
+    commandLine([tofuBin.absolutePath, 'plan'] + toVarArgs(fetchVars()))
+  }
+}
+
+task tofuApply(type: Exec) {
+  group       = 'deploy'
+  description = 'Apply OpenTofu plan — creates/updates all GCP infrastructure'
+  dependsOn   tofuInit
+  workingDir  = file('infra')
+  doFirst {
+    commandLine([tofuBin.absolutePath, 'apply', '-auto-approve'] + toVarArgs(fetchVars()))
+  }
+}
+
+task tofuDestroy(type: Exec) {
+  group       = 'deploy'
+  description = 'Destroy all GCP infrastructure managed by OpenTofu'
+  dependsOn   tofuInit
+  workingDir  = file('infra')
+  doFirst {
+    commandLine([tofuBin.absolutePath, 'destroy', '-auto-approve'] + toVarArgs(fetchVars()))
+  }
+}
+
+// ── Frontend ──────────────────────────────────────────────────────────────────
+
+task buildFrontend(type: Exec) {
+  group       = 'deploy'
+  description = 'Install deps and build Angular production bundle'
+  workingDir  = file('frontend')
+  commandLine 'bash', '-c', 'npm ci && npm run build'
+}
+
+task deployFrontend(type: Exec) {
+  group       = 'deploy'
+  description = 'Sync Angular production build to GCS frontend bucket'
+  dependsOn   buildFrontend
+  doFirst {
+    def pid = fetchVars().project_id
+    commandLine 'gsutil', '-m', 'rsync', '-r', '-d',
+      'frontend/dist/mbta-tracker-frontend/browser',
+      "gs://${pid}-frontend"
+  }
+}
+
+// ── Composite targets ─────────────────────────────────────────────────────────
+
+task infra {
+  group       = 'deploy'
+  description = 'Apply all GCP infrastructure via OpenTofu (no image build)'
+  dependsOn   tofuApply
+}
+
+task deploy {
+  group       = 'deploy'
+  description = 'Full deploy: build image, push, apply infrastructure, deploy frontend'
+  dependsOn   buildAndPush, tofuApply, deployFrontend
+  tofuApply.mustRunAfter buildAndPush
+  deployFrontend.mustRunAfter tofuApply
+}
+
+task teardown {
+  group       = 'deploy'
+  description = 'Destroy all GCP infrastructure via OpenTofu'
+  dependsOn   tofuDestroy
+}
+
+// ── Diagnostics ───────────────────────────────────────────────────────────────
+
+task checkCert(type: Exec) {
+  group       = 'deploy'
+  description = 'Check Google-managed TLS certificate provisioning status'
+  doFirst {
+    def pid = requireProjectId()
+    commandLine 'gcloud', 'compute', 'ssl-certificates', 'describe', 'mbta-cert',
+      '--global',
+      "--project=${pid}",
+      '--format=get(managed.status,managed.domainStatus)'
+  }
+}
+
+task tofuOutput(type: Exec) {
+  group       = 'deploy'
+  description = 'Show OpenTofu outputs (LB IP, Cloud Run URL, etc.)'
+  dependsOn   tofuInit
+  workingDir  = file('infra')
+  doFirst     { commandLine tofuBin.absolutePath, 'output' }
+}
