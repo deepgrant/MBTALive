@@ -7,6 +7,6 @@
   "cpu":            "256",
   "memory":         "512",
   "min-tasks":      1,
-  "max-tasks":      10,
+  "max-tasks":      2,
   "container-port": 8080
 }

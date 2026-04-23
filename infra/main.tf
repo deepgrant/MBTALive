@@ -28,10 +28,10 @@ resource "aws_ecr_repository" "app" {
 }
 
 # ── Secrets Manager ────────────────────────────────────────────────────────────
-# Manages the secret resource and IAM only. The secret value (MBTA_API_KEY) is
-# seeded separately by the Gradle seedApiKey task and never enters tofu state.
+# The secret is created once by the Gradle seedApiKey task and referenced here
+# as a data source — its value never enters tofu state.
 
-resource "aws_secretsmanager_secret" "mbta_api_key" {
+data "aws_secretsmanager_secret" "mbta_api_key" {
   name = "mbta-api-key"
 }
 
@@ -65,7 +65,7 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["secretsmanager:GetSecretValue"]
-      Resource = [aws_secretsmanager_secret.mbta_api_key.arn]
+      Resource = [data.aws_secretsmanager_secret.mbta_api_key.arn]
     }]
   })
 }
@@ -195,7 +195,7 @@ resource "aws_ecs_task_definition" "app" {
 
     secrets = [{
       name      = "MBTA_API_KEY"
-      valueFrom = aws_secretsmanager_secret.mbta_api_key.arn
+      valueFrom = data.aws_secretsmanager_secret.mbta_api_key.arn
     }]
 
     logConfiguration = {
@@ -254,20 +254,21 @@ resource "aws_apigatewayv2_api" "backend" {
 resource "aws_apigatewayv2_integration" "alb" {
   api_id             = aws_apigatewayv2_api.backend.id
   integration_type   = "HTTP_PROXY"
-  integration_uri    = "http://${aws_lb.main.dns_name}/{proxy}"
+  integration_uri    = "http://${aws_lb.main.dns_name}/"
   integration_method = "ANY"
+
+  # Forward the full request path to the ALB. $default has no path variables
+  # so we can't use /{proxy} in the URI — overwrite:path does the same thing.
+  request_parameters = {
+    "overwrite:path" = "$request.path"
+  }
 }
 
-resource "aws_apigatewayv2_route" "proxy" {
+# $default catches every path including bare / (after the /MBTA prefix is
+# stripped by the API Gateway custom domain mapping).
+resource "aws_apigatewayv2_route" "default" {
   api_id    = aws_apigatewayv2_api.backend.id
-  route_key = "ANY /{proxy+}"
-  target    = "integrations/${aws_apigatewayv2_integration.alb.id}"
-}
-
-# Also handle requests to the root after prefix stripping (e.g. critmind.com/MBTA)
-resource "aws_apigatewayv2_route" "root" {
-  api_id    = aws_apigatewayv2_api.backend.id
-  route_key = "ANY /"
+  route_key = "$default"
   target    = "integrations/${aws_apigatewayv2_integration.alb.id}"
 }
 

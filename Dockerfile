@@ -1,4 +1,5 @@
-FROM eclipse-temurin:17-jre-jammy
+# check=skip=FromPlatformFlagConstDisallowed
+FROM --platform=linux/amd64 eclipse-temurin:17-jre-jammy
 WORKDIR /app
 COPY libs /app/lib/
 COPY static /app/static/
