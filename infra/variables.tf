@@ -5,7 +5,7 @@ variable "aws_region" {
 
 variable "aws_profile" {
   type    = string
-  default = "grant"
+  default = "default"
 }
 
 variable "aws_account_id" {

@@ -12,15 +12,15 @@ Ensure the following are installed and configured locally:
 | Node.js 20+ / npm | Angular frontend build |
 | `unzip` | OpenTofu extraction (Gradle downloads tofu automatically) |
 
-Configure the `grant` AWS profile:
+Configure your AWS profile (substitute your preferred profile name):
 ```bash
-aws configure --profile grant
+aws configure --profile <your-profile>
 # Enter: Access Key ID, Secret Access Key, default region: us-east-1, output: json
 ```
 
 Verify access:
 ```bash
-aws sts get-caller-identity --profile grant
+aws sts get-caller-identity --profile <your-profile>
 ```
 
 ---
@@ -31,8 +31,8 @@ aws sts get-caller-identity --profile grant
 
 ```bash
 cat >> local.properties <<'EOF'
-aws.accountId=533972452432
-aws.profile=grant
+aws.accountId=<your-account-id>
+aws.profile=<your-profile>
 EOF
 ```
 
@@ -44,7 +44,7 @@ EOF
 ./gradlew createStateBucket
 ```
 
-Creates S3 bucket `533972452432-tofu-state` with versioning enabled for OpenTofu state storage. Idempotent — safe to re-run.
+Creates S3 bucket `<your-account-id>-tofu-state` with versioning enabled for OpenTofu state storage. Idempotent — safe to re-run.
 
 ### 3. Upload deploy config to Secrets Manager
 
@@ -74,8 +74,8 @@ This runs `tofu apply` and creates (in order):
 - ECR repository for Docker images
 - ECS cluster, task definition, and Fargate service
 - Application Load Balancer (HTTP, internal to API Gateway)
-- API Gateway HTTP API with custom domain `critmind.com`
-- ACM TLS certificate for `critmind.com` (DNS-validated automatically via Route 53)
+- API Gateway HTTP API with custom domain
+- ACM TLS certificate (DNS-validated automatically via Route 53)
 - Route 53 A record → API Gateway regional endpoint
 
 > **Note:** ACM certificate validation takes 1–5 minutes. OpenTofu waits for it automatically before completing.
@@ -116,16 +116,16 @@ This runs the full pipeline in the correct order:
 ./gradlew ecsStatus
 
 # Smoke test the health endpoint
-curl https://critmind.com/MBTA/health
+curl https://<your-domain>/MBTA/health
 
 # Test an API endpoint
-curl https://critmind.com/MBTA/api/routes
+curl https://<your-domain>/MBTA/api/routes
 ```
 
 The app is accessible at:
-- **`https://critmind.com/MBTA/`** — Angular frontend (served by Pekko from `/app/static/`)
-- **`https://critmind.com/mbta/`** — lowercase alias (same backend)
-- **`https://critmind.com/MBTA/api/*`** — backend API routes
+- **`https://<your-domain>/MBTA/`** — Angular frontend (served by Pekko from `/app/static/`)
+- **`https://<your-domain>/mbta/`** — lowercase alias (same backend)
+- **`https://<your-domain>/MBTA/api/*`** — backend API routes
 
 > The `/MBTA` prefix is stripped by the API Gateway custom domain mapping before requests reach the container, so Pekko sees clean paths (`/api/routes`, `/health`, `/`).
 
@@ -198,9 +198,9 @@ cd frontend && npm start
 
 > **Warning:** This destroys the ECS service, ALB, API Gateway, ECR repository (including all images), ACM cert, and Route 53 records. The Secrets Manager secrets and S3 state bucket are **not** destroyed (intentional — protects state and credentials from accidental loss). Delete them manually if needed:
 > ```bash
-> aws secretsmanager delete-secret --secret-id mbta-api-key --profile grant --region us-east-1
-> aws secretsmanager delete-secret --secret-id mbta-deploy-config --profile grant --region us-east-1
-> aws s3 rb s3://533972452432-tofu-state --force --profile grant
+> aws secretsmanager delete-secret --secret-id mbta-api-key --profile <your-profile> --region us-east-1
+> aws secretsmanager delete-secret --secret-id mbta-deploy-config --profile <your-profile> --region us-east-1
+> aws s3 rb s3://<your-account-id>-tofu-state --force --profile <your-profile>
 > ```
 
 ---

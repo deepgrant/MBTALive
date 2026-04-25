@@ -8,7 +8,7 @@ def awsAccountId = project.findProperty('aws.accountId')?.toString()
                 ?: localProps.getProperty('aws.accountId')
 def awsProfile   = project.findProperty('aws.profile')?.toString()
                 ?: localProps.getProperty('aws.profile')
-                ?: 'grant'
+                ?: 'default'
 
 def requireAccountId = {
   if (!awsAccountId) throw new GradleException(
