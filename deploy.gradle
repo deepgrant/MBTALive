@@ -142,7 +142,8 @@ task pushLatest(type: Exec) {
 task buildAndPush {
   group       = 'deploy'
   description = 'Build image, tag with git SHA and :latest, push to ECR'
-  dependsOn   pushLatest
+  dependsOn   pushLatest, configureDockerAuth
+  pushLatest.mustRunAfter configureDockerAuth
 }
 
 // ── ECR bootstrap ─────────────────────────────────────────────────────────────
