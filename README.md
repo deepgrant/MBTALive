@@ -1,139 +1,90 @@
 # MBTA Tracker
 
-A modern full-stack application for tracking MBTA commuter rail vehicles in real-time using Scala 3 backend and Angular frontend with interactive maps.
+Real-time vehicle tracking for the MBTA network. Select a route in the sidebar and watch buses, trains, and commuter rail cars move on the map. Click a vehicle to see its current stop, next arrival prediction, and how far off schedule it is.
 
-<img width="2709" height="1564" alt="Screenshot 2025-10-29 at 7 28 33 PM" src="https://github.com/user-attachments/assets/f5bf055a-b61f-4880-9773-19498e01d483" />
+**Live:** https://critmind.com/MBTA/
 
-## Features
+<img width="2945" height="1338" alt="Screenshot 2026-04-25 at 7 11 39 PM" src="https://github.com/user-attachments/assets/66f9d5f2-6fdd-406e-b6ab-8840c292fc46" />
+<img width="5890" height="2676" alt="Screenshot 2026-04-25 at 7 15 20 PM" src="https://github.com/user-attachments/assets/d8a93fac-6182-4ae6-a970-3ebc19715b32" />
 
-- **Real-time Vehicle Tracking**: Live updates of commuter rail vehicle positions
-- **Interactive Map**: Leaflet-based map with custom vehicle markers showing direction and speed
-- **Route Filtering**: Filter vehicles by specific routes
-- **Modern UI**: Material Design with MBTA branding colors
-- **RESTful API**: Scala 3 backend with Pekko HTTP
+## What it does
 
-## Technology Stack
+- Live vehicle positions on a Leaflet map, refreshed every 10 seconds
+- Route shapes and stop markers drawn when you select a route
+- Per-vehicle arrival predictions and delay status pulled from the MBTA predictions API
+- System-wide and per-route alert banners with a scrolling ticker for active disruptions
+- Persists your last selected route and map position in a cookie
 
-### Backend (Scala 3)
-- **Gradle 9.3.1** - Build tool
-- **Scala 3.3.7 LTS** - Language and stdlib
-- **Apache Pekko 1.4.0** - Actor system and streams
-- **Pekko HTTP 1.3.0** - HTTP server and client
-- **Spray JSON 1.3.6** - JSON serialization
-- **ScalaTest 3.2.19**, **scala-xml 2.4.0**, **scala-collection-compat 2.12.0**
-- **Scalafix** - Linting (OrganizeImports, RemoveUnused, DisableSyntax, RedundantSyntax, etc.)
+## Running locally
 
-### Frontend (Angular)
-- **Angular 20** - Framework and Angular Material
-- **TypeScript 5.8** - Type-safe JavaScript
-- **Leaflet 1.9** - Interactive maps
-- **RxJS 7.8** - Reactive programming
+You need JDK 17+, Node.js 20+, and npm.
 
-## Getting Started
+```bash
+# Terminal 1 — backend on http://localhost:8080
+./gradlew run
 
-### Prerequisites
-
-- **Java 21** for Scala backend (Gradle 9 requires JVM 17+)
-- **Node.js 18+** and **npm** for Angular frontend
-- **MBTA API Key** (optional, for higher rate limits)
-
-### Backend Setup
-
-1. **Set MBTA API Key** (optional):
-   ```bash
-   export MBTA_API_KEY="your_api_key_here"
-   ```
-
-2. **Run the Scala backend**:
-   ```bash
-   ./gradlew run
-   ```
-   The backend will start on `http://localhost:8080`
-
-### Frontend Setup
-
-1. **Install dependencies**:
-   ```bash
-   cd frontend
-   npm install
-   npm install -g @angular/cli@latest
-   ```
-
-2. **Start the Angular development server**:
-   ```bash
-   cd frontend
-   ng serve --proxy-config proxy.conf.json
-   ```
-   The frontend will start on `http://localhost:4200`
-
-### Access the Application
-
-- **Frontend**: http://localhost:4200
-- **Backend API**: http://localhost:8080/api
-
-### Build and Lint
-
-- **Backend**: `./gradlew build` (compile, test, check Scalafix)
-- **Lint only**: `./gradlew checkScalafixMain` (fail if fixes needed) or `./gradlew applyScalafixMain` (apply fixes)
-
-## API Endpoints
-
-- `GET /api/routes` - Get all commuter rail routes
-- `GET /api/vehicles` - Get all vehicles
-- `GET /api/vehicles/{routeId}` - Get vehicles for specific route
-
-## Features
-
-### Real-time Updates
-- Vehicle positions update every 5 seconds
-- Route information refreshes every 30 seconds
-- Automatic map bounds adjustment
-
-### Interactive Map
-- **Vehicle Markers**: Custom markers showing direction and speed
-- **Route Filtering**: Click routes in sidebar to filter vehicles
-- **Vehicle Details**: Click markers for detailed information
-- **Responsive Design**: Works on desktop and mobile
-
-### MBTA Branding
-- **Colors**: Navy blue (#003DA5), Orange (#ED8B00), Purple (#80276C)
-- **Material Design**: Modern, clean interface
-- **Route Colors**: Authentic MBTA route color coding
-
-## Development
-
-### Backend Development
-- **Gradle 9.3.1** for build management (`./gradlew build`, `./gradlew run`)
-- **Scala 3.3.7 LTS**, **Pekko 1.4.0**, **Pekko HTTP 1.3.0**
-- **Scalafix** for linting: `./gradlew checkScalafixMain` or `./gradlew applyScalafixMain`
-- In-memory caching for performance
-
-### Frontend Development
-- **Angular 20**, **TypeScript 5.8**, **Leaflet 1.9**
-- SCSS for styling with MBTA theme
-
-## Architecture
-
-```
-┌─────────────────┐    HTTP/REST   ┌─────────────────┐
-│   Angular UI    │◄──────────────►│    Scala API    │
-│   (Port 4200)   │                │   (Port 8080)   │
-└─────────────────┘                └─────────────────┘
-         │                                  │
-         │                                  │
-         ▼                                  ▼
-┌─────────────────┐                ┌─────────────────┐
-│   Leaflet Map   │                │    MBTA API     │
-│   (OpenStreet)  │                │   (External)    │
-└─────────────────┘                └─────────────────┘
+# Terminal 2 — frontend dev server on http://localhost:4200
+cd frontend && npm start
 ```
 
-## Configuration
+The dev proxy (`frontend/proxy.conf.json`) forwards `/api/**` to the backend, so no CORS config is needed locally.
 
-### Backend Configuration
-- `source/resources/MBTA.conf` - MBTA API settings
-- `source/resources/application.conf` - Pekko HTTP settings
+Grab a free API key from https://api-v3.mbta.com if you want the higher rate limit (1000 req/min vs 10). Set it before starting the backend:
 
-### Frontend Configuration
-- `frontend/proxy.conf.json` - API proxy settings
-- `frontend/src/styles.scss` - MBTA theme colors
+```bash
+export MBTA_API_KEY=your_key_here
+```
+
+## Stack
+
+The backend is a Scala 3 / Apache Pekko HTTP service that proxies the MBTA v3 REST API, enriches vehicle data with stop names and arrival predictions, and serves the compiled Angular app as static files. There's no separate frontend server in production — Pekko serves everything.
+
+| Layer | Tech |
+|---|---|
+| Backend | Scala 3.3 LTS, Pekko HTTP 1.3, Spray JSON |
+| Frontend | Angular 20, Leaflet 1.9, Angular Material, RxJS |
+| Build | Gradle 9, Angular CLI |
+| Infra | AWS ECS Fargate, ECR, API Gateway, ACM, Route 53 |
+
+## Project layout
+
+```
+source/scala/       Scala backend
+  MBTAService       HTTP routes + static file serving
+  MBTAAccess        Throttled HTTPS client to api-v3.mbta.com
+  RequestFlow       Vehicle enrichment pipeline (stops, predictions, alerts)
+  MBTAModels        Domain types
+
+frontend/src/app/
+  services/         VehicleService (state), ApiService (HTTP), MapService (Leaflet)
+  components/       Map, Routes sidebar, Vehicle list, Alert banner/ticker
+```
+
+## Backend API
+
+```
+GET /health
+GET /api/routes?type=<0-4>
+GET /api/route/:id/vehicles?sortBy=vehicleId&sortOrder=asc
+GET /api/route/:id/shapes
+GET /api/route/:id/stops
+GET /api/route/:id/alerts
+GET /api/alerts
+```
+
+## Linting
+
+The build enforces Scalafix rules (OrganizeImports, RemoveUnused, DisableSyntax). The `build` task will fail if there are violations.
+
+```bash
+./gradlew checkScalafixMain   # check
+./gradlew applyScalafixMain   # fix
+```
+
+## Deployment
+
+See [documents/deployment-guide.md](documents/deployment-guide.md) for the full AWS deployment walkthrough. The short version for updating a running deployment:
+
+```bash
+./gradlew --no-daemon buildAndPush tofuApply
+```

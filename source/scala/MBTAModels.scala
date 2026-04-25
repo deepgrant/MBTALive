@@ -48,7 +48,7 @@ object ModelAPIResponse {
 
   case class RouteInfo(id: String, long_name: String, short_name: String, color: String, text_color: String, route_type: Int) extends ModelAPIResponse
   case class StopInfo(id: String, name: String, latitude: Double, longitude: Double) extends ModelAPIResponse
-  case class ShapeInfo(id: String, polyline: String) extends ModelAPIResponse
+  case class ShapeInfo(id: String, polyline: String, priority: Int, directionId: Int) extends ModelAPIResponse
 
   case class AlertInfo(
     id          : String,

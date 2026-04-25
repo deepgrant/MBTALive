@@ -13,3 +13,11 @@ build/
 frontend/dist/
 frontend/.angular/
 frontend/node_modules/
+
+# Deployment
+local.properties
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+infra/redirect_lambda.zip

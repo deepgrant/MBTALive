@@ -406,7 +406,12 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
         access.parseMbtaResponse(entity).map { response =>
           response.getObjectList("data").asScala.toVector.map { shape =>
             val s = shape.toConfig
-            ShapeInfo(id = s.getString("id"), polyline = s.getString("attributes.polyline"))
+            ShapeInfo(
+              id          = s.getString("id"),
+              polyline    = s.getString("attributes.polyline"),
+              priority    = Try(s.getInt("attributes.priority")).getOrElse(0),
+              directionId = Try(s.getInt("attributes.direction_id")).getOrElse(0),
+            )
           }
         }
       case HttpResponse(code, _, entity, _) =>

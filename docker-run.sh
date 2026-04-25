@@ -1,3 +1,4 @@
 #!/bin/bash
-CLASSPATH=$(find /root/ -name '*.jar' -printf '%p:' | sed 's/:$//')
-java -cp $CLASSPATH mbta.actor.MBTAMain
+set -e
+CLASSPATH=$(find /app/lib/ -name '*.jar' | tr '\n' ':' | sed 's/:$//')
+exec java -cp "$CLASSPATH" mbta.actor.MBTAMain

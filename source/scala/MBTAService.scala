@@ -26,15 +26,16 @@ class MBTAService extends Actor with ActorLogging {
   implicit val logger:  LoggingAdapter = log
   implicit val timeout: Timeout        = 30.seconds
 
-  private val access = new MBTAAccess()
-  private val flow   = new RequestFlow(access)
+  private val access    = new MBTAAccess()
+  private val flow      = new RequestFlow(access)
+  private val staticDir = sys.env.getOrElse("STATIC_DIR", "/app/static")
 
   // ── JSON serialization ────────────────────────────────────────────────────
 
   object JsonProtocol extends DefaultJsonProtocol {
     implicit val routeInfoFormat:   RootJsonFormat[RouteInfo]   = jsonFormat6(RouteInfo.apply)
     implicit val stopInfoFormat:    RootJsonFormat[StopInfo]    = jsonFormat4(StopInfo.apply)
-    implicit val shapeInfoFormat:   RootJsonFormat[ShapeInfo]   = jsonFormat2(ShapeInfo.apply)
+    implicit val shapeInfoFormat:   RootJsonFormat[ShapeInfo]   = jsonFormat4(ShapeInfo.apply)
     implicit val vehicleDataFormat: RootJsonFormat[VehicleData] = new RootJsonFormat[VehicleData] {
       def write(v: VehicleData): JsValue = JsObject(
         "routeId"              -> v.routeId.toJson,
@@ -87,11 +88,13 @@ class MBTAService extends Actor with ActorLogging {
     startHttpServer()
   }
 
-  private def startHttpServer(): Unit =
-    Http().newServerAt("0.0.0.0", 8080).bind(createApiRoutes()).onComplete {
-      case Success(_)         => log.info("Server online at http://0.0.0.0:8080/")
+  private def startHttpServer(): Unit = {
+    val port = sys.env.getOrElse("PORT", "8080").toInt
+    Http().newServerAt("0.0.0.0", port).bind(createApiRoutes()).onComplete {
+      case Success(_)         => log.info("Server online at http://0.0.0.0:{}/", port)
       case Failure(exception) => log.error("Failed to bind HTTP server: {}", exception)
     }
+  }
 
   // ── HTTP routes ───────────────────────────────────────────────────────────
 
@@ -107,6 +110,9 @@ class MBTAService extends Actor with ActorLogging {
     respondWithHeaders(corsHeaders) {
       concat(
         options { complete(StatusCodes.OK) },
+        path("health") {
+          get { complete(StatusCodes.OK) }
+        },
         pathPrefix("api") {
           concat(
             path("routes") {
@@ -146,7 +152,11 @@ class MBTAService extends Actor with ActorLogging {
               }
             },
           )
-        }
+        },
+        // Serve Angular SPA static files; unknown paths fall back to index.html
+        // so the Angular router can handle client-side navigation.
+        getFromDirectory(staticDir),
+        get { getFromFile(s"$staticDir/index.html") }
       )
     }
   }

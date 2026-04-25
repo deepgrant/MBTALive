@@ -1,4 +1,5 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Inject } from '@angular/core';
+import { APP_BASE_HREF } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, interval, switchMap, startWith, map, catchError } from 'rxjs';
 import { of } from 'rxjs';
@@ -11,9 +12,17 @@ import { Alert } from '../models/alert.model';
   providedIn: 'root'
 })
 export class ApiService {
-  private baseUrl = '/api';
+  private baseUrl: string;
 
-  constructor(private http: HttpClient) { }
+  constructor(
+    private http: HttpClient,
+    @Inject(APP_BASE_HREF) baseHref: string
+  ) {
+    // Strip trailing slash from base href, then append /api.
+    // In dev: baseHref='/' → baseUrl='/api'
+    // In prod: baseHref='/MBTA/' → baseUrl='/MBTA/api'
+    this.baseUrl = baseHref.replace(/\/$/, '') + '/api';
+  }
 
   getRoutes(typeFilter?: string): Observable<Route[]> {
     const url = typeFilter ? `${this.baseUrl}/routes?type=${typeFilter}` : `${this.baseUrl}/routes`;
@@ -108,7 +117,9 @@ export class ApiService {
         map((shapes: ShapeResponse[]) =>
           shapes.map(shape => ({
             id: shape.id,
-            polyline: shape.polyline
+            polyline: shape.polyline,
+            priority: shape.priority ?? 0,
+            directionId: shape.directionId ?? 0,
           }))
         )
       );

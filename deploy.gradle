@@ -1,0 +1,338 @@
+// ── AWS identity (local.properties or -P flags) ───────────────────────────────
+
+def localProps = new Properties()
+def localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) localProps.load(localPropsFile.newReader())
+
+def awsAccountId = project.findProperty('aws.accountId')?.toString()
+                ?: localProps.getProperty('aws.accountId')
+def awsProfile   = project.findProperty('aws.profile')?.toString()
+                ?: localProps.getProperty('aws.profile')
+                ?: 'default'
+
+def requireAccountId = {
+  if (!awsAccountId) throw new GradleException(
+    "aws.accountId required — set in local.properties or pass -Paws.accountId=123456789012")
+  awsAccountId
+}
+
+// ── OpenTofu toolchain ────────────────────────────────────────────────────────
+
+def tofuVersion  = project.findProperty('tofu.version') ?: '1.8.8'
+def tofuOs       = System.getProperty('os.name').toLowerCase().contains('mac') ? 'darwin' : 'linux'
+def tofuArch     = System.getProperty('os.arch').toLowerCase()
+                     .with { it.contains('aarch64') || it.contains('arm64') ? 'arm64' : 'amd64' }
+def tofuFileName = "tofu_${tofuVersion}_${tofuOs}_${tofuArch}.zip"
+def tofuToolsDir = file("${buildDir}/tools")
+def tofuZip      = file("${tofuToolsDir}/${tofuFileName}")
+def tofuBin      = file("${tofuToolsDir}/tofu")
+
+task downloadTofu(type: Exec) {
+  group       = 'deploy-setup'
+  description = "Download OpenTofu ${tofuVersion} for ${tofuOs}/${tofuArch}"
+  onlyIf      { !tofuZip.exists() }
+  doFirst     { tofuToolsDir.mkdirs() }
+  commandLine 'curl', '-sSL', '-o', tofuZip.absolutePath,
+    "https://github.com/opentofu/opentofu/releases/download/v${tofuVersion}/${tofuFileName}"
+}
+
+task extractTofu(type: Exec) {
+  group       = 'deploy-setup'
+  description = 'Extract OpenTofu binary into build/tools/'
+  dependsOn   downloadTofu
+  onlyIf      { !tofuBin.exists() }
+  commandLine 'unzip', '-o', tofuZip.absolutePath, '-d', tofuToolsDir.absolutePath
+  doLast      { tofuBin.setExecutable(true) }
+}
+
+// ── In-memory config helper ───────────────────────────────────────────────────
+// Fetches JSON from AWS Secrets Manager into a ByteArrayOutputStream (never
+// written to disk), parses it with Groovy's built-in JsonSlurper, and returns
+// a Map of OpenTofu variable names → String values.
+
+def fetchVars = {
+  // Project.exec {} was removed in Gradle 9 — use ProcessBuilder directly.
+  def cmd = ['aws', 'secretsmanager', 'get-secret-value',
+    '--secret-id', 'mbta-deploy-config',
+    '--query', 'SecretString',
+    '--output', 'text',
+    '--profile', awsProfile,
+    '--region', 'us-east-1']
+  def proc = new ProcessBuilder(cmd).redirectErrorStream(false).start()
+  def out  = proc.inputStream.text
+  def err  = proc.errorStream.text
+  proc.waitFor()
+  if (proc.exitValue() != 0) throw new GradleException(
+    "Failed to fetch mbta-deploy-config from Secrets Manager:\n${err}")
+  def cfg         = new groovy.json.JsonSlurper().parseText(out)
+  def accountId   = requireAccountId()
+  def region      = cfg['region']
+  def repoName    = cfg['repo-name']
+  def serviceName = cfg['service-name']
+  def gitSha      = ['git', 'rev-parse', '--short', 'HEAD'].execute().text.trim()
+  // ECR repo is named <repo-name>/<service-name> — matches the aws_ecr_repository resource in main.tf
+  def imageUrl    = "${accountId}.dkr.ecr.${region}.amazonaws.com/${repoName}/${serviceName}:${gitSha}"
+  [
+    aws_region:     region,
+    aws_profile:    awsProfile,
+    aws_account_id: accountId,
+    service_name:   serviceName,
+    repo_name:      repoName,
+    image_url:      imageUrl,
+    domain:         cfg['domain'],
+    cpu:            cfg['cpu'].toString(),
+    memory:         cfg['memory'].toString(),
+    min_tasks:      cfg['min-tasks'].toString(),
+    max_tasks:      cfg['max-tasks'].toString(),
+    container_port: cfg['container-port'].toString(),
+  ]
+}
+
+// Converts vars map to a flat list for tofu: ['-var', 'k=v', '-var', 'k=v', ...]
+def toVarArgs = { Map vars -> vars.collectMany { k, v -> ['-var', "${k}=${v}"] as List } }
+
+// ── ECR authentication ────────────────────────────────────────────────────────
+
+task configureDockerAuth(type: Exec) {
+  group       = 'deploy-setup'
+  description = 'Authenticate Docker to ECR using AWS profile'
+  doFirst {
+    def vars = fetchVars()
+    commandLine 'bash', '-c',
+      "aws ecr get-login-password --profile ${awsProfile} --region ${vars.aws_region} | " +
+      "docker login --username AWS --password-stdin " +
+      "${vars.aws_account_id}.dkr.ecr.${vars.aws_region}.amazonaws.com"
+  }
+}
+
+// ── Image build and push ──────────────────────────────────────────────────────
+
+task tagImage(type: Exec) {
+  group       = 'deploy'
+  description = 'Tag local image for ECR with git SHA'
+  dependsOn   'docker'
+  doFirst {
+    def imageUrl = fetchVars().image_url
+    commandLine 'docker', 'tag', 'mbtalive:2.0', imageUrl
+    println "==> Tagged mbtalive:2.0 → ${imageUrl}"
+  }
+}
+
+task pushImage(type: Exec) {
+  group       = 'deploy'
+  description = 'Push SHA-tagged image to ECR'
+  dependsOn   tagImage
+  doFirst {
+    commandLine 'docker', 'push', fetchVars().image_url
+  }
+}
+
+task pushLatest(type: Exec) {
+  group       = 'deploy'
+  description = 'Also push :latest alias to ECR'
+  dependsOn   pushImage
+  doFirst {
+    def imageUrl  = fetchVars().image_url
+    def latestUrl = imageUrl.replaceAll(/:[^:]+$/, ':latest')
+    commandLine 'bash', '-c',
+      "docker tag ${imageUrl} ${latestUrl} && docker push ${latestUrl}"
+  }
+}
+
+task buildAndPush {
+  group       = 'deploy'
+  description = 'Build image, tag with git SHA and :latest, push to ECR'
+  dependsOn   pushLatest, configureDockerAuth
+  pushLatest.mustRunAfter configureDockerAuth
+}
+
+// ── ECR bootstrap ─────────────────────────────────────────────────────────────
+// Creates just the ECR repository via a targeted tofu apply. Must run before
+// buildAndPush on a fresh deploy (teardown destroys the repo). Safe to re-run.
+
+task createEcrRepo(type: Exec) {
+  group       = 'deploy-setup'
+  description = 'Create ECR repository via targeted tofu apply (required before first image push)'
+  dependsOn   'tofuInit'
+  workingDir  = file('infra')
+  doFirst {
+    commandLine([tofuBin.absolutePath, 'apply', '-auto-approve',
+      '-target=aws_ecr_repository.app'] + toVarArgs(fetchVars()))
+  }
+}
+
+// ── Bootstrap tasks (once per account) ───────────────────────────────────────
+
+task createStateBucket(type: Exec) {
+  group       = 'deploy-setup'
+  description = 'Create S3 bucket for OpenTofu remote state (idempotent)'
+  doFirst {
+    def accountId = requireAccountId()
+    commandLine 'bash', '-c', """
+      aws s3api head-bucket --bucket ${accountId}-tofu-state --profile ${awsProfile} 2>/dev/null || \
+      aws s3api create-bucket \
+        --bucket ${accountId}-tofu-state \
+        --region us-east-1 \
+        --profile ${awsProfile}
+      aws s3api put-bucket-versioning \
+        --bucket ${accountId}-tofu-state \
+        --versioning-configuration Status=Enabled \
+        --profile ${awsProfile}
+    """.stripIndent()
+  }
+}
+
+task uploadDeployConfig(type: Exec) {
+  group       = 'deploy-setup'
+  description = 'Push deploy.json to AWS Secrets Manager as mbta-deploy-config (create or update)'
+  doFirst {
+    def confPath = rootProject.file('deploy.json').absolutePath
+    commandLine 'bash', '-c', """
+      if aws secretsmanager describe-secret --secret-id mbta-deploy-config \
+          --profile ${awsProfile} --region us-east-1 &>/dev/null; then
+        aws secretsmanager put-secret-value \
+          --secret-id mbta-deploy-config \
+          --secret-string file://${confPath} \
+          --profile ${awsProfile} \
+          --region us-east-1
+      else
+        aws secretsmanager create-secret \
+          --name mbta-deploy-config \
+          --secret-string file://${confPath} \
+          --profile ${awsProfile} \
+          --region us-east-1
+      fi
+    """.stripIndent()
+  }
+}
+
+task seedApiKey(type: Exec) {
+  group       = 'deploy-setup'
+  description = 'Seed MBTA_API_KEY into Secrets Manager (skips if already exists). Set MBTA_API_KEY env var.'
+  doFirst {
+    commandLine 'bash', '-c', """
+      if aws secretsmanager describe-secret --secret-id mbta-api-key \
+          --profile ${awsProfile} --region us-east-1 &>/dev/null; then
+        echo "Secret mbta-api-key already exists — skipping."
+      else
+        if [ -z "\${MBTA_API_KEY:-}" ]; then
+          echo "ERROR: export MBTA_API_KEY=<value> before running seedApiKey" >&2; exit 1
+        fi
+        aws secretsmanager create-secret \
+          --name mbta-api-key \
+          --secret-string "\$MBTA_API_KEY" \
+          --profile ${awsProfile} \
+          --region us-east-1
+      fi
+    """.stripIndent()
+  }
+}
+
+// ── OpenTofu init / plan / apply / destroy ────────────────────────────────────
+
+task tofuInit(type: Exec) {
+  group       = 'deploy'
+  description = 'Initialize OpenTofu with S3 remote backend'
+  dependsOn   extractTofu, createStateBucket
+  workingDir  = file('infra')
+  doFirst {
+    def accountId = requireAccountId()
+    commandLine tofuBin.absolutePath, 'init',
+      "-backend-config=bucket=${accountId}-tofu-state",
+      '-backend-config=key=mbta-tracker/terraform.tfstate',
+      '-backend-config=region=us-east-1',
+      "-backend-config=profile=${awsProfile}",
+      '-reconfigure'
+  }
+}
+
+task tofuPlan(type: Exec) {
+  group       = 'deploy'
+  description = 'Show OpenTofu execution plan (stdout only, nothing written to disk)'
+  dependsOn   tofuInit
+  workingDir  = file('infra')
+  doFirst {
+    commandLine([tofuBin.absolutePath, 'plan'] + toVarArgs(fetchVars()))
+  }
+}
+
+task tofuApply(type: Exec) {
+  group       = 'deploy'
+  description = 'Apply OpenTofu plan — creates/updates all AWS infrastructure'
+  dependsOn   tofuInit
+  workingDir  = file('infra')
+  doFirst {
+    commandLine([tofuBin.absolutePath, 'apply', '-auto-approve'] + toVarArgs(fetchVars()))
+  }
+}
+
+task tofuDestroy(type: Exec) {
+  group       = 'deploy'
+  description = 'Destroy all AWS infrastructure managed by OpenTofu'
+  dependsOn   tofuInit
+  workingDir  = file('infra')
+  doFirst {
+    commandLine([tofuBin.absolutePath, 'destroy', '-auto-approve'] + toVarArgs(fetchVars()))
+  }
+}
+
+// ── Frontend ──────────────────────────────────────────────────────────────────
+
+task buildFrontend(type: Exec) {
+  group       = 'deploy'
+  description = 'Install deps and build Angular production bundle with /MBTA base-href'
+  workingDir  = file('frontend')
+  commandLine 'bash', '-c', 'npm ci && npm run build -- --base-href /MBTA/'
+}
+
+// Wire Angular build into Docker image preparation so `./gradlew docker` always
+// includes a fresh frontend build.
+tasks.named('dockerPrepare') {
+  dependsOn buildFrontend
+}
+
+// ── Composite targets ─────────────────────────────────────────────────────────
+
+task infra {
+  group       = 'deploy'
+  description = 'Apply all AWS infrastructure via OpenTofu (no image build)'
+  dependsOn   tofuApply
+}
+
+task deploy {
+  group       = 'deploy'
+  description = 'Full deploy: create ECR repo, build image, push, apply all infrastructure'
+  dependsOn   createEcrRepo, buildAndPush, tofuApply
+  buildAndPush.mustRunAfter createEcrRepo
+  tofuApply.mustRunAfter buildAndPush
+}
+
+task teardown {
+  group       = 'deploy'
+  description = 'Destroy all AWS infrastructure via OpenTofu'
+  dependsOn   tofuDestroy
+}
+
+// ── Diagnostics ───────────────────────────────────────────────────────────────
+
+task tofuOutput(type: Exec) {
+  group       = 'deploy'
+  description = 'Show OpenTofu outputs (CloudFront domain, ALB DNS, ECS service, etc.)'
+  dependsOn   tofuInit
+  workingDir  = file('infra')
+  doFirst     { commandLine tofuBin.absolutePath, 'output' }
+}
+
+task ecsStatus(type: Exec) {
+  group       = 'deploy'
+  description = 'Show ECS service status and running task count'
+  doFirst {
+    def vars = fetchVars()
+    commandLine 'aws', 'ecs', 'describe-services',
+      '--cluster', vars.service_name,
+      '--services', vars.service_name,
+      '--profile', awsProfile,
+      '--region', vars.aws_region,
+      '--query', 'services[0].{Status:status,Running:runningCount,Desired:desiredCount,TaskDef:taskDefinition}'
+  }
+}

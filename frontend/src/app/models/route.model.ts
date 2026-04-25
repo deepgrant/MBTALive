@@ -19,9 +19,13 @@ export interface RouteResponse {
 export interface Shape {
   id: string;
   polyline: string;
+  priority: number;
+  directionId: number;
 }
 
 export interface ShapeResponse {
   id: string;
   polyline: string;
+  priority: number;
+  directionId: number;
 }

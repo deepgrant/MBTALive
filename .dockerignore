@@ -1,0 +1,13 @@
+.gradle/
+build/classes/
+build/tmp/
+build/reports/
+build/generated/
+build/test-results/
+build/scala-3.3/
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+*.md
+.git/
+.gitignore
