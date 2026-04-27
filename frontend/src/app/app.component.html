@@ -34,7 +34,11 @@
     </mat-toolbar>
 
     <div class="content">
-      <app-map></app-map>
+      @if (isBusRoute) {
+        <app-bus-map></app-bus-map>
+      } @else {
+        <app-map></app-map>
+      }
     </div>
   </div>
 

@@ -3,6 +3,9 @@
 // Import Leaflet CSS
 @import '~leaflet/dist/leaflet.css';
 
+// Import MapLibre GL CSS
+@import 'maplibre-gl/dist/maplibre-gl.css';
+
 // Define MBTA color palette
 $mbta-blue: #003DA5;
 $mbta-orange: #ED8B00;
