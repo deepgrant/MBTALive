@@ -371,6 +371,7 @@ data "archive_file" "redirect_lambda" {
       DOMAIN = os.environ["DOMAIN"]
 
       ROBOTS_TXT = f"""User-agent: *
+      Disallow: /
       Allow: /MBTA/
       Sitemap: https://{DOMAIN}/MBTA/sitemap.xml
       """
