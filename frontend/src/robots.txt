@@ -1,0 +1,2 @@
+User-agent: *
+Sitemap: https://mbta.critmind.com/sitemap.xml

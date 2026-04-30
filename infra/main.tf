@@ -12,7 +12,7 @@ data "aws_subnets" "default" {
 }
 
 data "aws_route53_zone" "main" {
-  name = var.domain
+  name = var.zone
 }
 
 # ── ECR ────────────────────────────────────────────────────────────────────────
@@ -242,9 +242,8 @@ resource "aws_ecs_service" "app" {
 }
 
 # ── API Gateway HTTP API ──────────────────────────────────────────────────────
-# HTTP_PROXY integration forwards requests to the ALB. The api_mapping_key on
-# the custom domain strips the /MBTA (or /mbta) prefix before forwarding, so
-# Pekko sees clean paths (/api/*, /health, /) with no code changes required.
+# HTTP_PROXY integration forwards requests to the ALB unchanged. The backend
+# is at the domain root (mbta.critmind.com) so no path stripping is needed.
 
 resource "aws_apigatewayv2_api" "backend" {
   name          = "${var.service_name}-api"
@@ -256,16 +255,8 @@ resource "aws_apigatewayv2_integration" "alb" {
   integration_type   = "HTTP_PROXY"
   integration_uri    = "http://${aws_lb.main.dns_name}/"
   integration_method = "ANY"
-
-  # Forward the full request path to the ALB. $default has no path variables
-  # so we can't use /{proxy} in the URI — overwrite:path does the same thing.
-  request_parameters = {
-    "overwrite:path" = "$request.path"
-  }
 }
 
-# $default catches every path including bare / (after the /MBTA prefix is
-# stripped by the API Gateway custom domain mapping).
 resource "aws_apigatewayv2_route" "default" {
   api_id    = aws_apigatewayv2_api.backend.id
   route_key = "$default"
@@ -324,20 +315,12 @@ resource "aws_apigatewayv2_domain_name" "main" {
   }
 }
 
-# /MBTA prefix → this API (prefix is stripped before forwarding to ALB)
-resource "aws_apigatewayv2_api_mapping" "mbta_upper" {
+# Backend API at the domain root
+resource "aws_apigatewayv2_api_mapping" "root" {
   api_id          = aws_apigatewayv2_api.backend.id
   domain_name     = aws_apigatewayv2_domain_name.main.id
   stage           = aws_apigatewayv2_stage.default.id
-  api_mapping_key = "MBTA"
-}
-
-# /mbta prefix → same API (case-insensitive alias)
-resource "aws_apigatewayv2_api_mapping" "mbta_lower" {
-  api_id          = aws_apigatewayv2_api.backend.id
-  domain_name     = aws_apigatewayv2_domain_name.main.id
-  stage           = aws_apigatewayv2_stage.default.id
-  api_mapping_key = "mbta"
+  api_mapping_key = ""
 }
 
 # ── Route 53 ──────────────────────────────────────────────────────────────────
@@ -354,140 +337,3 @@ resource "aws_route53_record" "main" {
   }
 }
 
-# ── Redirect Lambda ───────────────────────────────────────────────────────────
-# Handles bare domain requests not matched by the /MBTA or /mbta path mappings:
-#   GET /robots.txt  → valid robots.txt pointing crawlers at /MBTA/
-#   GET /            → 301 redirect to /MBTA/
-#   GET /<anything>  → 404 sarcastic page
-
-data "archive_file" "redirect_lambda" {
-  type        = "zip"
-  output_path = "${path.module}/redirect_lambda.zip"
-  source {
-    filename = "redirect.py"
-    content  = <<-PYTHON
-      import os
-
-      DOMAIN = os.environ["DOMAIN"]
-
-      ROBOTS_TXT = f"""User-agent: *
-      Disallow: /
-      Allow: /MBTA/
-      Sitemap: https://{DOMAIN}/MBTA/sitemap.xml
-      """
-
-      SARCASTIC = """<!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="utf-8">
-        <title>These aren't the droids you're looking for</title>
-        <style>
-          body {{ font-family: sans-serif; text-align: center; padding: 80px;
-                 background: #0d0d0d; color: #FFD700; }}
-          a    {{ color: #ED8B00; }}
-        </style>
-      </head>
-      <body>
-        <h1>&#x1F916; These aren't the droids you're looking for.</h1>
-        <p>Move along. <a href="/MBTA/">Move along.</a></p>
-        <p><small>HTTP 404 &mdash; page not found in this galaxy or any other.</small></p>
-      </body>
-      </html>"""
-
-      def handler(event, context):
-          path = event.get("rawPath", "/")
-          if path == "/robots.txt":
-              return {
-                  "statusCode": 200,
-                  "headers": {"Content-Type": "text/plain"},
-                  "body": ROBOTS_TXT,
-              }
-          if path.rstrip("/") == "":
-              return {
-                  "statusCode": 301,
-                  "headers": {"Location": f"https://{DOMAIN}/MBTA/"},
-                  "body": "",
-              }
-          return {
-              "statusCode": 404,
-              "headers": {"Content-Type": "text/html"},
-              "body": SARCASTIC,
-          }
-      PYTHON
-  }
-}
-
-resource "aws_iam_role" "redirect_lambda" {
-  name = "${var.service_name}-redirect-lambda"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action    = "sts:AssumeRole"
-      Effect    = "Allow"
-      Principal = { Service = "lambda.amazonaws.com" }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "redirect_lambda_basic" {
-  role       = aws_iam_role.redirect_lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-resource "aws_lambda_function" "redirect" {
-  function_name    = "${var.service_name}-redirect"
-  role             = aws_iam_role.redirect_lambda.arn
-  filename         = data.archive_file.redirect_lambda.output_path
-  source_code_hash = data.archive_file.redirect_lambda.output_base64sha256
-  handler          = "redirect.handler"
-  runtime          = "python3.12"
-
-  environment {
-    variables = {
-      DOMAIN = var.domain
-    }
-  }
-}
-
-resource "aws_lambda_permission" "apigw_redirect" {
-  statement_id  = "AllowAPIGWInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.redirect.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.redirect.execution_arn}/*/*"
-}
-
-# ── Redirect API Gateway ──────────────────────────────────────────────────────
-
-resource "aws_apigatewayv2_api" "redirect" {
-  name          = "${var.service_name}-redirect"
-  protocol_type = "HTTP"
-}
-
-resource "aws_apigatewayv2_integration" "redirect_lambda" {
-  api_id                 = aws_apigatewayv2_api.redirect.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.redirect.invoke_arn
-  payload_format_version = "2.0"
-}
-
-resource "aws_apigatewayv2_route" "redirect_default" {
-  api_id    = aws_apigatewayv2_api.redirect.id
-  route_key = "$default"
-  target    = "integrations/${aws_apigatewayv2_integration.redirect_lambda.id}"
-}
-
-resource "aws_apigatewayv2_stage" "redirect_default" {
-  api_id      = aws_apigatewayv2_api.redirect.id
-  name        = "$default"
-  auto_deploy = true
-}
-
-# Empty api_mapping_key = catch-all for bare domain (evaluated last, after MBTA/mbta)
-resource "aws_apigatewayv2_api_mapping" "root" {
-  api_id          = aws_apigatewayv2_api.redirect.id
-  domain_name     = aws_apigatewayv2_domain_name.main.id
-  stage           = aws_apigatewayv2_stage.redirect_default.id
-  api_mapping_key = ""
-}

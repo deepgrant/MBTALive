@@ -79,6 +79,7 @@ def fetchVars = {
     service_name:   serviceName,
     repo_name:      repoName,
     image_url:      imageUrl,
+    zone:           cfg['zone'],
     domain:         cfg['domain'],
     cpu:            cfg['cpu'].toString(),
     memory:         cfg['memory'].toString(),
@@ -282,7 +283,7 @@ task buildFrontend(type: Exec) {
   group       = 'deploy'
   description = 'Install deps and build Angular production bundle with /MBTA base-href'
   workingDir  = file('frontend')
-  commandLine 'bash', '-c', 'npm ci && npm run build -- --base-href /MBTA/'
+  commandLine 'bash', '-c', 'npm ci && npm run build'
 }
 
 // Wire Angular build into Docker image preparation so `./gradlew docker` always

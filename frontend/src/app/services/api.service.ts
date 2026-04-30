@@ -1,5 +1,4 @@
-import { Injectable, Inject } from '@angular/core';
-import { APP_BASE_HREF } from '@angular/common';
+import { Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, interval, switchMap, startWith, map, catchError } from 'rxjs';
 import { of } from 'rxjs';
@@ -14,14 +13,8 @@ import { Alert } from '../models/alert.model';
 export class ApiService {
   private baseUrl: string;
 
-  constructor(
-    private http: HttpClient,
-    @Inject(APP_BASE_HREF) baseHref: string
-  ) {
-    // Strip trailing slash from base href, then append /api.
-    // In dev: baseHref='/' → baseUrl='/api'
-    // In prod: baseHref='/MBTA/' → baseUrl='/MBTA/api'
-    this.baseUrl = baseHref.replace(/\/$/, '') + '/api';
+  constructor(private http: HttpClient) {
+    this.baseUrl = '/api';
   }
 
   getRoutes(typeFilter?: string): Observable<Route[]> {
