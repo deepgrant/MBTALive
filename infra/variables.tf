@@ -25,8 +25,14 @@ variable "image_url" {
   description = "Full ECR image URL including git-SHA tag"
 }
 
+variable "zone" {
+  type        = string
+  description = "Route 53 hosted zone (parent domain)"
+}
+
 variable "domain" {
-  type = string
+  type        = string
+  description = "Full domain for the app (e.g. mbta.critmind.com)"
 }
 
 variable "cpu" {

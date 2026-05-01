@@ -1,5 +1,5 @@
 output "app_url" {
-  value       = "https://${var.domain}/MBTA/"
+  value       = "https://${var.domain}/"
   description = "Public URL for the MBTA Tracker app"
 }
 
