@@ -9,5 +9,5 @@
   "memory":         "512",
   "min-tasks":      1,
   "max-tasks":      2,
-  "container-port": 8080
+  "container-port": 8443
 }

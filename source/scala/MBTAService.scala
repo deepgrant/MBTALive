@@ -89,10 +89,10 @@ class MBTAService extends Actor with ActorLogging {
   }
 
   private def startHttpServer(): Unit = {
-    val port = sys.env.getOrElse("PORT", "8080").toInt
-    Http().newServerAt("0.0.0.0", port).bind(createApiRoutes()).onComplete {
-      case Success(_)         => log.info("Server online at http://0.0.0.0:{}/", port)
-      case Failure(exception) => log.error("Failed to bind HTTP server: {}", exception)
+    val port = sys.env.getOrElse("PORT", "8443").toInt
+    Http().newServerAt("0.0.0.0", port).enableHttps(TLSConfig.httpsContext()).bind(createApiRoutes()).onComplete {
+      case Success(_)         => log.info("Server online at https://0.0.0.0:{}/", port)
+      case Failure(exception) => log.error("Failed to bind HTTPS server: {}", exception)
     }
   }
 
