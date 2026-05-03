@@ -11,6 +11,7 @@ $mobile-bp: 767.98px;
   height: 100%;
 }
 
+// Routes drawer panel (desktop: side, mobile: overlay)
 .routes-sidenav {
   width: 300px;
   background: rgba(255, 255, 255, 0.8);
@@ -22,6 +23,7 @@ $mobile-bp: 767.98px;
   }
 }
 
+// Vehicle drawer panel (mobile overlay from right only)
 .vehicle-sidenav {
   width: 280px;
   background: rgba(255, 255, 255, 0.8);
@@ -33,11 +35,28 @@ $mobile-bp: 767.98px;
   }
 }
 
-.main-content {
+// Flex row inside mat-sidenav-content (desktop vehicle panel + map)
+.content-row {
   display: flex;
-  flex-direction: column;
   height: 100%;
   overflow: hidden;
+}
+
+// Desktop vehicle panel: sits between routes drawer and map
+.vehicle-panel-desktop {
+  width: 280px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.8);
+  border-right: 1px solid #e0e0e0;
+  overflow-y: auto;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .mat-toolbar {

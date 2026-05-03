@@ -45,7 +45,11 @@ export class AppComponent implements OnInit, OnDestroy {
     private dialogService: VehicleCompletionDialogService,
     private cookieService: CookieService,
     private breakpointObserver: BreakpointObserver
-  ) { }
+  ) {
+    // Initialize synchronously so the template renders with the correct mode
+    // on first paint — prevents a flash of desktop layout on mobile.
+    this.isMobile.set(breakpointObserver.isMatched('(max-width: 767.98px)'));
+  }
 
   ngOnInit(): void {
     const settings = this.cookieService.getSettingsCookie();

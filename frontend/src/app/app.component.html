@@ -1,6 +1,7 @@
 <div class="app-container">
   <mat-sidenav-container class="sidenav-container" [hasBackdrop]="isMobile()">
 
+    <!-- Routes drawer: side-by-side on desktop, overlay on mobile -->
     <mat-sidenav
       #routesDrawer
       [mode]="isMobile() ? 'over' : 'side'"
@@ -10,50 +11,63 @@
       <app-routes></app-routes>
     </mat-sidenav>
 
+    <!-- Vehicle drawer: overlay from right, mobile only -->
     <mat-sidenav
       #vehicleDrawer
-      [mode]="isMobile() ? 'over' : 'side'"
-      [opened]="!isMobile() && !!selectedRoute"
+      mode="over"
       position="end"
       class="vehicle-sidenav">
-      @if (selectedRoute || isMobile()) {
+      @if (isMobile()) {
         <app-vehicle-list></app-vehicle-list>
       }
     </mat-sidenav>
 
-    <mat-sidenav-content class="main-content">
-      <mat-toolbar color="primary">
-        <button
-          type="button"
-          [attr.aria-label]="isMobile() ? 'Open routes menu' : (routesPanelVisible ? 'Close routes panel' : 'Open routes panel')"
-          mat-icon-button
-          (click)="toggleRoutesPanel()">
-          <mat-icon>{{isMobile() ? 'menu' : (routesPanelVisible ? 'chevron_left' : 'chevron_right')}}</mat-icon>
-        </button>
-        <img src="assets/favicon.png" alt="MBTA Logo" class="toolbar-favicon">
-        <span class="toolbar-title">{{title}}</span>
-        <span class="spacer"></span>
-        @if (isMobile() && selectedRoute) {
-          <button
-            type="button"
-            aria-label="Toggle vehicle list"
-            mat-icon-button
-            (click)="toggleVehiclePanel()">
-            <mat-icon>directions_bus</mat-icon>
-          </button>
-        }
-        <button
-          type="button"
-          aria-label="Reset to initial state"
-          mat-icon-button
-          (click)="resetToInitialState()"
-          title="Reset to initial state">
-          <mat-icon>refresh</mat-icon>
-        </button>
-      </mat-toolbar>
+    <mat-sidenav-content>
+      <div class="content-row">
 
-      <div class="content">
-        <app-map></app-map>
+        <!-- Desktop vehicle panel: rendered as flex sibling left of the map -->
+        @if (!isMobile() && selectedRoute) {
+          <div class="vehicle-panel-desktop">
+            <app-vehicle-list></app-vehicle-list>
+          </div>
+        }
+
+        <div class="main-content">
+          <mat-toolbar color="primary">
+            <button
+              type="button"
+              [attr.aria-label]="isMobile() ? 'Open routes menu' : (routesPanelVisible ? 'Close routes panel' : 'Open routes panel')"
+              mat-icon-button
+              (click)="toggleRoutesPanel()">
+              <mat-icon>{{isMobile() ? 'menu' : (routesPanelVisible ? 'chevron_left' : 'chevron_right')}}</mat-icon>
+            </button>
+            <img src="assets/favicon.png" alt="MBTA Logo" class="toolbar-favicon">
+            <span class="toolbar-title">{{title}}</span>
+            <span class="spacer"></span>
+            @if (isMobile() && selectedRoute) {
+              <button
+                type="button"
+                aria-label="Toggle vehicle list"
+                mat-icon-button
+                (click)="toggleVehiclePanel()">
+                <mat-icon>directions_bus</mat-icon>
+              </button>
+            }
+            <button
+              type="button"
+              aria-label="Reset to initial state"
+              mat-icon-button
+              (click)="resetToInitialState()"
+              title="Reset to initial state">
+              <mat-icon>refresh</mat-icon>
+            </button>
+          </mat-toolbar>
+
+          <div class="content">
+            <app-map></app-map>
+          </div>
+        </div>
+
       </div>
     </mat-sidenav-content>
 
