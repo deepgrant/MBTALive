@@ -1,29 +1,42 @@
+$mobile-bp: 767.98px;
+
 .app-container {
   display: flex;
   height: 100vh;
   overflow: hidden;
 }
 
-.routes-panel {
+.sidenav-container {
+  flex: 1;
+  height: 100%;
+}
+
+.routes-sidenav {
   width: 300px;
   background: rgba(255, 255, 255, 0.8);
   border-right: 1px solid #e0e0e0;
   overflow-y: auto;
-  z-index: 2;
+
+  @media (max-width: $mobile-bp) {
+    width: min(320px, 85vw);
+  }
 }
 
-.vehicle-panel {
+.vehicle-sidenav {
   width: 280px;
   background: rgba(255, 255, 255, 0.8);
-  border-right: 1px solid #e0e0e0;
+  border-left: 1px solid #e0e0e0;
   overflow-y: auto;
-  z-index: 1;
+
+  @media (max-width: $mobile-bp) {
+    width: min(320px, 85vw);
+  }
 }
 
 .main-content {
-  flex: 1;
   display: flex;
   flex-direction: column;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -43,9 +56,28 @@
   height: 32px;
   margin-right: 12px;
   vertical-align: middle;
+
+  @media (max-width: $mobile-bp) {
+    width: 24px;
+    height: 24px;
+    margin-right: 6px;
+  }
+}
+
+.toolbar-title {
+  font-size: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  @media (max-width: $mobile-bp) {
+    font-size: 16px;
+  }
 }
 
 .content {
   flex: 1;
   overflow: hidden;
+  min-height: 0;
 }
