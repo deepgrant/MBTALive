@@ -31,6 +31,11 @@
     </button>
   </mat-toolbar>
 
+  <!-- Mobile alerts ticker: appears below the toolbar so Safari chrome can't cover it -->
+  @if (isMobile()) {
+    <app-alert-ticker [alerts]="routeAlerts"></app-alert-ticker>
+  }
+
   <!-- Sidenav container fills the remaining height below the toolbar -->
   <mat-sidenav-container class="sidenav-container" [hasBackdrop]="isMobile()">
 

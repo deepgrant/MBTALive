@@ -11,6 +11,8 @@ import { VehicleCompletionDialogComponent } from './components/vehicle-completio
 import { VehicleService } from './services/vehicle.service';
 import { VehicleCompletionDialogService, VehicleCompletionDialogData } from './services/vehicle-completion-dialog.service';
 import { CookieService } from './services/cookie.service';
+import { AlertTickerComponent } from './components/alert-ticker/alert-ticker.component';
+import { Alert } from './models/alert.model';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -20,6 +22,7 @@ import { Subscription } from 'rxjs';
         MatButtonModule,
         MatIconModule,
         MatSidenavModule,
+        AlertTickerComponent,
         RoutesComponent,
         MapComponent,
         VehicleListComponent,
@@ -33,6 +36,7 @@ export class AppComponent implements OnInit, OnDestroy {
   selectedRoute: string | null = null;
   routesPanelVisible = true;
   dialogData: VehicleCompletionDialogData | null = null;
+  routeAlerts: Alert[] = [];
   isMobile = signal(false);
 
   @ViewChild('routesDrawer') routesDrawer!: MatSidenav;
@@ -76,6 +80,10 @@ export class AppComponent implements OnInit, OnDestroy {
           }
         },
         error: (error) => { console.error('AppComponent: Error receiving selected route:', error); }
+      }),
+
+      this.vehicleService.selectedRouteAlerts$.subscribe({
+        next: (alerts) => { this.routeAlerts = alerts; }
       }),
 
       this.dialogService.dialogData$.subscribe({

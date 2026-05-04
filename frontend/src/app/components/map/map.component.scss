@@ -16,6 +16,10 @@
   left: 0;
   right: 0;
   z-index: 500;
+
+  @media (max-width: 767.98px) {
+    display: none;
+  }
 }
 
 // Vehicle marker styles
