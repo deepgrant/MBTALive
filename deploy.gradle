@@ -45,6 +45,14 @@ task extractTofu(type: Exec) {
   doLast      { tofuBin.setExecutable(true) }
 }
 
+// ── Build tag ─────────────────────────────────────────────────────────────────
+// Computed once at script load so every task in this build run shares the same
+// tag. Epoch millis guarantees a unique, monotonically increasing value on every
+// build, which means tofuApply always sees a changed image_url and triggers an
+// ECS rolling deploy without requiring a git commit first.
+
+def buildTag = System.currentTimeMillis().toString()
+
 // ── In-memory config helper ───────────────────────────────────────────────────
 // Fetches JSON from AWS Secrets Manager into a ByteArrayOutputStream (never
 // written to disk), parses it with Groovy's built-in JsonSlurper, and returns
@@ -69,9 +77,7 @@ def fetchVars = {
   def region      = cfg['region']
   def repoName    = cfg['repo-name']
   def serviceName = cfg['service-name']
-  def gitSha      = ['git', 'rev-parse', '--short', 'HEAD'].execute().text.trim()
-  // ECR repo is named <repo-name>/<service-name> — matches the aws_ecr_repository resource in main.tf
-  def imageUrl    = "${accountId}.dkr.ecr.${region}.amazonaws.com/${repoName}/${serviceName}:${gitSha}"
+  def imageUrl    = "${accountId}.dkr.ecr.${region}.amazonaws.com/${repoName}/${serviceName}:${buildTag}"
   [
     aws_region:     region,
     aws_profile:    awsProfile,

@@ -39,6 +39,7 @@ export class AppComponent implements OnInit, OnDestroy {
   @ViewChild('vehicleDrawer') vehicleDrawer!: MatSidenav;
 
   private subscriptions: Subscription[] = [];
+  private swipeStartX = 0;
 
   constructor(
     private vehicleService: VehicleService,
@@ -46,8 +47,8 @@ export class AppComponent implements OnInit, OnDestroy {
     private cookieService: CookieService,
     private breakpointObserver: BreakpointObserver
   ) {
-    // Initialize synchronously so the template renders with the correct mode
-    // on first paint — prevents a flash of desktop layout on mobile.
+    // Set synchronously so the template renders with the correct mode on first
+    // paint and avoids a flash of the desktop layout on mobile.
     this.isMobile.set(breakpointObserver.isMatched('(max-width: 767.98px)'));
   }
 
@@ -68,8 +69,10 @@ export class AppComponent implements OnInit, OnDestroy {
       this.vehicleService.selectedRoute$.subscribe({
         next: (routeId) => {
           this.selectedRoute = routeId;
-          if (this.isMobile()) {
-            routeId ? this.vehicleDrawer?.open() : this.vehicleDrawer?.close();
+          // On mobile: close the vehicle drawer when a route is deselected.
+          // Do NOT auto-open on selection — the user opens it via the toolbar button.
+          if (this.isMobile() && !routeId) {
+            this.vehicleDrawer?.close();
           }
         },
         error: (error) => { console.error('AppComponent: Error receiving selected route:', error); }
@@ -98,6 +101,18 @@ export class AppComponent implements OnInit, OnDestroy {
 
   toggleVehiclePanel(): void {
     this.vehicleDrawer.toggle();
+  }
+
+  onSwipeStart(event: TouchEvent): void {
+    this.swipeStartX = event.touches[0].clientX;
+  }
+
+  onSwipeEnd(event: TouchEvent): void {
+    const deltaX = event.changedTouches[0].clientX - this.swipeStartX;
+    // A rightward swipe of more than 60px dismisses the drawer
+    if (deltaX > 60) {
+      this.vehicleDrawer.close();
+    }
   }
 
   onDialogClose(): void {
