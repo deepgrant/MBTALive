@@ -1,42 +1,94 @@
 <div class="app-container">
-  @if (routesPanelVisible) {
-    <div class="routes-panel">
-      <app-routes></app-routes>
-    </div>
-  }
 
-  @if (selectedRoute) {
-    <div class="vehicle-panel">
-      <app-vehicle-list></app-vehicle-list>
-    </div>
-  }
-
-  <div class="main-content">
-    <mat-toolbar color="primary">
+  <!-- Toolbar sits outside the sidenav container so drawers never cover it -->
+  <mat-toolbar color="primary">
+    <button
+      type="button"
+      [attr.aria-label]="isMobile() ? 'Open routes menu' : (routesPanelVisible ? 'Close routes panel' : 'Open routes panel')"
+      mat-icon-button
+      (click)="toggleRoutesPanel()">
+      <mat-icon>{{isMobile() ? 'menu' : (routesPanelVisible ? 'chevron_left' : 'chevron_right')}}</mat-icon>
+    </button>
+    <img src="assets/favicon.png" alt="MBTA Logo" class="toolbar-favicon">
+    <span class="toolbar-title">{{title}}</span>
+    <span class="spacer"></span>
+    @if (isMobile() && selectedRoute) {
       <button
         type="button"
-        aria-label="Toggle routes panel"
+        aria-label="Toggle vehicle list"
         mat-icon-button
-        (click)="toggleRoutesPanel()">
-        <mat-icon aria-label="Routes toggle icon">{{routesPanelVisible ? 'chevron_left' : 'chevron_right'}}</mat-icon>
+        (click)="toggleVehiclePanel()">
+        <mat-icon>directions_bus</mat-icon>
       </button>
-      <img src="assets/favicon.png" alt="MBTA Logo" class="toolbar-favicon">
-      <span>{{title}}</span>
-      <span class="spacer"></span>
-      <button
-        type="button"
-        aria-label="Settings and preferences"
-        mat-icon-button
-        (click)="resetToInitialState()"
-        title="Reset to initial state">
-        <mat-icon aria-label="Settings icon">menu</mat-icon>
-      </button>
-    </mat-toolbar>
+    }
+    <button
+      type="button"
+      aria-label="Reset to initial state"
+      mat-icon-button
+      (click)="resetToInitialState()"
+      title="Reset to initial state">
+      <mat-icon>refresh</mat-icon>
+    </button>
+  </mat-toolbar>
 
-    <div class="content">
-      <app-map></app-map>
-    </div>
-  </div>
+  <!-- Mobile alerts ticker: appears below the toolbar so Safari chrome can't cover it -->
+  @if (isMobile()) {
+    <app-alert-ticker [alerts]="routeAlerts"></app-alert-ticker>
+  }
+
+  <!-- Sidenav container fills the remaining height below the toolbar -->
+  <mat-sidenav-container class="sidenav-container" [hasBackdrop]="isMobile()">
+
+    <!-- Routes drawer: side-by-side on desktop, overlay on mobile -->
+    <mat-sidenav
+      #routesDrawer
+      [mode]="isMobile() ? 'over' : 'side'"
+      [opened]="!isMobile() && routesPanelVisible"
+      position="start"
+      class="routes-sidenav">
+      <div class="routes-drawer-swipe-area"
+           (touchstart)="onSwipeStart($event)"
+           (touchend)="onRoutesSwipeEnd($event)">
+        <app-routes></app-routes>
+      </div>
+    </mat-sidenav>
+
+    <!-- Vehicle drawer: right-side overlay, mobile only.
+         Swipe right anywhere inside to dismiss. -->
+    <mat-sidenav
+      #vehicleDrawer
+      mode="over"
+      position="end"
+      class="vehicle-sidenav">
+      <div class="vehicle-drawer-swipe-area"
+           (touchstart)="onSwipeStart($event)"
+           (touchend)="onSwipeEnd($event)">
+        @if (isMobile()) {
+          <app-vehicle-list></app-vehicle-list>
+        }
+      </div>
+    </mat-sidenav>
+
+    <mat-sidenav-content>
+      <div class="content-row">
+
+        <!-- Desktop vehicle panel: flex sibling left of the map -->
+        @if (!isMobile() && selectedRoute) {
+          <div class="vehicle-panel-desktop">
+            <app-vehicle-list></app-vehicle-list>
+          </div>
+        }
+
+        <div class="main-content">
+          <div class="content">
+            <app-map></app-map>
+          </div>
+        </div>
+
+      </div>
+    </mat-sidenav-content>
+
+  </mat-sidenav-container>
 
   @if (dialogData) {
     <app-vehicle-completion-dialog
@@ -48,4 +100,5 @@
       (closed)="onDialogClose()">
     </app-vehicle-completion-dialog>
   }
+
 </div>

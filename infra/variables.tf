@@ -59,5 +59,5 @@ variable "max_tasks" {
 
 variable "container_port" {
   type    = number
-  default = 8080
+  default = 8443
 }

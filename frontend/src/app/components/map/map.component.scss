@@ -1,7 +1,7 @@
 .map-wrapper {
   position: relative;
   width: 100%;
-  height: calc(100vh - 64px);
+  height: 100%;
 }
 
 .map-container {
@@ -16,6 +16,10 @@
   left: 0;
   right: 0;
   z-index: 500;
+
+  @media (max-width: 767.98px) {
+    display: none;
+  }
 }
 
 // Vehicle marker styles

@@ -123,7 +123,7 @@ resource "aws_security_group" "ecs" {
   }
 }
 
-# ── ALB (HTTP only — TLS terminates at API Gateway) ───────────────────────────
+# ── ALB (HTTP listener from API Gateway; forwards HTTPS to container) ─────────
 
 resource "aws_lb" "main" {
   name               = "${var.service_name}-alb"
@@ -134,17 +134,23 @@ resource "aws_lb" "main" {
 }
 
 resource "aws_lb_target_group" "app" {
-  name        = "${var.service_name}-tg"
+  name_prefix = "mbta-"
   port        = var.container_port
-  protocol    = "HTTP"
+  protocol    = "HTTPS"
   vpc_id      = data.aws_vpc.default.id
   target_type = "ip"
 
   health_check {
     path                = "/health"
+    protocol            = "HTTPS"
+    matcher             = "200"
     interval            = 30
     healthy_threshold   = 2
     unhealthy_threshold = 3
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
@@ -188,10 +194,16 @@ resource "aws_ecs_task_definition" "app" {
       protocol      = "tcp"
     }]
 
-    environment = [{
-      name  = "PORT"
-      value = tostring(var.container_port)
-    }]
+    environment = [
+      {
+        name  = "PORT"
+        value = tostring(var.container_port)
+      },
+      {
+        name  = "STATIC_DIR"
+        value = "/app/static"
+      }
+    ]
 
     secrets = [{
       name      = "MBTA_API_KEY"
@@ -208,7 +220,7 @@ resource "aws_ecs_task_definition" "app" {
     }
 
     healthCheck = {
-      command     = ["CMD-SHELL", "curl -f http://localhost:${var.container_port}/health || exit 1"]
+      command     = ["CMD-SHELL", "curl -fk https://localhost:${var.container_port}/health || exit 1"]
       interval    = 30
       timeout     = 5
       retries     = 3
