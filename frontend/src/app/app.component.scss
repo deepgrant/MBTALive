@@ -46,7 +46,8 @@ $mobile-bp: 767.98px;
   }
 }
 
-// Scroll wrapper and swipe target inside the vehicle drawer
+// Scroll wrapper and swipe target inside each drawer
+.routes-drawer-swipe-area,
 .vehicle-drawer-swipe-area {
   height: 100%;
   overflow-y: auto;

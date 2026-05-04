@@ -117,9 +117,15 @@ export class AppComponent implements OnInit, OnDestroy {
 
   onSwipeEnd(event: TouchEvent): void {
     const deltaX = event.changedTouches[0].clientX - this.swipeStartX;
-    // A rightward swipe of more than 60px dismisses the drawer
     if (deltaX > 60) {
       this.vehicleDrawer.close();
+    }
+  }
+
+  onRoutesSwipeEnd(event: TouchEvent): void {
+    const deltaX = event.changedTouches[0].clientX - this.swipeStartX;
+    if (deltaX < -60) {
+      this.routesDrawer.close();
     }
   }
 

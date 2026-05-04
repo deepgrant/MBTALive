@@ -46,7 +46,11 @@
       [opened]="!isMobile() && routesPanelVisible"
       position="start"
       class="routes-sidenav">
-      <app-routes></app-routes>
+      <div class="routes-drawer-swipe-area"
+           (touchstart)="onSwipeStart($event)"
+           (touchend)="onRoutesSwipeEnd($event)">
+        <app-routes></app-routes>
+      </div>
     </mat-sidenav>
 
     <!-- Vehicle drawer: right-side overlay, mobile only.
