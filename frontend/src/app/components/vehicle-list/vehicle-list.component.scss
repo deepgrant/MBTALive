@@ -280,3 +280,11 @@
   color: #999;
   line-height: 1.4;
 }
+
+.position-stale-badge {
+  color: #e65100;
+
+  mat-icon {
+    color: #e65100;
+  }
+}

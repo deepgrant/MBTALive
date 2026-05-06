@@ -113,9 +113,19 @@ export class MapService {
       tripNameClass = 'flash-trip-name';
     }
 
+    let staleHtml = '';
+    if (vehicle.positionStale) {
+      const ageMs = Date.now() - new Date(vehicle.updatedAt).getTime();
+      const ageMin = Math.round(ageMs / 60000);
+      const movingText = vehicle.speed > 0
+        ? `moving at ${vehicle.speed.toFixed(0)} mph`
+        : 'stopped';
+      staleHtml = `<div style="color:#e65100;margin-top:4px;">&#9888; Position not reported<br>Last seen ${ageMin} min ago &mdash; ${movingText}</div>`;
+    }
+
     const tooltipText = vehicle.tripName
-      ? `<div><strong>ID:</strong> ${vehicle.vehicleId}</div><div><strong class="${tripLabelClass}">Trip:</strong> <span class="${tripNameClass}">${vehicle.tripName}</span></div>`
-      : `<div><strong>ID:</strong> ${vehicle.vehicleId}</div>`;
+      ? `<div><strong>ID:</strong> ${vehicle.vehicleId}</div><div><strong class="${tripLabelClass}">Trip:</strong> <span class="${tripNameClass}">${vehicle.tripName}</span></div>${staleHtml}`
+      : `<div><strong>ID:</strong> ${vehicle.vehicleId}</div>${staleHtml}`;
     marker.bindTooltip(tooltipText, {
       permanent: true,
       direction: isOutbound ? 'bottom' : 'top',
@@ -318,20 +328,23 @@ export class MapService {
     const size = isHighlighted ? 24 : 20;
     const borderWidth = isHighlighted ? 3 : 2;
     const borderColor = isHighlighted ? '#FF5722' : '#ffffff';
+    const opacity = vehicle.positionStale ? '0.55' : '1';
 
-    let markerBackgroundColor = '#2196F3';
+    let markerBackgroundColor = vehicle.positionStale ? '#9e9e9e' : '#2196F3';
     let delayIndicator = '';
 
-    if (vehicle.delayStatus === 'minor-delay') {
-      markerBackgroundColor = '#ffc107';
-      delayIndicator = '<div class="delay-indicator minor-delay" title="Minor Delay"></div>';
-    } else if (vehicle.delayStatus === 'major-delay') {
-      markerBackgroundColor = '#dc3545';
-      delayIndicator = '<div class="delay-indicator major-delay" title="Major Delay"></div>';
+    if (!vehicle.positionStale) {
+      if (vehicle.delayStatus === 'minor-delay') {
+        markerBackgroundColor = '#ffc107';
+        delayIndicator = '<div class="delay-indicator minor-delay" title="Minor Delay"></div>';
+      } else if (vehicle.delayStatus === 'major-delay') {
+        markerBackgroundColor = '#dc3545';
+        delayIndicator = '<div class="delay-indicator major-delay" title="Major Delay"></div>';
+      }
     }
 
     return `
-      <div class="vehicle-marker-container" style="transform: rotate(${rotation}deg); width: ${size}px; height: ${size}px;">
+      <div class="vehicle-marker-container" style="transform: rotate(${rotation}deg); width: ${size}px; height: ${size}px; opacity: ${opacity};">
         <div class="vehicle-marker-circle" style="
           width: ${size}px;
           height: ${size}px;

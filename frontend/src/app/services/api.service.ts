@@ -54,6 +54,8 @@ export class ApiService {
           vehicles.map(vehicle => ({
             routeId: vehicle.routeId,
             vehicleId: vehicle.vehicleId ?? 'unknown',
+            positionValid: vehicle.latitude != null && vehicle.longitude != null,
+            positionStale: false,
             latitude: vehicle.latitude ?? 0,
             longitude: vehicle.longitude ?? 0,
             bearing: vehicle.bearing ?? 0,

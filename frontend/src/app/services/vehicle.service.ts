@@ -16,6 +16,13 @@ export class VehicleService {
   private routesSubject = new BehaviorSubject<Route[]>([]);
   private selectedRouteSubject = new BehaviorSubject<string | null>(null);
   private selectedVehicleSubject = new BehaviorSubject<string | null>(null);
+  private lastKnownPositions = new Map<string, {
+    latitude:  number;
+    longitude: number;
+    bearing:   number;
+    speed:     number;
+    updatedAt: string;
+  }>();
 
   public vehicles$ = this.vehiclesSubject.asObservable();
   public routes$ = this.routesSubject.asObservable();
@@ -49,7 +56,8 @@ export class VehicleService {
                 return vehicles;
               })
             )
-          )
+          ),
+          map(vehicles => this.applyLastKnownPositions(vehicles))
         );
       })
     );
@@ -104,7 +112,42 @@ export class VehicleService {
     });
   }
 
+  private applyLastKnownPositions(vehicles: Vehicle[]): Vehicle[] {
+    const result = vehicles.map(v => {
+      if (v.positionValid) {
+        this.lastKnownPositions.set(v.vehicleId, {
+          latitude:  v.latitude,
+          longitude: v.longitude,
+          bearing:   v.bearing,
+          speed:     v.speed,
+          updatedAt: v.updatedAt,
+        });
+        return v;
+      }
+      const cached = this.lastKnownPositions.get(v.vehicleId);
+      if (cached) {
+        return {
+          ...v,
+          latitude:  cached.latitude,
+          longitude: cached.longitude,
+          bearing:   cached.bearing,
+          speed:     cached.speed,
+          positionStale: true,
+        };
+      }
+      return v;
+    });
+
+    const liveIds = new Set(vehicles.map(v => v.vehicleId));
+    this.lastKnownPositions.forEach((_, id) => {
+      if (!liveIds.has(id)) this.lastKnownPositions.delete(id);
+    });
+
+    return result;
+  }
+
   selectRoute(routeId: string | null, skipCookieSave: boolean = false): void {
+    this.lastKnownPositions.clear();
     this.selectedRouteSubject.next(routeId);
 
     if (!skipCookieSave) {

@@ -81,6 +81,13 @@
                   <mat-icon>update</mat-icon>
                   <span>{{formatTime(vehicle.updatedAt)}}</span>
                 </div>
+
+                @if (vehicle.positionStale) {
+                  <div class="detail-row position-stale-badge">
+                    <mat-icon>location_off</mat-icon>
+                    <span>Position not reporting</span>
+                  </div>
+                }
               </div>
             </div>
           </mat-list-item>
