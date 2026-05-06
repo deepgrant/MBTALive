@@ -262,7 +262,7 @@ export class MapService {
       className: 'station-marker',
       html: this.createStationMarkerHtml(station),
       iconSize: [24, 24],
-      iconAnchor: [12, 24]
+      iconAnchor: [12, 12]
     });
 
     const marker = L.marker([station.latitude, station.longitude], {
@@ -363,33 +363,26 @@ export class MapService {
 
   private createStationMarkerHtml(station: Station): string {
     return `
-      <div style="
-        width: 24px;
-        height: 24px;
-        background: rgba(108, 117, 125, 0.7);
-        border: 2px solid white;
-        border-radius: 50%;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      ">
+      <div style="position: relative; width: 24px; height: 24px;">
+        <img src="assets/favicon.png"
+             style="width: 24px; height: 24px; display: block;"
+             alt="${station.name}">
         <div style="
           position: absolute;
-          bottom: -8px;
+          top: 28px;
           left: 50%;
           transform: translateX(-50%);
           font-size: 8px;
-          color: #6c757d;
+          color: #333;
           font-weight: bold;
           background: white;
-          padding: 1px 2px;
+          padding: 1px 3px;
           border-radius: 2px;
           white-space: nowrap;
-          max-width: 60px;
+          max-width: 70px;
           overflow: hidden;
           text-overflow: ellipsis;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.25);
         ">${station.name}</div>
       </div>
     `;
