@@ -10,6 +10,8 @@ export interface Vehicle {
   currentStatus: string;
   stopName: string;
   updatedAt: string;
+  positionValid: boolean;
+  positionStale?: boolean;
   routeType?: number;
   predictedArrivalTime?: string;
   scheduledArrivalTime?: string;

@@ -113,9 +113,19 @@ export class MapService {
       tripNameClass = 'flash-trip-name';
     }
 
+    let staleHtml = '';
+    if (vehicle.positionStale) {
+      const ageMs = Date.now() - new Date(vehicle.updatedAt).getTime();
+      const ageMin = Math.round(ageMs / 60000);
+      const movingText = vehicle.speed > 0
+        ? `moving at ${vehicle.speed.toFixed(0)} mph`
+        : 'stopped';
+      staleHtml = `<div style="color:#e65100;margin-top:4px;">&#9888; Position not reported<br>Last seen ${ageMin} min ago &mdash; ${movingText}</div>`;
+    }
+
     const tooltipText = vehicle.tripName
-      ? `<div><strong>ID:</strong> ${vehicle.vehicleId}</div><div><strong class="${tripLabelClass}">Trip:</strong> <span class="${tripNameClass}">${vehicle.tripName}</span></div>`
-      : `<div><strong>ID:</strong> ${vehicle.vehicleId}</div>`;
+      ? `<div><strong>ID:</strong> ${vehicle.vehicleId}</div><div><strong class="${tripLabelClass}">Trip:</strong> <span class="${tripNameClass}">${vehicle.tripName}</span></div>${staleHtml}`
+      : `<div><strong>ID:</strong> ${vehicle.vehicleId}</div>${staleHtml}`;
     marker.bindTooltip(tooltipText, {
       permanent: true,
       direction: isOutbound ? 'bottom' : 'top',
@@ -252,7 +262,7 @@ export class MapService {
       className: 'station-marker',
       html: this.createStationMarkerHtml(station),
       iconSize: [24, 24],
-      iconAnchor: [12, 24]
+      iconAnchor: [12, 12]
     });
 
     const marker = L.marker([station.latitude, station.longitude], {
@@ -318,20 +328,20 @@ export class MapService {
     const size = isHighlighted ? 24 : 20;
     const borderWidth = isHighlighted ? 3 : 2;
     const borderColor = isHighlighted ? '#FF5722' : '#ffffff';
+    const opacity = vehicle.positionStale ? '0.55' : '1';
 
-    let markerBackgroundColor = '#2196F3';
-    let delayIndicator = '';
+    let markerBackgroundColor = vehicle.positionStale ? '#9e9e9e' : '#2196F3';
 
-    if (vehicle.delayStatus === 'minor-delay') {
-      markerBackgroundColor = '#ffc107';
-      delayIndicator = '<div class="delay-indicator minor-delay" title="Minor Delay"></div>';
-    } else if (vehicle.delayStatus === 'major-delay') {
-      markerBackgroundColor = '#dc3545';
-      delayIndicator = '<div class="delay-indicator major-delay" title="Major Delay"></div>';
+    if (!vehicle.positionStale) {
+      if (vehicle.delayStatus === 'minor-delay') {
+        markerBackgroundColor = '#ffc107';
+      } else if (vehicle.delayStatus === 'major-delay') {
+        markerBackgroundColor = '#dc3545';
+      }
     }
 
     return `
-      <div class="vehicle-marker-container" style="transform: rotate(${rotation}deg); width: ${size}px; height: ${size}px;">
+      <div class="vehicle-marker-container" style="transform: rotate(${rotation}deg); width: ${size}px; height: ${size}px; opacity: ${opacity};">
         <div class="vehicle-marker-circle" style="
           width: ${size}px;
           height: ${size}px;
@@ -343,40 +353,32 @@ export class MapService {
         </div>
         <div class="vehicle-marker-direction"></div>
         ${isHighlighted ? '<div class="vehicle-marker-highlight-ring"></div>' : ''}
-        ${delayIndicator}
       </div>
     `;
   }
 
   private createStationMarkerHtml(station: Station): string {
     return `
-      <div style="
-        width: 24px;
-        height: 24px;
-        background: rgba(108, 117, 125, 0.7);
-        border: 2px solid white;
-        border-radius: 50%;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      ">
+      <div style="position: relative; width: 24px; height: 24px;">
+        <img src="assets/favicon.png"
+             style="width: 24px; height: 24px; display: block;"
+             alt="${station.name}">
         <div style="
           position: absolute;
-          bottom: -8px;
+          top: 28px;
           left: 50%;
           transform: translateX(-50%);
           font-size: 8px;
-          color: #6c757d;
+          color: #333;
           font-weight: bold;
           background: white;
-          padding: 1px 2px;
+          padding: 1px 3px;
           border-radius: 2px;
           white-space: nowrap;
-          max-width: 60px;
+          max-width: 70px;
           overflow: hidden;
           text-overflow: ellipsis;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.25);
         ">${station.name}</div>
       </div>
     `;
