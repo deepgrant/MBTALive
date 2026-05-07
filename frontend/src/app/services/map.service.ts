@@ -331,15 +331,12 @@ export class MapService {
     const opacity = vehicle.positionStale ? '0.55' : '1';
 
     let markerBackgroundColor = vehicle.positionStale ? '#9e9e9e' : '#2196F3';
-    let delayIndicator = '';
 
     if (!vehicle.positionStale) {
       if (vehicle.delayStatus === 'minor-delay') {
         markerBackgroundColor = '#ffc107';
-        delayIndicator = '<div class="delay-indicator minor-delay" title="Minor Delay"></div>';
       } else if (vehicle.delayStatus === 'major-delay') {
         markerBackgroundColor = '#dc3545';
-        delayIndicator = '<div class="delay-indicator major-delay" title="Major Delay"></div>';
       }
     }
 
@@ -356,7 +353,6 @@ export class MapService {
         </div>
         <div class="vehicle-marker-direction"></div>
         ${isHighlighted ? '<div class="vehicle-marker-highlight-ring"></div>' : ''}
-        ${delayIndicator}
       </div>
     `;
   }
