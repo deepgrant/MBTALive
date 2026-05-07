@@ -1,6 +1,5 @@
 import { Component, OnInit, OnDestroy, AfterViewInit } from '@angular/core';
 import { Subscription } from 'rxjs';
-import * as L from 'leaflet';
 import { Vehicle } from '../../models/vehicle.model';
 import { Route, Shape } from '../../models/route.model';
 import { Station } from '../../models/station.model';
@@ -17,7 +16,7 @@ import { AlertTickerComponent } from '../alert-ticker/alert-ticker.component';
 })
 export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   private subscriptions: Subscription[] = [];
-  private map: L.Map | null = null;
+  private mapInitialized = false;
   private currentRoute: Route | null = null;
   private currentRouteId: string | null = null;
   private routeFramed: boolean = false;
@@ -49,7 +48,7 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
       }),
       this.vehicleService.selectedVehicle$.subscribe({
         next: (vehicleId) => {
-          if (vehicleId && this.map) {
+          if (vehicleId && this.mapInitialized) {
             // Small delay to ensure map centering has completed
             setTimeout(() => { this.mapService.highlightVehicleMarker(vehicleId); }, 100);
           }
@@ -66,8 +65,9 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   ngAfterViewInit(): void {
     setTimeout(() => {
       try {
-        this.map = this.mapService.initializeMap('map');
-        // Wait for map bounds restoration to complete before restoring route
+        this.mapService.initializeMap('map');
+        this.mapInitialized = true;
+        // Wait for map style load + bounds restoration before restoring route
         setTimeout(() => { this.vehicleService.restoreRouteFromCookie(); }, 800);
       } catch (error) {
         console.error('MapComponent: Error initializing map:', error);
@@ -124,7 +124,7 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private fitBoundsToRouteAndStations(): void {
-    if (!this.routeFramed && this.map) {
+    if (!this.routeFramed && this.mapInitialized) {
       const shouldSkipFraming = this.isInitialRouteLoad && this.mapService.wereBoundsRestored();
 
       if (!shouldSkipFraming) {
