@@ -42,6 +42,12 @@ html, body {
   width: 100%;
 }
 
+@media (min-width: 768px) {
+  .maplibregl-ctrl-bottom-right {
+    bottom: 32px;
+  }
+}
+
 // Vehicle marker styles
 .vehicle-marker {
   background: transparent;
