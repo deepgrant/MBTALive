@@ -4,13 +4,14 @@ Real-time vehicle tracking for the MBTA network. Select a route in the sidebar a
 
 **Live:** https://mbta.critmind.com/
 
-<img width="2992" height="1692" alt="Screenshot 2026-05-09 at 7 31 48 PM" src="https://github.com/user-attachments/assets/3f6f1130-8155-4094-8d1a-b2410686b733" />
-<img width="2992" height="1692" alt="Screenshot 2026-05-09 at 7 32 11 PM" src="https://github.com/user-attachments/assets/25dbb7c8-eaaf-413d-a21b-4e8daf686ba0" />
+<img width="2992" height="1692" alt="Screenshot 2026-05-09 at 7 31 48 PM" src="https://github.com/user-attachments/assets/3f6f1130-8155-4094-8d1a-b2410686b733" />
+<img width="2992" height="1692" alt="Screenshot 2026-05-09 at 7 32 11 PM" src="https://github.com/user-attachments/assets/25dbb7c8-eaaf-413d-a21b-4e8daf686ba0" />
 
 ## What it does
 
-- Live vehicle positions on a Leaflet map, refreshed every 10 seconds
-- Route shapes and stop markers drawn when you select a route
+- Live vehicle positions on a dark 3D MapLibre GL map, refreshed every 10 seconds
+- Route shapes driven by MBTA route patterns (`typicality=1`) for authoritative shape selection
+- Stop markers with MBTA T-logo icons drawn when you select a route
 - Per-vehicle arrival predictions and delay status pulled from the MBTA predictions API
 - System-wide and per-route alert banners with a scrolling ticker for active disruptions
 - Persists your last selected route and map position in a cookie
@@ -20,14 +21,14 @@ Real-time vehicle tracking for the MBTA network. Select a route in the sidebar a
 You need JDK 17+, Node.js 20+, and npm.
 
 ```bash
-# Terminal 1 — backend on http://localhost:8080
+# Terminal 1 — backend on https://localhost:8443
 ./gradlew run
 
 # Terminal 2 — frontend dev server on http://localhost:4200
 cd frontend && npm start
 ```
 
-The dev proxy (`frontend/proxy.conf.json`) forwards `/api/**` to the backend, so no CORS config is needed locally.
+The backend generates a self-signed TLS certificate at startup using Bouncy Castle — no keystore file or external `keytool` step needed. The dev proxy (`frontend/proxy.conf.json`) forwards `/api/**` to `https://localhost:8443` with certificate validation disabled (`secure: false`), so no CORS config is needed locally.
 
 Grab a free API key from https://api-v3.mbta.com if you want the higher rate limit (1000 req/min vs 10). Set it before starting the backend:
 
@@ -37,12 +38,12 @@ export MBTA_API_KEY=your_key_here
 
 ## Stack
 
-The backend is a Scala 3 / Apache Pekko HTTP service that proxies the MBTA v3 REST API, enriches vehicle data with stop names and arrival predictions, and serves the compiled Angular app as static files. There's no separate frontend server in production — Pekko serves everything.
+The backend is a Scala 3 / Apache Pekko HTTP service that proxies the MBTA v3 REST API, enriches vehicle data with stop names and arrival predictions, and serves the compiled Angular app as static files. There's no separate frontend server in production — Pekko serves everything over HTTPS with a runtime-generated certificate.
 
 | Layer | Tech |
 |---|---|
-| Backend | Scala 3.3 LTS, Pekko HTTP 1.3, Spray JSON |
-| Frontend | Angular 20, Leaflet 1.9, Angular Material, RxJS |
+| Backend | Scala 3.3 LTS, Pekko HTTP 1.3, Spray JSON, Bouncy Castle 1.80 |
+| Frontend | Angular 20, MapLibre GL JS 5, OpenFreeMap vector tiles, Angular Material, RxJS |
 | Build | Gradle 9, Angular CLI |
 | Infra | AWS ECS Fargate, ECR, API Gateway, ACM, Route 53 |
 
@@ -52,11 +53,12 @@ The backend is a Scala 3 / Apache Pekko HTTP service that proxies the MBTA v3 RE
 source/scala/       Scala backend
   MBTAService       HTTP routes + static file serving
   MBTAAccess        Throttled HTTPS client to api-v3.mbta.com
-  RequestFlow       Vehicle enrichment pipeline (stops, predictions, alerts)
+  RequestFlow       Vehicle enrichment pipeline (stops, predictions, alerts, shapes)
+  TLSConfig         Runtime self-signed cert generation via Bouncy Castle
   MBTAModels        Domain types
 
 frontend/src/app/
-  services/         VehicleService (state), ApiService (HTTP), MapService (Leaflet)
+  services/         VehicleService (state), ApiService (HTTP), MapService (MapLibre GL)
   components/       Map, Routes sidebar, Vehicle list, Alert banner/ticker
 ```
 
@@ -72,13 +74,15 @@ GET /api/route/:id/alerts
 GET /api/alerts
 ```
 
+Shapes are filtered server-side using the MBTA `/route_patterns` endpoint — only `typicality=1` (typical service) shapes are returned. If the route patterns call fails, all shapes are returned as a fallback.
+
 ## Linting
 
 The build enforces Scalafix rules (OrganizeImports, RemoveUnused, DisableSyntax). The `build` task will fail if there are violations.
 
 ```bash
 ./gradlew checkScalafixMain   # check
-./gradlew applyScalafixMain   # fix
+./gradlew scalafixMain        # fix
 ```
 
 ## Deployment
