@@ -1,7 +1,7 @@
 /* You can add global styles to this file, and also import other style files */
 
-// Import Leaflet CSS
-@import '~leaflet/dist/leaflet.css';
+// Import MapLibre GL CSS
+@import '~maplibre-gl/dist/maplibre-gl.css';
 
 // Define MBTA color palette
 $mbta-blue: #003DA5;
@@ -37,10 +37,15 @@ html, body {
   color: $mbta-blue;
 }
 
-// Leaflet map styles
-.leaflet-container {
+.maplibregl-map {
   height: 100%;
   width: 100%;
+}
+
+@media (min-width: 768px) {
+  .maplibregl-ctrl-bottom-right {
+    bottom: 32px;
+  }
 }
 
 // Vehicle marker styles

@@ -8,6 +8,7 @@ build/
 .bloop/
 .vscode/
 .metals/
+bin/
 
 # Angular
 frontend/dist/

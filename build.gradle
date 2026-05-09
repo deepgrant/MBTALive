@@ -40,6 +40,8 @@ dependencies {
     , libs.pprint
     , libs.apache_commons_io
     , libs.sprayJSON
+    , libs.bcprov
+    , libs.bcpkix
     ]
   )
 }

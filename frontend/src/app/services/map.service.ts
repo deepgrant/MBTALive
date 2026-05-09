@@ -1,148 +1,129 @@
 import { Injectable } from '@angular/core';
-import * as L from 'leaflet';
+import maplibregl, { Map as MaplibreMap, GeoJSONSource, Marker } from 'maplibre-gl';
 import * as polyline from '@mapbox/polyline';
 import { Vehicle } from '../models/vehicle.model';
 import { Route, Shape } from '../models/route.model';
 import { Station } from '../models/station.model';
 import { VehicleCompletionDialogService } from './vehicle-completion-dialog.service';
 import { CookieService } from './cookie.service';
+import { VehicleService } from './vehicle.service';
 
-@Injectable({
-  providedIn: 'root'
-})
+interface SimpleBounds {
+  minLat: number; maxLat: number;
+  minLng: number; maxLng: number;
+}
+
+@Injectable({ providedIn: 'root' })
 export class MapService {
-  private map: L.Map | null = null;
-  private vehicleMarkers: Map<string, L.Marker> = new Map();
-  private routeLayers: Map<string, L.Polyline> = new Map();
-  private stationMarkers: Map<string, L.Marker> = new Map();
-  private selectedVehicleMarker: L.Marker | null = null;
+  private map: MaplibreMap | null = null;
+  private mapLoaded = false;
+  private vehicleMarkers: Map<string, Marker> = new Map();
+  private stationMarkers: Map<string, Marker> = new Map();
+  private highlightOverlay: Marker | null = null;
   private vehicleData: Map<string, Vehicle> = new Map();
-  private originalIcons: Map<string, L.DivIcon> = new Map();
-  private highlightOverlay: L.Marker | null = null;
   private trackedVehicleId: string | null = null;
   private trackedVehicleRouteId: string | null = null;
-  private previousView: { center: L.LatLngLiteral; zoom: number } | null = null;
+  private previousView: { lng: number; lat: number; zoom: number } | null = null;
   private trackingInterval: ReturnType<typeof setInterval> | null = null;
-  private routeBounds: L.LatLngBounds | null = null;
+  private routeBounds: SimpleBounds | null = null;
+  private stationBounds: SimpleBounds | null = null;
   private lastTrackedVehicleData: Vehicle | null = null;
-  private isTrackingActive: boolean = false;
+  private isTrackingActive = false;
   private boundsSaveTimeout: ReturnType<typeof setTimeout> | null = null;
-  private readonly BOUNDS_SAVE_DELAY = 2500; // 2.5 seconds
-  private boundsRestored: boolean = false;
+  private readonly BOUNDS_SAVE_DELAY = 2500;
+  private boundsRestored = false;
+  private pendingShapes: { shapes: Shape[]; route: Route } | null = null;
+
+  private readonly SOURCE_ROUTE = 'route-source';
+  private readonly LAYER_CASING = 'route-casing';
+  private readonly LAYER_LINE = 'route-line';
 
   constructor(
     private dialogService: VehicleCompletionDialogService,
-    private cookieService: CookieService
-  ) { }
+    private cookieService: CookieService,
+    private vehicleService: VehicleService
+  ) {}
 
-  initializeMap(containerId: string): L.Map {
+  initializeMap(containerId: string): void {
     if (this.map) {
       this.map.remove();
+      this.mapLoaded = false;
+      this.boundsRestored = false;
     }
 
-    const container = document.getElementById(containerId);
-    if (!container) {
-      throw new Error(`Map container with id '${containerId}' not found`);
-    }
-
-    this.map = L.map(containerId, {
-      center: [42.3601, -71.0589], // Boston coordinates
+    this.map = new maplibregl.Map({
+      container: containerId,
+      style: 'assets/map-styles/dark-map.json',
+      center: [-71.0589, 42.3601],
       zoom: 10,
-      zoomControl: true,
-      preferCanvas: false
+      pitch: 45,
+      attributionControl: false
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      maxZoom: 19,
-      subdomains: ['a', 'b', 'c'],
-      tileSize: 256,
-      zoomOffset: 0
-    }).addTo(this.map);
+    this.map.addControl(new maplibregl.NavigationControl(), 'top-right');
+    this.map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
 
     this.restoreMapBounds();
     this.setupMapBoundsSaving();
 
-    // Ensure proper rendering after mount
-    setTimeout(() => { this.map?.invalidateSize(); }, 200);
-
-    return this.map;
+    this.map.on('load', () => {
+      this.map!.addSource(this.SOURCE_ROUTE, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+      this.map!.addLayer({
+        id: this.LAYER_CASING,
+        type: 'line',
+        source: this.SOURCE_ROUTE,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#ffffff', 'line-width': 10, 'line-opacity': 0.35 }
+      });
+      this.map!.addLayer({
+        id: this.LAYER_LINE,
+        type: 'line',
+        source: this.SOURCE_ROUTE,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': ['get', 'routeColor'], 'line-width': 6, 'line-opacity': 0.9 }
+      });
+      this.mapLoaded = true;
+      if (this.pendingShapes) {
+        this.applyRouteShapes(this.pendingShapes.shapes, this.pendingShapes.route);
+        this.pendingShapes = null;
+      }
+    });
   }
 
-  getMap(): L.Map | null {
+  getMap(): MaplibreMap | null {
     return this.map;
   }
 
   addVehicleMarker(vehicle: Vehicle): void {
     if (!this.map) return;
+    const markerId = vehicle.vehicleId ?? '';
+    if (!markerId) return;
 
-    const markerId = vehicle.vehicleId;
     this.vehicleData.set(markerId, vehicle);
 
-    // Remove existing marker if it exists
     const existing = this.vehicleMarkers.get(markerId);
-    if (existing) {
-      this.map.removeLayer(existing);
-    }
+    if (existing) existing.remove();
 
-    const vehicleIcon = L.divIcon({
-      className: 'vehicle-marker',
-      html: this.createVehicleMarkerHtml(vehicle, false),
-      iconSize: [20, 20],
-      iconAnchor: [10, 10]
+    const el = document.createElement('div');
+    el.innerHTML = this.createVehicleMarkerHtml(vehicle, false);
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', () => {
+      this.vehicleService.selectVehicle(markerId);
+      this.centerOnVehicle(markerId);
     });
 
-    this.originalIcons.set(markerId, vehicleIcon);
-
-    const marker = L.marker([vehicle.latitude, vehicle.longitude], {
-      icon: vehicleIcon,
-      zIndexOffset: 1000
-    }).addTo(this.map);
-
-    const isOutbound = vehicle.direction === 'Outbound';
-    const delaySeconds = vehicle.delaySeconds ?? 0;
-    const hasCriticalDelay = delaySeconds > 900;  // 15 minutes
-    const hasSevereDelay = delaySeconds >= 1800;   // 30 minutes
-
-    let tripNameClass = '';
-    let tripLabelClass = '';
-    if (hasSevereDelay) {
-      tripNameClass = 'flash-trip-name';
-      tripLabelClass = 'flash-trip-label';
-    } else if (hasCriticalDelay) {
-      tripNameClass = 'flash-trip-name';
-    }
-
-    let staleHtml = '';
-    if (vehicle.positionStale) {
-      const ageMs = Date.now() - new Date(vehicle.updatedAt).getTime();
-      const ageMin = Math.round(ageMs / 60000);
-      const movingText = vehicle.speed > 0
-        ? `moving at ${vehicle.speed.toFixed(0)} mph`
-        : 'stopped';
-      staleHtml = `<div style="color:#e65100;margin-top:4px;">&#9888; Position not reported<br>Last seen ${ageMin} min ago &mdash; ${movingText}</div>`;
-    }
-
-    const tooltipText = vehicle.tripName
-      ? `<div><strong>ID:</strong> ${vehicle.vehicleId}</div><div><strong class="${tripLabelClass}">Trip:</strong> <span class="${tripNameClass}">${vehicle.tripName}</span></div>${staleHtml}`
-      : `<div><strong>ID:</strong> ${vehicle.vehicleId}</div>${staleHtml}`;
-    marker.bindTooltip(tooltipText, {
-      permanent: true,
-      direction: isOutbound ? 'bottom' : 'top',
-      className: isOutbound ? 'vehicle-tooltip-outbound' : 'vehicle-tooltip',
-      offset: isOutbound ? [0, 10] : [0, -10],
-      interactive: false
-    });
+    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat([vehicle.longitude, vehicle.latitude])
+      .addTo(this.map);
 
     this.vehicleMarkers.set(markerId, marker);
   }
 
   updateVehicleMarkers(vehicles: Vehicle[], currentRouteId?: string | null): void {
     if (!this.map) return;
-
-    const previouslyHighlightedVehicle = this.selectedVehicleMarker
-      ? Array.from(this.vehicleMarkers.entries()).find(([, m]) => m === this.selectedVehicleMarker)?.[0]
-      : null;
 
     const currentlyTrackedVehicle = this.trackedVehicleId;
     const trackedVehicleInList = currentlyTrackedVehicle
@@ -152,7 +133,6 @@ export class MapService {
 
     if (currentlyTrackedVehicle && !trackedVehicleStillExists && this.isTrackingActive) {
       if (currentRouteId && this.trackedVehicleRouteId && currentRouteId === this.trackedVehicleRouteId) {
-        // Still on the same route — vehicle completed/left the route
         this.handleVehicleDisappeared(true);
       } else if (this.isTrackingActive) {
         this.handleVehicleDisappeared(true);
@@ -161,17 +141,9 @@ export class MapService {
       this.handleVehicleDisappeared(true);
     }
 
-    // Clear highlight overlay before refreshing markers
-    if (this.selectedVehicleMarker) {
-      this.map.removeLayer(this.selectedVehicleMarker);
-      this.selectedVehicleMarker = null;
-    }
-
-    // Replace all markers
-    this.vehicleMarkers.forEach(marker => this.map!.removeLayer(marker));
+    this.vehicleMarkers.forEach(m => m.remove());
     this.vehicleMarkers.clear();
     this.vehicleData.clear();
-    this.originalIcons.clear();
 
     vehicles.forEach(vehicle => {
       this.addVehicleMarker(vehicle);
@@ -180,39 +152,25 @@ export class MapService {
       }
     });
 
-    if (previouslyHighlightedVehicle) {
-      setTimeout(() => { this.highlightVehicleMarker(previouslyHighlightedVehicle); }, 100);
-    }
-
     if (currentlyTrackedVehicle && trackedVehicleStillExists) {
       const trackedVehicle = vehicles.find(v => v.vehicleId === currentlyTrackedVehicle);
-      if (trackedVehicle) {
-        this.lastTrackedVehicleData = { ...trackedVehicle };
-      }
+      if (trackedVehicle) this.lastTrackedVehicleData = { ...trackedVehicle };
     }
   }
 
   addRouteLayer(route: Route, shapes: Shape[]): void {
-    if (!this.map) return;
-
-    const routeId = route.id;
-
-    const existingLayer = this.routeLayers.get(routeId);
-    if (existingLayer) {
-      this.map.removeLayer(existingLayer);
+    if (!this.mapLoaded) {
+      this.pendingShapes = { shapes, route };
+      return;
     }
+    this.applyRouteShapes(shapes, route);
+  }
 
-    // 1. Drop negative-priority shapes (bus bridges, shuttles, road detours on roads).
+  private applyRouteShapes(shapes: Shape[], route: Route): void {
     const validShapes = shapes.filter(s => s.priority >= 0);
-
-    // 2. Prefer canonical shapes when the API provides them — they are the MBTA's
-    //    designated display shapes and avoid re-drawing legacy/variant duplicates.
     const canonicalShapes = validShapes.filter(s => s.id.startsWith('canonical-'));
     const candidates = canonicalShapes.length > 0 ? canonicalShapes : validShapes;
 
-    // 3. Find the maximum priority per direction_id, then keep ALL shapes that tie
-    //    at that maximum. Keeping all ties (not just one) ensures branch routes like
-    //    CR-NewBedford show every branch when they share direction_id and priority.
     const maxPriority = new Map<number, number>();
     for (const shape of candidates) {
       const current = maxPriority.get(shape.directionId) ?? -Infinity;
@@ -222,103 +180,238 @@ export class MapService {
       s => s.priority === maxPriority.get(s.directionId)
     );
 
-    shapesToDraw.forEach(shape => {
-      const coordinates = this.decodePolyline(shape.polyline);
-      if (coordinates.length === 0) return;
+    const bounds: SimpleBounds = {
+      minLat: Infinity, maxLat: -Infinity,
+      minLng: Infinity, maxLng: -Infinity
+    };
 
-      const glowPolyline = L.polyline(coordinates, {
-        color: '#ffffff',
-        weight: 10,
-        opacity: 0.6
-      }).addTo(this.map!);
+    const features = shapesToDraw.flatMap(shape => {
+      const coords = this.decodePolylineToLngLat(shape.polyline);
+      if (coords.length === 0) return [];
+      coords.forEach(([lng, lat]) => {
+        if (lat < bounds.minLat) bounds.minLat = lat;
+        if (lat > bounds.maxLat) bounds.maxLat = lat;
+        if (lng < bounds.minLng) bounds.minLng = lng;
+        if (lng > bounds.maxLng) bounds.maxLng = lng;
+      });
+      return [{
+        type: 'Feature' as const,
+        properties: { routeColor: `#${route.color}` },
+        geometry: { type: 'LineString' as const, coordinates: coords }
+      }];
+    });
 
-      const routePolyline = L.polyline(coordinates, {
-        color: `#${route.color}`,
-        weight: 6,
-        opacity: 0.9
-      }).addTo(this.map!);
-
-      this.routeLayers.set(`${routeId}-${shape.id}-glow`, glowPolyline);
-      this.routeLayers.set(`${routeId}-${shape.id}`, routePolyline);
+    this.routeBounds = bounds.minLat !== Infinity ? bounds : null;
+    (this.map!.getSource(this.SOURCE_ROUTE) as GeoJSONSource).setData({
+      type: 'FeatureCollection',
+      features
     });
   }
 
   clearRouteLayers(): void {
-    if (!this.map) return;
-    this.routeLayers.forEach(p => this.map!.removeLayer(p));
-    this.routeLayers.clear();
+    this.pendingShapes = null;
+    this.routeBounds = null;
+    if (!this.map || !this.mapLoaded) return;
+    (this.map.getSource(this.SOURCE_ROUTE) as GeoJSONSource).setData({
+      type: 'FeatureCollection',
+      features: []
+    });
   }
 
   addStationMarker(station: Station): void {
     if (!this.map) return;
-
     const markerId = station.id;
     const existing = this.stationMarkers.get(markerId);
-    if (existing) {
-      this.map.removeLayer(existing);
-    }
+    if (existing) existing.remove();
 
-    const stationIcon = L.divIcon({
-      className: 'station-marker',
-      html: this.createStationMarkerHtml(station),
-      iconSize: [24, 24],
-      iconAnchor: [12, 12]
-    });
+    const el = document.createElement('div');
+    el.innerHTML = this.createStationMarkerHtml(station);
 
-    const marker = L.marker([station.latitude, station.longitude], {
-      icon: stationIcon,
-      zIndexOffset: 0
-    }).addTo(this.map);
-
-    marker.bindPopup(`
-      <div>
-        <strong>${station.name}</strong><br>
-        Station ID: ${station.id}
-      </div>
-    `);
+    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat([station.longitude, station.latitude])
+      .addTo(this.map);
 
     this.stationMarkers.set(markerId, marker);
   }
 
   updateStationMarkers(stations: Station[]): void {
     if (!this.map) return;
-    this.stationMarkers.forEach(marker => this.map!.removeLayer(marker));
+    this.stationMarkers.forEach(m => m.remove());
     this.stationMarkers.clear();
-    stations.forEach(station => { this.addStationMarker(station); });
+
+    const bounds: SimpleBounds = {
+      minLat: Infinity, maxLat: -Infinity,
+      minLng: Infinity, maxLng: -Infinity
+    };
+
+    stations.forEach(station => {
+      this.addStationMarker(station);
+      if (station.latitude < bounds.minLat) bounds.minLat = station.latitude;
+      if (station.latitude > bounds.maxLat) bounds.maxLat = station.latitude;
+      if (station.longitude < bounds.minLng) bounds.minLng = station.longitude;
+      if (station.longitude > bounds.maxLng) bounds.maxLng = station.longitude;
+    });
+
+    this.stationBounds = stations.length > 0 ? bounds : null;
   }
 
   clearStationMarkers(): void {
     if (!this.map) return;
-    this.stationMarkers.forEach(marker => this.map!.removeLayer(marker));
+    this.stationMarkers.forEach(m => m.remove());
     this.stationMarkers.clear();
+    this.stationBounds = null;
   }
 
   fitBoundsToVehicles(vehicles: Vehicle[]): void {
     if (!this.map || vehicles.length === 0) return;
-    const bounds = L.latLngBounds(vehicles.map(v => [v.latitude, v.longitude]));
-    this.map.fitBounds(bounds, { padding: [20, 20] });
+    const lats = vehicles.map(v => v.latitude);
+    const lngs = vehicles.map(v => v.longitude);
+    this.map.fitBounds(
+      [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+      { padding: 20, pitch: 45 }
+    );
   }
 
   fitBoundsToRoute(): void {
     if (!this.map) return;
 
-    const bounds = L.latLngBounds([]);
+    let minLat = Infinity, maxLat = -Infinity;
+    let minLng = Infinity, maxLng = -Infinity;
     let hasContent = false;
 
-    this.routeLayers.forEach(p => {
-      const layerBounds = p.getBounds();
-      if (layerBounds.isValid()) { bounds.extend(layerBounds); hasContent = true; }
-    });
-
-    this.stationMarkers.forEach(marker => {
-      bounds.extend(marker.getLatLng());
+    const merge = (b: SimpleBounds) => {
+      if (b.minLat < minLat) minLat = b.minLat;
+      if (b.maxLat > maxLat) maxLat = b.maxLat;
+      if (b.minLng < minLng) minLng = b.minLng;
+      if (b.maxLng > maxLng) maxLng = b.maxLng;
       hasContent = true;
-    });
+    };
+
+    if (this.routeBounds) merge(this.routeBounds);
+    if (this.stationBounds) merge(this.stationBounds);
 
     if (hasContent) {
-      this.routeBounds = bounds;
-      this.map.fitBounds(bounds, { padding: [50, 50] });
+      this.map.fitBounds(
+        [[minLng, minLat], [maxLng, maxLat]],
+        { padding: { top: 80, bottom: 80, left: 60, right: 60 }, pitch: 45 }
+      );
     }
+  }
+
+  centerOnVehicle(vehicleId: string): void {
+    if (!this.map) return;
+    if (this.trackedVehicleId === vehicleId) {
+      this.stopVehicleTracking();
+      return;
+    }
+    if (this.trackedVehicleId !== null) this.stopVehicleTracking();
+    this.startVehicleTracking(vehicleId);
+  }
+
+  private startVehicleTracking(vehicleId: string): void {
+    if (!this.map) return;
+    const marker = this.vehicleMarkers.get(vehicleId);
+    if (!marker) return;
+
+    const center = this.map.getCenter();
+    this.previousView = { lng: center.lng, lat: center.lat, zoom: this.map.getZoom() };
+
+    const vehicle = this.vehicleData.get(vehicleId);
+    if (vehicle) {
+      this.lastTrackedVehicleData = { ...vehicle };
+      this.trackedVehicleRouteId = vehicle.routeId;
+    }
+
+    this.trackedVehicleId = vehicleId;
+    this.isTrackingActive = true;
+
+    const pos = marker.getLngLat();
+    this.map.easeTo({ center: [pos.lng, pos.lat], zoom: 15, pitch: 45 });
+
+    this.trackingInterval = setInterval(() => {
+      if (!this.map || !this.trackedVehicleId || !this.isTrackingActive) return;
+      const trackedMarker = this.vehicleMarkers.get(this.trackedVehicleId);
+      if (trackedMarker) {
+        const currentVehicle = this.vehicleData.get(this.trackedVehicleId);
+        if (currentVehicle) this.lastTrackedVehicleData = { ...currentVehicle };
+        const p = trackedMarker.getLngLat();
+        this.map.easeTo({ center: [p.lng, p.lat], zoom: 15, pitch: 45, duration: 1000 });
+      } else {
+        this.handleVehicleDisappeared(false);
+      }
+    }, 2000);
+  }
+
+  private stopVehicleTracking(): void {
+    this.isTrackingActive = false;
+    if (this.trackingInterval) {
+      clearInterval(this.trackingInterval);
+      this.trackingInterval = null;
+    }
+    if (this.map && this.previousView) {
+      this.map.easeTo({
+        center: [this.previousView.lng, this.previousView.lat],
+        zoom: this.previousView.zoom,
+        pitch: 45
+      });
+    }
+    this.trackedVehicleId = null;
+    this.trackedVehicleRouteId = null;
+    this.previousView = null;
+    this.lastTrackedVehicleData = null;
+  }
+
+  stopVehicleTrackingSilently(): void {
+    this.isTrackingActive = false;
+    if (this.trackingInterval) {
+      clearInterval(this.trackingInterval);
+      this.trackingInterval = null;
+    }
+    this.trackedVehicleId = null;
+    this.trackedVehicleRouteId = null;
+    this.lastTrackedVehicleData = null;
+  }
+
+  private handleVehicleDisappeared(premature: boolean): void {
+    if (!this.isTrackingActive || !this.trackedVehicleId || !this.lastTrackedVehicleData) return;
+    const trackedData = { ...this.lastTrackedVehicleData };
+    const vehicleId = this.trackedVehicleId;
+    const routeId = trackedData.routeId;
+    const lastUpdateTime = trackedData.updatedAt || new Date().toISOString();
+    const finalArrivalTime = trackedData.predictedArrivalTime ?? trackedData.scheduledArrivalTime;
+    this.stopVehicleTracking();
+    this.fitBoundsToRoute();
+    this.dialogService.showDialog({
+      vehicleId, routeId, completedNormally: !premature, finalArrivalTime, lastUpdateTime
+    });
+  }
+
+  highlightVehicleMarker(vehicleId: string): void {
+    if (!this.map) return;
+    if (this.highlightOverlay) {
+      this.highlightOverlay.remove();
+      this.highlightOverlay = null;
+    }
+    const marker = this.vehicleMarkers.get(vehicleId);
+    if (!marker || !this.vehicleData.get(vehicleId)) return;
+
+    const el = document.createElement('div');
+    el.innerHTML = '<div class="highlight-ring"></div>';
+
+    this.highlightOverlay = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat(marker.getLngLat())
+      .addTo(this.map);
+
+    setTimeout(() => {
+      if (this.highlightOverlay) {
+        this.highlightOverlay.remove();
+        this.highlightOverlay = null;
+      }
+    }, 2000);
+  }
+
+  wereBoundsRestored(): boolean {
+    return this.boundsRestored;
   }
 
   private createVehicleMarkerHtml(vehicle: Vehicle, isHighlighted: boolean = false): string {
@@ -329,30 +422,59 @@ export class MapService {
     const borderWidth = isHighlighted ? 3 : 2;
     const borderColor = isHighlighted ? '#FF5722' : '#ffffff';
     const opacity = vehicle.positionStale ? '0.55' : '1';
+    const isOutbound = vehicle.direction === 'Outbound';
 
     let markerBackgroundColor = vehicle.positionStale ? '#9e9e9e' : '#2196F3';
-
     if (!vehicle.positionStale) {
-      if (vehicle.delayStatus === 'minor-delay') {
-        markerBackgroundColor = '#ffc107';
-      } else if (vehicle.delayStatus === 'major-delay') {
-        markerBackgroundColor = '#dc3545';
-      }
+      if (vehicle.delayStatus === 'minor-delay') markerBackgroundColor = '#ffc107';
+      else if (vehicle.delayStatus === 'major-delay') markerBackgroundColor = '#dc3545';
     }
 
+    const delaySeconds = vehicle.delaySeconds ?? 0;
+    const hasCriticalDelay = delaySeconds > 900;
+    const hasSevereDelay = delaySeconds >= 1800;
+    let tripNameClass = '';
+    let tripLabelClass = '';
+    if (hasSevereDelay) {
+      tripNameClass = 'flash-trip-name';
+      tripLabelClass = 'flash-trip-label';
+    } else if (hasCriticalDelay) {
+      tripNameClass = 'flash-trip-name';
+    }
+
+    let staleHtml = '';
+    if (vehicle.positionStale && vehicle.updatedAt) {
+      const ageMs = Date.now() - new Date(vehicle.updatedAt).getTime();
+      const ageMin = Math.round(ageMs / 60000);
+      const movingText = speed > 0 ? `moving at ${speed.toFixed(0)} mph` : 'stopped';
+      staleHtml = `<div style="color:#e65100;margin-top:4px;">&#9888; Position not reported<br>Last seen ${ageMin} min ago &mdash; ${movingText}</div>`;
+    }
+
+    const labelContent = vehicle.tripName
+      ? `<div><strong>ID:</strong> ${vehicle.vehicleId}</div><div><strong class="${tripLabelClass}">Trip:</strong> <span class="${tripNameClass}">${vehicle.tripName}</span></div>${staleHtml}`
+      : `<div><strong>ID:</strong> ${vehicle.vehicleId}</div>${staleHtml}`;
+
+    const tooltipClass = isOutbound ? 'vehicle-tooltip-outbound' : 'vehicle-tooltip';
+    const labelPos = isOutbound
+      ? `top: calc(100% + 4px); left: 50%; transform: translateX(-50%);`
+      : `bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%);`;
+
     return `
-      <div class="vehicle-marker-container" style="transform: rotate(${rotation}deg); width: ${size}px; height: ${size}px; opacity: ${opacity};">
-        <div class="vehicle-marker-circle" style="
-          width: ${size}px;
-          height: ${size}px;
-          background-color: ${markerBackgroundColor};
-          border: ${borderWidth}px solid ${borderColor};
-          ${isHighlighted ? 'box-shadow: 0 0 10px rgba(255, 87, 34, 0.8);' : ''}
-        ">
-          ${isBus ? '' : `<div class="vehicle-marker-speed">${speed.toFixed(0)}</div>`}
+      <div style="position: relative; width: ${size}px; height: ${size}px;">
+        <div class="vehicle-marker-container" style="transform: rotate(${rotation}deg); width: ${size}px; height: ${size}px; opacity: ${opacity};">
+          <div class="vehicle-marker-circle" style="
+            width: ${size}px;
+            height: ${size}px;
+            background-color: ${markerBackgroundColor};
+            border: ${borderWidth}px solid ${borderColor};
+            ${isHighlighted ? 'box-shadow: 0 0 10px rgba(255, 87, 34, 0.8);' : ''}
+          ">
+            ${isBus ? '' : `<div class="vehicle-marker-speed">${speed.toFixed(0)}</div>`}
+          </div>
+          <div class="vehicle-marker-direction"></div>
+          ${isHighlighted ? '<div class="vehicle-marker-highlight-ring"></div>' : ''}
         </div>
-        <div class="vehicle-marker-direction"></div>
-        ${isHighlighted ? '<div class="vehicle-marker-highlight-ring"></div>' : ''}
+        <div class="${tooltipClass}" style="position: absolute; ${labelPos} pointer-events: none;">${labelContent}</div>
       </div>
     `;
   }
@@ -369,205 +491,25 @@ export class MapService {
           left: 50%;
           transform: translateX(-50%);
           font-size: 8px;
-          color: #333;
+          color: #ccc;
           font-weight: bold;
-          background: white;
+          background: rgba(20,30,40,0.85);
           padding: 1px 3px;
           border-radius: 2px;
           white-space: nowrap;
           max-width: 70px;
           overflow: hidden;
           text-overflow: ellipsis;
-          box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+          box-shadow: 0 1px 2px rgba(0,0,0,0.5);
         ">${station.name}</div>
       </div>
     `;
   }
 
-  centerOnVehicle(vehicleId: string): void {
-    if (!this.map) return;
-
-    if (this.trackedVehicleId === vehicleId) {
-      this.stopVehicleTracking();
-      return;
-    }
-
-    if (this.trackedVehicleId !== null) {
-      this.stopVehicleTracking();
-    }
-
-    this.startVehicleTracking(vehicleId);
-  }
-
-  private startVehicleTracking(vehicleId: string): void {
-    if (!this.map) return;
-
-    const marker = this.vehicleMarkers.get(vehicleId);
-    if (!marker) return;
-
-    const center = this.map.getCenter();
-    this.previousView = {
-      center: { lat: center.lat, lng: center.lng },
-      zoom: this.map.getZoom()
-    };
-
-    const vehicle = this.vehicleData.get(vehicleId);
-    if (vehicle) {
-      this.lastTrackedVehicleData = { ...vehicle };
-      this.trackedVehicleRouteId = vehicle.routeId;
-    }
-
-    this.trackedVehicleId = vehicleId;
-    this.isTrackingActive = true;
-
-    const latLng = marker.getLatLng();
-    this.map.setView(latLng, 15);
-
-    this.trackingInterval = setInterval(() => {
-      if (!this.map || !this.trackedVehicleId || !this.isTrackingActive) return;
-
-      const trackedMarker = this.vehicleMarkers.get(this.trackedVehicleId);
-      if (trackedMarker) {
-        const currentVehicle = this.vehicleData.get(this.trackedVehicleId);
-        if (currentVehicle) {
-          this.lastTrackedVehicleData = { ...currentVehicle };
-        }
-        this.map.setView(trackedMarker.getLatLng(), 15, { animate: true, duration: 1.0 });
-      } else {
-        this.handleVehicleDisappeared(false);
-      }
-    }, 2000);
-  }
-
-  private stopVehicleTracking(): void {
-    this.isTrackingActive = false;
-
-    if (this.trackingInterval) {
-      clearInterval(this.trackingInterval);
-      this.trackingInterval = null;
-    }
-
-    if (this.map && this.previousView) {
-      this.map.setView(this.previousView.center, this.previousView.zoom, { animate: true });
-    }
-
-    this.trackedVehicleId = null;
-    this.trackedVehicleRouteId = null;
-    this.previousView = null;
-    this.lastTrackedVehicleData = null;
-  }
-
-  stopVehicleTrackingSilently(): void {
-    this.isTrackingActive = false;
-
-    if (this.trackingInterval) {
-      clearInterval(this.trackingInterval);
-      this.trackingInterval = null;
-    }
-
-    this.trackedVehicleId = null;
-    this.trackedVehicleRouteId = null;
-    this.lastTrackedVehicleData = null;
-  }
-
-  private handleVehicleDisappeared(premature: boolean): void {
-    if (!this.isTrackingActive || !this.trackedVehicleId || !this.lastTrackedVehicleData) return;
-
-    const trackedData = { ...this.lastTrackedVehicleData };
-    const vehicleId = this.trackedVehicleId;
-    const routeId = trackedData.routeId;
-    const lastUpdateTime = trackedData.updatedAt || new Date().toISOString();
-    const finalArrivalTime = trackedData.predictedArrivalTime ?? trackedData.scheduledArrivalTime;
-
-    this.stopVehicleTracking();
-
-    if (this.routeBounds && this.map) {
-      this.map.fitBounds(this.routeBounds, { padding: [50, 50] });
-    } else {
-      this.fitBoundsToRoute();
-    }
-
-    this.dialogService.showDialog({
-      vehicleId,
-      routeId,
-      completedNormally: !premature,
-      finalArrivalTime,
-      lastUpdateTime
-    });
-  }
-
-  highlightVehicleMarker(vehicleId: string): void {
-    if (!this.map) return;
-
-    if (this.highlightOverlay) {
-      this.map.removeLayer(this.highlightOverlay);
-      this.highlightOverlay = null;
-    }
-
-    const marker = this.vehicleMarkers.get(vehicleId);
-    if (!marker || !this.getVehicleById(vehicleId)) return;
-
-    const highlightIcon = L.divIcon({
-      className: 'vehicle-highlight-overlay',
-      html: '<div class="highlight-ring"></div>',
-      iconSize: [40, 40],
-      iconAnchor: [20, 20]
-    });
-
-    this.highlightOverlay = L.marker(marker.getLatLng(), {
-      icon: highlightIcon,
-      interactive: false,
-      zIndexOffset: 2000
-    }).addTo(this.map);
-
-    // Auto-remove highlight after 2 seconds (fallback)
-    setTimeout(() => {
-      if (this.highlightOverlay && this.map) {
-        this.map.removeLayer(this.highlightOverlay);
-        this.highlightOverlay = null;
-      }
-    }, 2000);
-  }
-
-  private restoreOriginalMarker(marker: L.Marker): void {
-    let vehicleId: string | null = null;
-    for (const [id, m] of this.vehicleMarkers.entries()) {
-      if (m === marker) { vehicleId = id; break; }
-    }
-
-    if (vehicleId) {
-      const originalIcon = this.originalIcons.get(vehicleId);
-      if (originalIcon) {
-        marker.setIcon(originalIcon);
-      }
-    }
-
-    marker.setOpacity(1);
-    marker.setZIndexOffset(0);
-
-    const element = marker.getElement();
-    if (element) {
-      element.style.animation = '';
-    }
-
-    this.selectedVehicleMarker = null;
-  }
-
-  private getVehicleById(vehicleId: string): Vehicle | null {
-    return this.vehicleData.get(vehicleId) ?? null;
-  }
-
-  private addPulsingEffect(marker: L.Marker): void {
-    const element = marker.getElement();
-    if (element) {
-      element.style.animation = 'vehicle-pulse 1.5s ease-in-out infinite';
-    }
-  }
-
-  private decodePolyline(encoded: string): L.LatLngExpression[] {
+  private decodePolylineToLngLat(encoded: string): [number, number][] {
     try {
-      const coordinates = polyline.decode(encoded);
-      return coordinates.map((coord: [number, number]) => [coord[0], coord[1]] as L.LatLngExpression);
+      const decoded = polyline.decode(encoded);
+      return decoded.map(([lat, lng]: [number, number]) => [lng, lat]);
     } catch (error) {
       console.error('MapService: Error decoding polyline:', error);
       return [];
@@ -576,15 +518,13 @@ export class MapService {
 
   private setupMapBoundsSaving(): void {
     if (!this.map) return;
-    this.map.on('moveend', () => { this.debouncedSaveMapBounds(); });
-    this.map.on('zoomend', () => { this.debouncedSaveMapBounds(); });
+    this.map.on('moveend', () => this.debouncedSaveMapBounds());
+    this.map.on('zoomend', () => this.debouncedSaveMapBounds());
   }
 
   private debouncedSaveMapBounds(): void {
-    if (this.boundsSaveTimeout) {
-      clearTimeout(this.boundsSaveTimeout);
-    }
-    this.boundsSaveTimeout = setTimeout(() => { this.saveMapBounds(); }, this.BOUNDS_SAVE_DELAY);
+    if (this.boundsSaveTimeout) clearTimeout(this.boundsSaveTimeout);
+    this.boundsSaveTimeout = setTimeout(() => this.saveMapBounds(), this.BOUNDS_SAVE_DELAY);
   }
 
   private saveMapBounds(): void {
@@ -606,7 +546,6 @@ export class MapService {
     if (mapCenter && mapZoom !== undefined) {
       const { lat, lng } = mapCenter;
       const zoom = mapZoom;
-
       if (
         !isNaN(lat) && !isNaN(lng) && !isNaN(zoom) &&
         lat >= -90 && lat <= 90 &&
@@ -614,7 +553,7 @@ export class MapService {
         zoom >= 0 && zoom <= 19
       ) {
         this.boundsRestored = true;
-        setTimeout(() => { this.map?.setView([lat, lng], zoom); }, 300);
+        this.map.jumpTo({ center: [lng, lat], zoom });
       } else {
         this.clearMapBoundsCookies();
       }
@@ -626,9 +565,5 @@ export class MapService {
     delete currentSettings.mapCenter;
     delete currentSettings.mapZoom;
     this.cookieService.setSettingsCookie(currentSettings);
-  }
-
-  wereBoundsRestored(): boolean {
-    return this.boundsRestored;
   }
 }

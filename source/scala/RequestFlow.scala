@@ -395,7 +395,7 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
     }
   }
 
-  def fetchShapes(routeId: String): Future[Vector[ShapeInfo]] =
+  private def fetchRawShapes(routeId: String): Future[Vector[ShapeInfo]] =
     access.queueRequest(
       HttpRequest(uri = access.mbtaUri(
         path  = "/shapes",
@@ -415,10 +415,54 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
           }
         }
       case HttpResponse(code, _, entity, _) =>
-        log.error("fetchShapes({}) unexpected status: {}", routeId, code)
+        log.error("fetchRawShapes({}) unexpected status: {}", routeId, code)
         entity.discardBytes()
         Future.successful(Vector.empty)
     }
+
+  private def fetchShapeTypicality(routeId: String): Future[Map[String, Int]] =
+    access.queueRequest(
+      HttpRequest(uri = access.mbtaUri(
+        path  = "/route_patterns",
+        query = access.mbtaQuery(Map("filter[route]" -> routeId, "include" -> "representative_trip"))
+      ))
+    ).flatMap {
+      case HttpResponse(StatusCodes.OK, _, entity, _) =>
+        access.parseMbtaResponse(entity).map { resp =>
+          val included = Try(resp.getObjectList("included").asScala.toVector.map(_.toConfig)).getOrElse(Vector.empty)
+          val tripToShape: Map[String, String] = included
+            .filter(t => Try(t.getString("type")).getOrElse("") == "trip")
+            .flatMap { t =>
+              for {
+                tripId  <- Try(t.getString("id")).toOption
+                shapeId <- Try(t.getString("relationships.shape.data.id")).toOption
+              } yield tripId -> shapeId
+            }
+            .toMap
+          val patterns = Try(resp.getObjectList("data").asScala.toVector.map(_.toConfig)).getOrElse(Vector.empty)
+          patterns.flatMap { p =>
+            for {
+              typicality <- Try(p.getInt("attributes.typicality")).toOption
+              tripId     <- Try(p.getString("relationships.representative_trip.data.id")).toOption
+              shapeId    <- tripToShape.get(tripId)
+            } yield shapeId -> typicality
+          }.groupBy(_._1).view.mapValues(_.map(_._2).min).toMap
+        }
+      case HttpResponse(code, _, entity, _) =>
+        log.error("fetchShapeTypicality({}) unexpected status: {}", routeId, code)
+        entity.discardBytes()
+        Future.successful(Map.empty)
+    }
+
+  def fetchShapes(routeId: String): Future[Vector[ShapeInfo]] =
+    Source.future(fetchRawShapes(routeId))
+      .zipWith(Source.future(fetchShapeTypicality(routeId))) { (shapes, typicalityMap) =>
+        if (typicalityMap.nonEmpty)
+          shapes.filter(s => typicalityMap.get(s.id).contains(1))
+        else
+          shapes
+      }
+      .runWith(Sink.head)
 
   def fetchAlertsForRoute(routeId: String): Future[Vector[AlertInfo]] = {
     val now = System.currentTimeMillis()
