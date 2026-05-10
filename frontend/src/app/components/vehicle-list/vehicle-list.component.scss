@@ -288,3 +288,14 @@
     color: #e65100;
   }
 }
+
+.unreported {
+  color: #90a4ae;
+  user-select: none;
+}
+
+.detail-row--unreported {
+  mat-icon {
+    color: #cfd8dc;
+  }
+}

@@ -17,11 +17,13 @@ export class VehicleService {
   private selectedRouteSubject = new BehaviorSubject<string | null>(null);
   private selectedVehicleSubject = new BehaviorSubject<string | null>(null);
   private lastKnownPositions = new Map<string, {
-    latitude:  number;
-    longitude: number;
-    bearing:   number;
-    speed:     number;
-    updatedAt: string;
+    latitude:        number;
+    longitude:       number;
+    bearing:         number;
+    speed:           number;
+    bearingReported: boolean;
+    speedReported:   boolean;
+    updatedAt:       string;
   }>();
 
   public vehicles$ = this.vehiclesSubject.asObservable();
@@ -116,11 +118,13 @@ export class VehicleService {
     const result = vehicles.map(v => {
       if (v.positionValid) {
         this.lastKnownPositions.set(v.vehicleId, {
-          latitude:  v.latitude,
-          longitude: v.longitude,
-          bearing:   v.bearing,
-          speed:     v.speed,
-          updatedAt: v.updatedAt,
+          latitude:        v.latitude,
+          longitude:       v.longitude,
+          bearing:         v.bearing,
+          speed:           v.speed,
+          bearingReported: v.bearingReported ?? false,
+          speedReported:   v.speedReported ?? false,
+          updatedAt:       v.updatedAt,
         });
         return v;
       }
@@ -128,11 +132,13 @@ export class VehicleService {
       if (cached) {
         return {
           ...v,
-          latitude:  cached.latitude,
-          longitude: cached.longitude,
-          bearing:   cached.bearing,
-          speed:     cached.speed,
-          positionStale: true,
+          latitude:        cached.latitude,
+          longitude:       cached.longitude,
+          bearing:         cached.bearing,
+          speed:           cached.speed,
+          bearingReported: cached.bearingReported,
+          speedReported:   cached.speedReported,
+          positionStale:   true,
         };
       }
       return v;

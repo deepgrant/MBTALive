@@ -40,12 +40,23 @@
                   <span>{{vehicle.destination}}</span>
                 </div>
 
-                @if (!isBus(vehicle)) {
-                  <div class="detail-row">
-                    <mat-icon>speed</mat-icon>
+                <div class="detail-row" [class.detail-row--unreported]="!vehicle.speedReported">
+                  <mat-icon>speed</mat-icon>
+                  @if (vehicle.speedReported) {
                     <span>{{formatSpeed(vehicle.speed)}}</span>
-                  </div>
-                }
+                  } @else {
+                    <span class="unreported">Not Reported 🐌</span>
+                  }
+                </div>
+
+                <div class="detail-row" [class.detail-row--unreported]="!vehicle.bearingReported">
+                  <mat-icon>explore</mat-icon>
+                  @if (vehicle.bearingReported) {
+                    <span>{{vehicle.bearing}}°</span>
+                  } @else {
+                    <span class="unreported">Not Reported 🤷</span>
+                  }
+                </div>
 
                 <div class="detail-row delay-info" [ngClass]="vehicle.delayStatus || 'on-time'">
                   <mat-icon>schedule</mat-icon>
@@ -81,6 +92,13 @@
                   <mat-icon>update</mat-icon>
                   <span>{{formatTime(vehicle.updatedAt)}}</span>
                 </div>
+
+                @if (!vehicle.positionValid && !vehicle.positionStale) {
+                  <div class="detail-row detail-row--unreported">
+                    <mat-icon>my_location</mat-icon>
+                    <span class="unreported">Not Reported 👻</span>
+                  </div>
+                }
 
                 @if (vehicle.positionStale) {
                   <div class="detail-row position-stale-badge">

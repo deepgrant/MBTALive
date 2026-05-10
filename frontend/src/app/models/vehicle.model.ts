@@ -12,6 +12,8 @@ export interface Vehicle {
   updatedAt: string;
   positionValid: boolean;
   positionStale?: boolean;
+  bearingReported?: boolean;
+  speedReported?: boolean;
   routeType?: number;
   predictedArrivalTime?: string;
   scheduledArrivalTime?: string;
