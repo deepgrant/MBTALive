@@ -435,7 +435,9 @@ export class MapService {
     const borderWidth = isHighlighted ? 3 : 2;
     const borderColor = isHighlighted ? '#FF5722' : '#ffffff';
     const opacity = vehicle.positionStale ? '0.55' : '1';
-    const isOutbound = vehicle.direction === 'Outbound';
+    const isOutbound = vehicle.direction === 'Outbound'
+      || vehicle.direction === 'South'
+      || vehicle.direction === 'West';
 
     let markerBackgroundColor = vehicle.positionStale ? '#9e9e9e' : '#2196F3';
     if (!vehicle.positionStale) {
