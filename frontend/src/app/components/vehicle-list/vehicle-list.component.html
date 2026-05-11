@@ -19,10 +19,10 @@
                 <span class="vehicle-id">{{vehicle.vehicleId}}</span>
                 <div class="vehicle-status-indicators">
                   <div class="delay-indicator"
-                       [style.background-color]="getDelayColor(vehicle.delayStatus)"
-                       [title]="formatDelayTime(vehicle.delaySeconds)">
+                       [style.background-color]="fmt.getDelayColor(vehicle.delayStatus)"
+                       [title]="fmt.formatDelayTime(vehicle.delaySeconds)">
                   </div>
-                  <mat-icon class="vehicle-type-icon">{{isBus(vehicle) ? 'directions_bus' : 'train'}}</mat-icon>
+                  <mat-icon class="vehicle-type-icon">{{fmt.isBus(vehicle) ? 'directions_bus' : 'train'}}</mat-icon>
                   @if (vehicle.tripName) {
                     <span class="trip-name">{{vehicle.tripName}}</span>
                   }
@@ -43,7 +43,7 @@
                 <div class="detail-row" [class.detail-row--unreported]="!vehicle.speedReported">
                   <mat-icon>speed</mat-icon>
                   @if (vehicle.speedReported) {
-                    <span>{{formatSpeed(vehicle.speed)}}</span>
+                    <span>{{fmt.formatSpeed(vehicle.speed)}}</span>
                   } @else {
                     <span class="unreported">Not Reported 🐌</span>
                   }
@@ -60,8 +60,8 @@
 
                 <div class="detail-row delay-info" [ngClass]="vehicle.delayStatus || 'on-time'">
                   <mat-icon>schedule</mat-icon>
-                  <span [style.color]="getDelayColor(vehicle.delayStatus)">
-                    {{formatDelayTime(vehicle.delaySeconds)}}
+                  <span [style.color]="fmt.getDelayColor(vehicle.delayStatus)">
+                    {{fmt.formatDelayTime(vehicle.delaySeconds)}}
                   </span>
                 </div>
 
@@ -71,12 +71,12 @@
                     <span>
                       @if (vehicle.scheduledArrivalTime) {
                         <div class="time-info">
-                          <strong>Scheduled:</strong> {{formatTime(vehicle.scheduledArrivalTime)}}
+                          <strong>Scheduled:</strong> {{fmt.formatTime(vehicle.scheduledArrivalTime)}}
                         </div>
                       }
                       @if (vehicle.predictedArrivalTime) {
                         <div class="time-info">
-                          <strong>Predicted:</strong> {{formatTime(vehicle.predictedArrivalTime)}}
+                          <strong>Predicted:</strong> {{fmt.formatTime(vehicle.predictedArrivalTime)}}
                         </div>
                       }
                     </span>
@@ -90,7 +90,7 @@
 
                 <div class="detail-row">
                   <mat-icon>update</mat-icon>
-                  <span>{{formatTime(vehicle.updatedAt)}}</span>
+                  <span>{{fmt.formatTime(vehicle.updatedAt)}}</span>
                 </div>
 
                 @if (!vehicle.positionValid && !vehicle.positionStale) {

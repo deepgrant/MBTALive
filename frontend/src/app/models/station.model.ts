@@ -4,10 +4,3 @@ export interface Station {
   latitude: number;
   longitude: number;
 }
-
-export interface StationResponse {
-  id: string;
-  name: string;
-  latitude: number;
-  longitude: number;
-}

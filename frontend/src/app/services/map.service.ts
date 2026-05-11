@@ -7,6 +7,7 @@ import { Station } from '../models/station.model';
 import { VehicleCompletionDialogService } from './vehicle-completion-dialog.service';
 import { CookieService } from './cookie.service';
 import { VehicleService } from './vehicle.service';
+import { ROUTE_TYPE } from './vehicle-format.service';
 
 interface SimpleBounds {
   minLat: number; maxLat: number;
@@ -430,7 +431,7 @@ export class MapService {
   private createVehicleMarkerHtml(vehicle: Vehicle, isHighlighted: boolean = false): string {
     const rotation = vehicle.bearing ?? 0;
     const speed = vehicle.speed ?? 0;
-    const isBus = vehicle.routeType === 3;
+    const isBus = vehicle.routeType === ROUTE_TYPE.BUS;
     const size = isHighlighted ? 24 : 20;
     const borderWidth = isHighlighted ? 3 : 2;
     const borderColor = isHighlighted ? '#FF5722' : '#ffffff';

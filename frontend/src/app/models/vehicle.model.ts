@@ -39,7 +39,6 @@ export interface VehicleResponse {
   stopId?: string;
   tripId?: string;
   tripName?: string;
-  currentStopSequence?: number;
   timeStamp: number;
   routeType?: number;
   predictedArrivalTime?: string;
@@ -47,4 +46,7 @@ export interface VehicleResponse {
   delaySeconds?: number;
   formattedStatus?: string;
   delayStatus?: string;
+  positionValid: boolean;
+  bearingReported: boolean;
+  speedReported: boolean;
 }

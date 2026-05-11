@@ -30,7 +30,7 @@
 </div>
 
 <mat-list>
-  @for (route of getFilteredRoutes(); track route.id) {
+  @for (route of filteredRoutes; track route.id) {
     <mat-list-item
                    (click)="selectRoute(route.id)"
                    [class.selected]="selectedRoute === route.id"
@@ -44,7 +44,7 @@
           </span>
           <span class="route-long-name">{{route.long_name}}</span>
           <mat-icon class="route-type-icon">{{getRouteTypeIcon(route)}}</mat-icon>
-          @if (getAlertLevel(route.id); as level) {
+          @if (alertLevelMap.get(route.id); as level) {
             <span class="route-alert-dot" [class]="'alert-' + level" [title]="level + ' alert'"></span>
           }
         </div>

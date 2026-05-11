@@ -6,8 +6,9 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { Subscription } from 'rxjs';
 import { Route } from '../../models/route.model';
-import { Alert, AlertSeverityLevel, alertSeverityLevel } from '../../models/alert.model';
+import { Alert, AlertSeverityLevel, alertSeverityLevel, highestSeverityLevel } from '../../models/alert.model';
 import { VehicleService } from '../../services/vehicle.service';
+import { ROUTE_TYPE } from '../../services/vehicle-format.service';
 
 @Component({
     selector: 'app-routes',
@@ -23,10 +24,12 @@ import { VehicleService } from '../../services/vehicle.service';
 })
 export class RoutesComponent implements OnInit, OnDestroy {
   routes: Route[] = [];
-  allAlerts: Alert[] = [];
+  filteredRoutes: Route[] = [];
+  alertLevelMap: Map<string, AlertSeverityLevel | null> = new Map();
   selectedRoute: string | null = null;
   isRefreshing: boolean = false;
   routeTypeFilter: string = 'all';
+  private allAlerts: Alert[] = [];
   private subscriptions: Subscription[] = [];
 
   constructor(private vehicleService: VehicleService) { }
@@ -34,7 +37,11 @@ export class RoutesComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.subscriptions.push(
       this.vehicleService.routes$.subscribe({
-        next: (routes) => { this.routes = routes; },
+        next: (routes) => {
+          this.routes = routes;
+          this.updateFilteredRoutes();
+          this.updateAlertLevelMap();
+        },
         error: (error) => { console.error('RoutesComponent: Error receiving routes:', error); }
       }),
       this.vehicleService.selectedRoute$.subscribe({
@@ -42,7 +49,10 @@ export class RoutesComponent implements OnInit, OnDestroy {
         error: (error) => { console.error('RoutesComponent: Error receiving selected route:', error); }
       }),
       this.vehicleService.allAlerts$.subscribe({
-        next: (alerts) => { this.allAlerts = alerts; },
+        next: (alerts) => {
+          this.allAlerts = alerts;
+          this.updateAlertLevelMap();
+        },
         error: (error) => { console.error('RoutesComponent: Error receiving global alerts:', error); }
       })
     );
@@ -53,11 +63,7 @@ export class RoutesComponent implements OnInit, OnDestroy {
   }
 
   selectRoute(routeId: string): void {
-    if (this.selectedRoute === routeId) {
-      this.vehicleService.selectRoute(null);
-    } else {
-      this.vehicleService.selectRoute(routeId);
-    }
+    this.vehicleService.selectRoute(this.selectedRoute === routeId ? null : routeId);
   }
 
   getRouteColor(route: Route): string {
@@ -71,51 +77,53 @@ export class RoutesComponent implements OnInit, OnDestroy {
   refreshRoutes(): void {
     this.isRefreshing = true;
     this.vehicleService.refreshRoutes();
-    // Reset after animation completes
     setTimeout(() => { this.isRefreshing = false; }, 500);
-  }
-
-  getFilteredRoutes(): Route[] {
-    if (this.routeTypeFilter === 'all') {
-      return this.routes;
-    } else if (this.routeTypeFilter === 'rail') {
-      return this.routes.filter(route => route.route_type <= 2);
-    } else if (this.routeTypeFilter === 'bus') {
-      return this.routes.filter(route => route.route_type === 3);
-    }
-    return this.routes;
   }
 
   setRouteTypeFilter(type: string): void {
     this.routeTypeFilter = type;
+    this.updateFilteredRoutes();
   }
 
   getRouteTypeIcon(route: Route): string {
     switch (route.route_type) {
-      case 0: return 'tram';
-      case 1: return 'train';
-      case 2: return 'train';
-      case 3: return 'directions_bus';
-      default: return 'help';
+      case ROUTE_TYPE.LIGHT_RAIL:    return 'tram';
+      case ROUTE_TYPE.HEAVY_RAIL:    return 'train';
+      case ROUTE_TYPE.COMMUTER_RAIL: return 'train';
+      case ROUTE_TYPE.BUS:           return 'directions_bus';
+      default:                       return 'help';
     }
   }
 
   getRouteTypeLabel(route: Route): string {
     switch (route.route_type) {
-      case 0: return 'Light Rail';
-      case 1: return 'Heavy Rail';
-      case 2: return 'Commuter Rail';
-      case 3: return 'Bus';
-      default: return 'Unknown';
+      case ROUTE_TYPE.LIGHT_RAIL:    return 'Light Rail';
+      case ROUTE_TYPE.HEAVY_RAIL:    return 'Heavy Rail';
+      case ROUTE_TYPE.COMMUTER_RAIL: return 'Commuter Rail';
+      case ROUTE_TYPE.BUS:           return 'Bus';
+      default:                       return 'Unknown';
     }
   }
 
-  getAlertLevel(routeId: string): AlertSeverityLevel | null {
-    const routeAlerts = this.allAlerts.filter(a => a.routeIds?.includes(routeId));
-    if (routeAlerts.length === 0) return null;
-    const levels = routeAlerts.map(alertSeverityLevel);
-    if (levels.includes('critical')) return 'critical';
-    if (levels.includes('warning'))  return 'warning';
-    return 'info';
+  private updateFilteredRoutes(): void {
+    switch (this.routeTypeFilter) {
+      case 'rail':
+        this.filteredRoutes = this.routes.filter(r => r.route_type <= ROUTE_TYPE.COMMUTER_RAIL);
+        break;
+      case 'bus':
+        this.filteredRoutes = this.routes.filter(r => r.route_type === ROUTE_TYPE.BUS);
+        break;
+      default:
+        this.filteredRoutes = this.routes;
+    }
+  }
+
+  private updateAlertLevelMap(): void {
+    this.alertLevelMap = new Map(
+      this.routes.map(r => {
+        const routeAlerts = this.allAlerts.filter(a => a.routeIds?.includes(r.id));
+        return [r.id, highestSeverityLevel(routeAlerts)];
+      })
+    );
   }
 }

@@ -46,14 +46,11 @@ class MBTAService extends Actor with ActorLogging {
         "bearing"              -> v.bearing.toJson,
         "directionId"          -> v.directionId.toJson,
         "currentStatus"        -> v.currentStatus.toJson,
-        "currentStopSequence"  -> v.currentStopSequence.toJson,
         "latitude"             -> v.latitude.toJson,
         "longitude"            -> v.longitude.toJson,
         "speed"                -> v.speed.toJson,
         "updatedAt"            -> v.updatedAt.toJson,
         "stopName"             -> v.stopName.toJson,
-        "stopPlatformName"     -> v.stopPlatformName.toJson,
-        "stopZone"             -> v.stopZone.toJson,
         "timeStamp"            -> v.timeStamp.toJson,
         "direction"            -> v.direction.toJson,
         "destination"          -> v.destination.toJson,
@@ -62,6 +59,9 @@ class MBTAService extends Actor with ActorLogging {
         "delaySeconds"         -> v.delaySeconds.toJson,
         "formattedStatus"      -> v.formattedStatus.toJson,
         "delayStatus"          -> v.delayStatus.toJson,
+        "positionValid"        -> v.positionValid.toJson,
+        "bearingReported"      -> v.bearingReported.toJson,
+        "speedReported"        -> v.speedReported.toJson,
       )
       def read(json: JsValue): VehicleData = deserializationError("VehicleData read not supported")
     }

@@ -104,23 +104,29 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
         rawVehicles.map { r =>
           val directionId = Try(r.getInt("attributes.direction_id"))
           val tripId      = Try(r.getString("relationships.trip.data.id")).toOption
+          val bearing     = Try(r.getInt("attributes.bearing")).toOption
+          val latitude    = Try(r.getDouble("attributes.latitude")).toOption
+          val longitude   = Try(r.getDouble("attributes.longitude")).toOption
+          val speed       = Try(r.getDouble("attributes.speed")).toOption
 
           VehicleData(
-            routeId             = route.route,
-            vehicleId           = Try(r.getString("attributes.label")).toOption,
-            stopId              = Try(r.getString("relationships.stop.data.id")).toOption,
-            tripId              = tripId,
-            tripName            = tripId.flatMap(tripNameMap.get),
-            bearing             = Try(r.getInt("attributes.bearing")).toOption,
-            directionId         = directionId.toOption,
-            currentStatus       = Try(r.getString("attributes.current_status")).toOption,
-            currentStopSequence = Try(r.getInt("attributes.current_stop_sequence")).toOption,
-            latitude            = Try(r.getDouble("attributes.latitude")).toOption,
-            longitude           = Try(r.getDouble("attributes.longitude")).toOption,
-            speed               = Try(r.getDouble("attributes.speed")).toOption,
-            updatedAt           = Try(r.getString("attributes.updated_at")).toOption,
-            direction           = directionId.flatMap(id => Try(directionNames(id))).toOption,
-            destination         = directionId.flatMap(id => Try(destinationNames(id))).toOption,
+            routeId         = route.route,
+            vehicleId       = Try(r.getString("attributes.label")).toOption,
+            stopId          = Try(r.getString("relationships.stop.data.id")).toOption,
+            tripId          = tripId,
+            tripName        = tripId.flatMap(tripNameMap.get),
+            bearing         = bearing,
+            directionId     = directionId.toOption,
+            currentStatus   = Try(r.getString("attributes.current_status")).toOption,
+            latitude        = latitude,
+            longitude       = longitude,
+            speed           = speed,
+            updatedAt       = Try(r.getString("attributes.updated_at")).toOption,
+            direction       = directionId.flatMap(id => Try(directionNames(id))).toOption,
+            destination     = directionId.flatMap(id => Try(destinationNames(id))).toOption,
+            positionValid   = latitude.isDefined && longitude.isDefined,
+            bearingReported = bearing.isDefined,
+            speedReported   = speed.isDefined,
           )
         }
 
@@ -174,8 +180,6 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
           vehicle.stopId.flatMap(stopMap.get).fold(vehicle) { stop =>
             vehicle.copy(
               stopName         = stop.name,
-              stopPlatformName = stop.platformName,
-              stopZone         = stop.zone,
             )
           }
         }

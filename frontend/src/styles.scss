@@ -4,11 +4,13 @@
 @import '~maplibre-gl/dist/maplibre-gl.css';
 
 // Define MBTA color palette
-$mbta-blue: #003DA5;
+$mbta-blue:   #003DA5;
 $mbta-orange: #ED8B00;
 $mbta-purple: #80276C;
-$mbta-red: #DA291C;
-$mbta-green: #00843D;
+$mbta-red:    #DA291C;
+$mbta-green:  #00843D;
+
+$selection-highlight: #FF5722;
 
 html, body {
   height: 100%;
@@ -118,7 +120,7 @@ html, body {
 .vehicle-marker-selected {
   .vehicle-marker-circle {
     background: $mbta-orange !important;
-    border-color: #FF5722 !important;
+    border-color: $selection-highlight !important;
     box-shadow: 0 0 15px rgba(255, 87, 34, 0.8) !important;
   }
 
@@ -133,7 +135,7 @@ html, body {
   left: -6px;
   right: -6px;
   bottom: -6px;
-  border: 2px solid #FF5722;
+  border: 2px solid $selection-highlight;
   border-radius: 50%;
   animation: vehicle-pulse-ring 1.5s ease-in-out infinite;
 }
@@ -169,15 +171,15 @@ html, body {
 // Enhanced pulsing glow animation for vehicle highlighting
 @keyframes pulse-glow {
   0% {
-    box-shadow: 0 0 20px #FF5722, 0 0 40px #FF5722;
+    box-shadow: 0 0 20px $selection-highlight, 0 0 40px $selection-highlight;
     transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 30px #FF5722, 0 0 60px #FF5722, 0 0 80px #FF5722;
+    box-shadow: 0 0 30px $selection-highlight, 0 0 60px $selection-highlight, 0 0 80px $selection-highlight;
     transform: scale(1.1);
   }
   100% {
-    box-shadow: 0 0 20px #FF5722, 0 0 40px #FF5722;
+    box-shadow: 0 0 20px $selection-highlight, 0 0 40px $selection-highlight;
     transform: scale(1);
   }
 }
@@ -197,14 +199,6 @@ html, body {
   }
 }
 
-// Test highlight class for vehicle markers
-.test-highlight {
-  border: 4px solid #FF5722 !important;
-  box-shadow: 0 0 20px #FF5722, 0 0 40px #FF5722 !important;
-  animation: pulse-glow 1.5s ease-in-out infinite !important;
-  background-color: #FF5722 !important;
-  transform: scale(1.2) !important;
-}
 
 // Vehicle highlight overlay - separate from original marker
 .vehicle-highlight-overlay {
@@ -214,142 +208,76 @@ html, body {
 .highlight-ring {
   width: 40px;
   height: 40px;
-  border: 4px solid #FF5722;
+  border: 4px solid $selection-highlight;
   border-radius: 50%;
   background: transparent;
-  box-shadow: 0 0 20px #FF5722, 0 0 40px #FF5722;
+  box-shadow: 0 0 20px $selection-highlight, 0 0 40px $selection-highlight;
   animation: pulse-glow 0.8s ease-in-out infinite;
   position: relative;
 }
 
-// Vehicle tooltip styles
+// Vehicle tooltip — shared base styles
+.vehicle-tooltip,
+.vehicle-tooltip-outbound {
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+  font-weight: normal !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+  white-space: nowrap !important;
+  line-height: 1.4 !important;
+
+  strong { font-weight: bold; }
+
+  div {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    &:first-child { margin-bottom: 2px; }
+  }
+}
+
+// Inbound (dark) tooltip — label above marker
 .vehicle-tooltip {
   background: rgba(0, 0, 0, 0.8) !important;
   color: white !important;
-  border: none !important;
-  border-radius: 4px !important;
-  padding: 4px 8px !important;
-  font-size: 11px !important;
-  font-weight: normal !important;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
-  white-space: nowrap !important;
-  line-height: 1.4 !important;
 
-  strong {
-    font-weight: bold;
+  .flash-trip-name {
+    animation: flash-on-white 1s ease-in-out infinite;
   }
-
-  div {
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    
-    &:first-child {
-      margin-bottom: 2px;
-    }
+  .flash-trip-label {
+    animation: flash-label-on-white 1s ease-in-out infinite;
   }
 }
 
-.vehicle-tooltip::before {
-  border-top-color: rgba(0, 0, 0, 0.8) !important;
-}
-
-// Outbound vehicle tooltip styles (bottom positioned, white background)
+// Outbound (light) tooltip — label below marker
 .vehicle-tooltip-outbound {
   background: rgba(255, 255, 255, 0.9) !important;
   color: black !important;
-  border: none !important;
-  border-radius: 4px !important;
-  padding: 4px 8px !important;
-  font-size: 11px !important;
-  font-weight: normal !important;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
-  white-space: nowrap !important;
-  line-height: 1.4 !important;
 
-  strong {
-    font-weight: bold;
-  }
-
-  div {
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    
-    &:first-child {
-      margin-bottom: 2px;
-    }
-  }
-}
-
-.vehicle-tooltip-outbound::before {
-  border-bottom-color: rgba(255, 255, 255, 0.9) !important;
-}
-
-// Flash trip name between red and white for delays > 15 minutes
-@keyframes flash-trip-name {
-  0%, 100% {
-    color: #ff0000;
-  }
-  50% {
-    color: #ffffff;
-  }
-}
-
-// Flash trip label alternately (opposite phase to trip name) for delays > 30 minutes
-// When trip name is red, label is white; when trip name is white, label is red
-@keyframes flash-trip-label {
-  0%, 100% {
-    color: #ffffff;
-  }
-  50% {
-    color: #ff0000;
-  }
-}
-
-// For outbound tooltip (white background, black text), flash between black and red
-.vehicle-tooltip-outbound {
-  .flash-trip-label {
-    animation: flash-trip-label-outbound 1s ease-in-out infinite;
-  }
-}
-
-@keyframes flash-trip-label-outbound {
-  0%, 100% {
-    color: #000000;
-  }
-  50% {
-    color: #ff0000;
-  }
-}
-
-// Apply flashing animation to trip name and label
-.vehicle-tooltip {
   .flash-trip-name {
-    animation: flash-trip-name 1s ease-in-out infinite;
+    animation: flash-on-light 1s ease-in-out infinite;
   }
-
   .flash-trip-label {
-    animation: flash-trip-label 1s ease-in-out infinite;
+    animation: flash-label-on-light 1s ease-in-out infinite;
   }
 }
 
-// For outbound tooltip, trip name flashes between red and black (not white)
-@keyframes flash-trip-name-outbound {
-  0%, 100% {
-    color: #ff0000;
-  }
-  50% {
-    color: #000000;
-  }
+// Flash animations: trip name cycles red↔background-color; label cycles in opposite phase
+@keyframes flash-on-white {
+  0%, 100% { color: #ff0000; }
+  50%       { color: #ffffff; }
 }
-
-.vehicle-tooltip-outbound {
-  .flash-trip-name {
-    animation: flash-trip-name-outbound 1s ease-in-out infinite;
-  }
-
-  .flash-trip-label {
-    animation: flash-trip-label-outbound 1s ease-in-out infinite;
-  }
+@keyframes flash-label-on-white {
+  0%, 100% { color: #ffffff; }
+  50%       { color: #ff0000; }
+}
+@keyframes flash-on-light {
+  0%, 100% { color: #ff0000; }
+  50%       { color: #000000; }
+}
+@keyframes flash-label-on-light {
+  0%, 100% { color: #000000; }
+  50%       { color: #ff0000; }
 }

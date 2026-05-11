@@ -22,14 +22,11 @@ object ModelData {
     bearing              : Option[Int]    = None,
     directionId          : Option[Int]    = None,
     currentStatus        : Option[String] = None,
-    currentStopSequence  : Option[Int]    = None,
     latitude             : Option[Double] = None,
     longitude            : Option[Double] = None,
     speed                : Option[Double] = None,
     updatedAt            : Option[String] = None,
     stopName             : Option[String] = None,
-    stopPlatformName     : Option[String] = None,
-    stopZone             : Option[String] = None,
     timeStamp            : Long           = java.time.Instant.now().toEpochMilli(),
     direction            : Option[String] = None,
     destination          : Option[String] = None,
@@ -38,6 +35,9 @@ object ModelData {
     delaySeconds         : Option[Int]    = None,
     formattedStatus      : Option[String] = None,
     delayStatus          : Option[String] = None,
+    positionValid        : Boolean        = false,
+    bearingReported      : Boolean        = false,
+    speedReported        : Boolean        = false,
   ) extends VehicleMsg
 }
 
