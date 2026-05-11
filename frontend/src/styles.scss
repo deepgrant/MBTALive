@@ -48,6 +48,28 @@ html, body {
   }
 }
 
+// Station alert ring — pulsing orange ring overlaid on alerted station markers
+.station-alert-ring {
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 2px solid $mbta-orange;
+  box-shadow: 0 0 6px rgba(237, 139, 0, 0.7);
+  animation: station-alert-pulse 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes station-alert-pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 4px rgba(237, 139, 0, 0.7);
+  }
+  50% {
+    opacity: 0.65;
+    box-shadow: 0 0 12px rgba(237, 139, 0, 0.9);
+  }
+}
+
 // Vehicle marker styles
 .vehicle-marker {
   background: transparent;

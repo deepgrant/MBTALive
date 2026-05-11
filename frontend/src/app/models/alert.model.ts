@@ -8,6 +8,7 @@ export interface Alert {
   description?: string;
   cause?: string;
   routeIds?: string[];
+  stopIds?: string[];
 }
 
 export type AlertSeverityLevel = 'critical' | 'warning' | 'info';

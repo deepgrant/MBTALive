@@ -19,6 +19,8 @@ export class MapService {
   private mapLoaded = false;
   private vehicleMarkers: Map<string, Marker> = new Map();
   private stationMarkers: Map<string, Marker> = new Map();
+  private currentStations: Station[] = [];
+  private alertedStationIds: Set<string> = new Set();
   private highlightOverlay: Marker | null = null;
   private vehicleData: Map<string, Vehicle> = new Map();
   private trackedVehicleId: string | null = null;
@@ -225,7 +227,7 @@ export class MapService {
     if (existing) existing.remove();
 
     const el = document.createElement('div');
-    el.innerHTML = this.createStationMarkerHtml(station);
+    el.innerHTML = this.createStationMarkerHtml(station, this.alertedStationIds.has(station.id));
 
     const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
       .setLngLat([station.longitude, station.latitude])
@@ -234,7 +236,16 @@ export class MapService {
     this.stationMarkers.set(markerId, marker);
   }
 
+  updateStationAlerts(alertedStopIds: Set<string>): void {
+    this.alertedStationIds = alertedStopIds;
+    if (!this.map || this.currentStations.length === 0) return;
+    this.stationMarkers.forEach(m => m.remove());
+    this.stationMarkers.clear();
+    this.currentStations.forEach(station => this.addStationMarker(station));
+  }
+
   updateStationMarkers(stations: Station[]): void {
+    this.currentStations = stations;
     if (!this.map) return;
     this.stationMarkers.forEach(m => m.remove());
     this.stationMarkers.clear();
@@ -256,6 +267,8 @@ export class MapService {
   }
 
   clearStationMarkers(): void {
+    this.currentStations = [];
+    this.alertedStationIds = new Set();
     if (!this.map) return;
     this.stationMarkers.forEach(m => m.remove());
     this.stationMarkers.clear();
@@ -479,9 +492,13 @@ export class MapService {
     `;
   }
 
-  private createStationMarkerHtml(station: Station): string {
+  private createStationMarkerHtml(station: Station, alerted: boolean): string {
+    const alertRing = alerted
+      ? `<div class="station-alert-ring"></div>`
+      : '';
     return `
       <div style="position: relative; width: 24px; height: 24px;">
+        ${alertRing}
         <img src="assets/favicon.png"
              style="width: 24px; height: 24px; display: block;"
              alt="${station.name}">

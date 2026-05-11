@@ -534,6 +534,12 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
         Try(r.getObjectList("relationships.routes.data").asScala.toVector)
           .getOrElse(Vector.empty)
           .flatMap(obj => Try(obj.toConfig.getString("id")).toOption)
+    val stopIds: Vector[String] =
+      Try(r.getObjectList("attributes.informed_entity").asScala.toVector)
+        .getOrElse(Vector.empty)
+        .flatMap(obj => Try(obj.toConfig.getString("stop")).toOption)
+        .filter(_.nonEmpty)
+        .distinct
     AlertInfo(
       id          = r.getString("id"),
       header      = Try(r.getString("attributes.header")).getOrElse(""),
@@ -544,6 +550,7 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
       description = Try(r.getString("attributes.description")).toOption,
       cause       = Try(r.getString("attributes.cause")).toOption,
       routeIds    = routeIds,
+      stopIds     = stopIds,
     )
   }
 }

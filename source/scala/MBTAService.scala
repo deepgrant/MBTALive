@@ -71,7 +71,7 @@ class MBTAService extends Actor with ActorLogging {
         HttpEntity(ContentTypes.`application/json`, xs.toJson.compactPrint)
       }
 
-    implicit val alertInfoFormat: RootJsonFormat[AlertInfo] = jsonFormat9(AlertInfo.apply)
+    implicit val alertInfoFormat: RootJsonFormat[AlertInfo] = jsonFormat10(AlertInfo.apply)
 
     implicit val routeInfoListMarshaller:   Marshaller[Vector[RouteInfo],   HttpEntity.Strict] = jsonMarshaller[RouteInfo]
     implicit val stopInfoListMarshaller:    Marshaller[Vector[StopInfo],    HttpEntity.Strict] = jsonMarshaller[StopInfo]

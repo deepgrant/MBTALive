@@ -60,5 +60,6 @@ object ModelAPIResponse {
     description : Option[String]  = None,
     cause       : Option[String]  = None,
     routeIds    : Vector[String]  = Vector.empty,
+    stopIds     : Vector[String]  = Vector.empty,
   ) extends ModelAPIResponse
 }
