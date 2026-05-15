@@ -35,7 +35,7 @@ class MBTAService extends Actor with ActorLogging {
   object JsonProtocol extends DefaultJsonProtocol {
     implicit val routeInfoFormat:   RootJsonFormat[RouteInfo]   = jsonFormat6(RouteInfo.apply)
     implicit val stopInfoFormat:    RootJsonFormat[StopInfo]    = jsonFormat4(StopInfo.apply)
-    implicit val shapeInfoFormat:   RootJsonFormat[ShapeInfo]   = jsonFormat4(ShapeInfo.apply)
+    implicit val shapeInfoFormat:   RootJsonFormat[ShapeInfo]   = jsonFormat5(ShapeInfo.apply)
     implicit val vehicleDataFormat: RootJsonFormat[VehicleData] = new RootJsonFormat[VehicleData] {
       def write(v: VehicleData): JsValue = JsObject(
         "routeId"              -> v.routeId.toJson,

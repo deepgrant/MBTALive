@@ -12,4 +12,5 @@ export interface Shape {
   polyline: string;
   priority: number;
   directionId: number;
+  typicality: number;
 }

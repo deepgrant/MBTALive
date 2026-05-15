@@ -462,7 +462,9 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
     Source.future(fetchRawShapes(routeId))
       .zipWith(Source.future(fetchShapeTypicality(routeId))) { (shapes, typicalityMap) =>
         if (typicalityMap.nonEmpty)
-          shapes.filter(s => typicalityMap.get(s.id).contains(1))
+          shapes
+            .filter(s => typicalityMap.get(s.id).forall(_ <= 3))
+            .map(s => s.copy(typicality = typicalityMap.get(s.id).getOrElse(1)))
         else
           shapes
       }

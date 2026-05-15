@@ -38,8 +38,33 @@ export class MapService {
   private pendingShapes: { shapes: Shape[]; route: Route } | null = null;
 
   private readonly SOURCE_ROUTE = 'route-source';
-  private readonly LAYER_CASING = 'route-casing';
-  private readonly LAYER_LINE = 'route-line';
+
+  private readonly typicalityStyles = [
+    {
+      id: 1,
+      filter: ['==', ['get', 'typicality'], 1],
+      casing: { color: '#ffffff', opacity: 0.35, width: 10, dasharray: undefined as number[] | undefined },
+      line:   { opacity: 0.9,  width: 6, dasharray: undefined as number[] | undefined },
+    },
+    {
+      id: 2,
+      filter: ['==', ['get', 'typicality'], 2],
+      casing: { color: '#ffffff', opacity: 0.35, width: 8,  dasharray: [4, 3] as number[] | undefined },
+      line:   { opacity: 0.5,  width: 4, dasharray: [4, 3] as number[] | undefined },
+    },
+    {
+      id: 3,
+      filter: ['==', ['get', 'typicality'], 3],
+      casing: { color: '#808080', opacity: 0.3, width: 8,  dasharray: [4, 3] as number[] | undefined },
+      line:   { opacity: 0.3,  width: 4, dasharray: [4, 3] as number[] | undefined },
+    },
+    {
+      id: 4,
+      filter: ['>=', ['get', 'typicality'], 4],
+      casing: { color: '#bfbfbf', opacity: 0.15, width: 8, dasharray: [4, 3] as number[] | undefined },
+      line:   { opacity: 0.15, width: 4, dasharray: undefined as number[] | undefined },
+    },
+  ];
 
   constructor(
     private dialogService: VehicleCompletionDialogService,
@@ -74,20 +99,44 @@ export class MapService {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] }
       });
-      this.map!.addLayer({
-        id: this.LAYER_CASING,
-        type: 'line',
-        source: this.SOURCE_ROUTE,
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': '#ffffff', 'line-width': 10, 'line-opacity': 0.35 }
-      });
-      this.map!.addLayer({
-        id: this.LAYER_LINE,
-        type: 'line',
-        source: this.SOURCE_ROUTE,
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': ['get', 'routeColor'], 'line-width': 6, 'line-opacity': 0.9 }
-      });
+      // Add layers bottom-to-top: typicality 4 first, 1 last (most important on top).
+      // Casing and line are interleaved per level so each line sits above its own casing.
+      for (const style of [...this.typicalityStyles].sort((a, b) => b.id - a.id)) {
+        const cap = style.casing.dasharray ? 'butt' : 'round';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const casingPaint: Record<string, any> = {
+          'line-color': style.casing.color,
+          'line-width': style.casing.width,
+          'line-opacity': style.casing.opacity,
+        };
+        if (style.casing.dasharray) casingPaint['line-dasharray'] = style.casing.dasharray;
+        this.map!.addLayer({
+          id: `route-casing-${style.id}`,
+          type: 'line',
+          source: this.SOURCE_ROUTE,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          filter: style.filter as any,
+          layout: { 'line-join': 'round', 'line-cap': cap },
+          paint: casingPaint,
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const linePaint: Record<string, any> = {
+          'line-color': ['get', 'routeColor'],
+          'line-width': style.line.width,
+          'line-opacity': style.line.opacity,
+        };
+        if (style.line.dasharray) linePaint['line-dasharray'] = style.line.dasharray;
+        this.map!.addLayer({
+          id: `route-line-${style.id}`,
+          type: 'line',
+          source: this.SOURCE_ROUTE,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          filter: style.filter as any,
+          layout: { 'line-join': 'round', 'line-cap': cap },
+          paint: linePaint,
+        });
+      }
       this.mapLoaded = true;
       if (this.pendingShapes) {
         this.applyRouteShapes(this.pendingShapes.shapes, this.pendingShapes.route);
@@ -170,9 +219,7 @@ export class MapService {
   }
 
   private applyRouteShapes(shapes: Shape[], route: Route): void {
-    const validShapes = shapes.filter(s => s.priority >= 0);
-    const canonicalShapes = validShapes.filter(s => s.id.startsWith('canonical-'));
-    const candidates = canonicalShapes.length > 0 ? canonicalShapes : validShapes;
+    const candidates = shapes.filter(s => s.priority >= 0);
 
     const maxPriority = new Map<number, number>();
     for (const shape of candidates) {
@@ -199,7 +246,7 @@ export class MapService {
       });
       return [{
         type: 'Feature' as const,
-        properties: { routeColor: `#${route.color}` },
+        properties: { routeColor: `#${route.color}`, typicality: shape.typicality ?? 1 },
         geometry: { type: 'LineString' as const, coordinates: coords }
       }];
     });
