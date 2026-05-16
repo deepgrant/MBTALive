@@ -1,10 +1,8 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Observable, interval, switchMap, startWith, map, catchError } from 'rxjs';
-import { of } from 'rxjs';
+import { Observable, interval, switchMap, startWith, map, catchError, of } from 'rxjs';
 import { Vehicle, VehicleResponse } from '../models/vehicle.model';
-import { Route } from '../models/route.model';
-import { Shape } from '../models/route.model';
+import { Route, Shape } from '../models/route.model';
 import { Station } from '../models/station.model';
 import { Alert } from '../models/alert.model';
 

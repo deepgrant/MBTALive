@@ -35,11 +35,7 @@ export interface VehicleResponse {
   currentStatus?: string;
   stopName?: string;
   updatedAt?: string;
-  directionId?: number;
-  stopId?: string;
-  tripId?: string;
   tripName?: string;
-  timeStamp: number;
   routeType?: number;
   predictedArrivalTime?: string;
   scheduledArrivalTime?: string;

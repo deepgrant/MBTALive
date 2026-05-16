@@ -7,9 +7,7 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { RoutesComponent } from './components/routes/routes.component';
 import { MapComponent } from './components/map/map.component';
 import { VehicleListComponent } from './components/vehicle-list/vehicle-list.component';
-import { VehicleCompletionDialogComponent } from './components/vehicle-completion-dialog/vehicle-completion-dialog.component';
 import { VehicleService } from './services/vehicle.service';
-import { VehicleCompletionDialogService, VehicleCompletionDialogData } from './services/vehicle-completion-dialog.service';
 import { CookieService } from './services/cookie.service';
 import { AlertTickerComponent } from './components/alert-ticker/alert-ticker.component';
 import { Alert } from './models/alert.model';
@@ -26,7 +24,6 @@ import { Subscription } from 'rxjs';
         RoutesComponent,
         MapComponent,
         VehicleListComponent,
-        VehicleCompletionDialogComponent
     ],
     templateUrl: './app.component.html',
     styleUrls: ['./app.component.scss']
@@ -35,7 +32,6 @@ export class AppComponent implements OnInit, OnDestroy {
   title = 'MBTA Tracker';
   selectedRoute: string | null = null;
   routesPanelVisible = true;
-  dialogData: VehicleCompletionDialogData | null = null;
   routeAlerts: Alert[] = [];
   isMobile = signal(false);
 
@@ -47,7 +43,6 @@ export class AppComponent implements OnInit, OnDestroy {
 
   constructor(
     private vehicleService: VehicleService,
-    private dialogService: VehicleCompletionDialogService,
     private cookieService: CookieService,
     private breakpointObserver: BreakpointObserver
   ) {
@@ -84,10 +79,6 @@ export class AppComponent implements OnInit, OnDestroy {
 
       this.vehicleService.selectedRouteAlerts$.subscribe({
         next: (alerts) => { this.routeAlerts = alerts; }
-      }),
-
-      this.dialogService.dialogData$.subscribe({
-        next: (data) => { this.dialogData = data; }
       })
     );
   }
@@ -129,14 +120,9 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  onDialogClose(): void {
-    this.dialogService.closeDialog();
-  }
-
   resetToInitialState(): void {
     this.cookieService.deleteSettingsCookie();
     this.vehicleService.selectRoute(null, true);
-    this.vehicleService.selectVehicle(null);
     this.routesPanelVisible = true;
     if (this.isMobile()) {
       this.routesDrawer?.close();

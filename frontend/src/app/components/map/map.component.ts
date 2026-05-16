@@ -46,15 +46,6 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
         next: (shapes) => { this.updateMapWithShapes(shapes); },
         error: (error) => { console.error('MapComponent: Error receiving shapes:', error); }
       }),
-      this.vehicleService.selectedVehicle$.subscribe({
-        next: (vehicleId) => {
-          if (vehicleId && this.mapInitialized) {
-            // Small delay to ensure map centering has completed
-            setTimeout(() => { this.mapService.highlightVehicleMarker(vehicleId); }, 100);
-          }
-        },
-        error: (error) => { console.error('MapComponent: Error receiving selected vehicle:', error); }
-      }),
       this.vehicleService.selectedRouteAlerts$.subscribe({
         next: (alerts) => {
           this.alerts = alerts;
@@ -84,13 +75,10 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private updateMapWithVehicles(vehicles: Vehicle[]): void {
-    const routeIdFromVehicles = vehicles[0]?.routeId;
-    this.mapService.updateVehicleMarkers(vehicles, this.currentRouteId ?? routeIdFromVehicles);
+    this.mapService.updateVehicleMarkers(vehicles);
   }
 
   private handleRouteSelection(routeId: string | null): void {
-    this.mapService.stopVehicleTrackingSilently();
-
     const isRouteChange = this.currentRouteId !== null && this.currentRouteId !== routeId;
 
     this.mapService.clearRouteLayers();

@@ -11,8 +11,6 @@
       <mat-list>
         @for (vehicle of vehicles; track vehicle.vehicleId) {
           <mat-list-item
-                         (click)="selectVehicle(vehicle.vehicleId)"
-                         [class.selected]="selectedVehicle === vehicle.vehicleId"
                          [class]="'vehicle-item ' + (vehicle.delayStatus || 'on-time')">
             <div class="vehicle-info">
               <div class="vehicle-header">

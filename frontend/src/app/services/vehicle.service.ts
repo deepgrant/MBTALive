@@ -14,7 +14,6 @@ import { CookieService } from './cookie.service';
 export class VehicleService {
   private routesSubject = new BehaviorSubject<Route[]>([]);
   private selectedRouteSubject = new BehaviorSubject<string | null>(null);
-  private selectedVehicleSubject = new BehaviorSubject<string | null>(null);
   private lastKnownPositions = new Map<string, {
     latitude:        number;
     longitude:       number;
@@ -27,7 +26,6 @@ export class VehicleService {
 
   public routes$ = this.routesSubject.asObservable();
   public selectedRoute$ = this.selectedRouteSubject.asObservable();
-  public selectedVehicle$ = this.selectedVehicleSubject.asObservable();
 
   public filteredVehicles$: Observable<Vehicle[]>;
   public selectedRouteStations$: Observable<Station[]>;
@@ -149,10 +147,6 @@ export class VehicleService {
       currentSettings.selectedRoute = routeId;
       this.cookieService.setSettingsCookie(currentSettings);
     }
-  }
-
-  selectVehicle(vehicleId: string | null): void {
-    this.selectedVehicleSubject.next(vehicleId);
   }
 
   getRouteById(routeId: string): Observable<Route | undefined> {
