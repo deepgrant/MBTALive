@@ -33,6 +33,7 @@ export class MapService {
   private stationMarkers: Map<string, Marker> = new Map();
   private currentStations: Station[] = [];
   private alertedStationIds: Set<string> = new Set();
+  private delayedStationIds: Set<string> = new Set();
   private routeBounds: SimpleBounds | null = null;
   private stationBounds: SimpleBounds | null = null;
   private boundsSaveTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -240,7 +241,7 @@ export class MapService {
 
     const el = document.createElement('div');
     el.style.zIndex = '1';
-    el.innerHTML = this.createStationMarkerHtml(station, this.alertedStationIds.has(station.id));
+    el.innerHTML = this.createStationMarkerHtml(station, this.alertedStationIds.has(station.id), this.delayedStationIds.has(station.id));
 
     const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
       .setLngLat([station.longitude, station.latitude])
@@ -249,8 +250,9 @@ export class MapService {
     this.stationMarkers.set(markerId, marker);
   }
 
-  updateStationAlerts(alertedStopIds: Set<string>): void {
+  updateStationAlerts(alertedStopIds: Set<string>, delayedStopIds: Set<string> = new Set()): void {
     this.alertedStationIds = alertedStopIds;
+    this.delayedStationIds = delayedStopIds;
     if (!this.map || this.currentStations.length === 0) return;
     this.stationMarkers.forEach(m => m.remove());
     this.stationMarkers.clear();
@@ -282,6 +284,7 @@ export class MapService {
   clearStationMarkers(): void {
     this.currentStations = [];
     this.alertedStationIds = new Set();
+    this.delayedStationIds = new Set();
     if (!this.map) return;
     this.stationMarkers.forEach(m => m.remove());
     this.stationMarkers.clear();
@@ -408,13 +411,12 @@ export class MapService {
     `;
   }
 
-  private createStationMarkerHtml(station: Station, alerted: boolean): string {
-    const alertRing = alerted
-      ? `<div class="station-alert-ring"></div>`
-      : '';
+  private createStationMarkerHtml(station: Station, alerted: boolean, delayed: boolean = false): string {
+    const alertRing = alerted ? `<div class="station-alert-ring"></div>` : '';
+    const delaySquare = delayed ? `<div class="station-delay-square"></div>` : '';
     return `
       <div style="position: relative; width: 24px; height: 24px;">
-        ${alertRing}
+        ${delaySquare}${alertRing}
         <img src="assets/favicon.png"
              style="width: 24px; height: 24px; display: block;"
              alt="${station.name}">

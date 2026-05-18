@@ -49,8 +49,9 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
       this.vehicleService.selectedRouteAlerts$.subscribe({
         next: (alerts) => {
           this.alerts = alerts;
-          const alertedStopIds = new Set(alerts.flatMap(a => a.stopIds ?? []));
-          this.mapService.updateStationAlerts(alertedStopIds);
+          const alertedStopIds = new Set(alerts.filter(a => a.effect !== 'DELAY').flatMap(a => a.stopIds ?? []));
+          const delayedStopIds = new Set(alerts.filter(a => a.effect === 'DELAY').flatMap(a => a.stopIds ?? []));
+          this.mapService.updateStationAlerts(alertedStopIds, delayedStopIds);
         },
         error: (error) => { console.error('MapComponent: Error receiving alerts:', error); }
       })

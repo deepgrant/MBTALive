@@ -48,6 +48,15 @@ html, body {
   }
 }
 
+// Station delay square — dashed red square for DELAY alerts, slightly larger than the alert ring
+.station-delay-square {
+  position: absolute;
+  inset: -8px;
+  border: 2px dashed $mbta-red;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
 // Station alert ring — pulsing orange ring overlaid on alerted station markers
 .station-alert-ring {
   position: absolute;
