@@ -352,16 +352,16 @@ export class MapService {
       circleInner = '<div class="vehicle-marker-icon">🚂</div>';
     } else if (!vehicle.speedReported) {
       circleInner = '<div class="vehicle-marker-icon">🎱</div>';
-    } else if (!vehicle.bearingReported) {
-      circleInner = '<div class="vehicle-marker-icon">🧭</div>';
     } else if (!isBus) {
       circleInner = `<div class="vehicle-marker-speed">${speed.toFixed(0)}</div>`;
     } else {
       circleInner = '';
     }
 
-    // Suppress the direction arrow when bearing is unknown — no direction to show.
-    const directionArrow = vehicle.bearingReported ? '<div class="vehicle-marker-direction"></div>' : '';
+    const arrowClass = (!vehicle.bearingReported && !vehicle.positionStale)
+      ? 'vehicle-marker-direction vehicle-marker-direction-unknown'
+      : 'vehicle-marker-direction';
+    const directionArrow = `<div class="${arrowClass}"></div>`;
 
     const delaySeconds = vehicle.delaySeconds ?? 0;
     const hasCriticalDelay = delaySeconds > 900;

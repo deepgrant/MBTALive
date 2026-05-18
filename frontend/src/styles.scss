@@ -129,6 +129,15 @@ html, body {
   border-bottom: 8px solid $mbta-purple;
 }
 
+@keyframes direction-flash-red {
+  50% { border-bottom-color: transparent; }
+}
+
+.vehicle-marker-direction-unknown {
+  border-bottom-color: $mbta-red;
+  animation: direction-flash-red 1000ms step-end infinite;
+}
+
 // Vehicle tooltip — shared base styles
 .vehicle-tooltip,
 .vehicle-tooltip-outbound {
