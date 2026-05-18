@@ -157,6 +157,7 @@ export class MapService {
     if (existing) existing.remove();
 
     const el = document.createElement('div');
+    el.style.zIndex = '2';
     el.innerHTML = this.createVehicleMarkerHtml(vehicle);
 
     const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
@@ -238,6 +239,7 @@ export class MapService {
     if (existing) existing.remove();
 
     const el = document.createElement('div');
+    el.style.zIndex = '1';
     el.innerHTML = this.createStationMarkerHtml(station, this.alertedStationIds.has(station.id));
 
     const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
@@ -341,6 +343,23 @@ export class MapService {
       else if (vehicle.delayStatus === 'major-delay') markerBackgroundColor = '#dc3545';
     }
 
+    // Circle inner content — priority: stale > speed unreported > bearing unreported > speed number
+    let circleInner: string;
+    if (vehicle.positionStale) {
+      circleInner = '<div class="vehicle-marker-icon">🚂</div>';
+    } else if (!vehicle.speedReported) {
+      circleInner = '<div class="vehicle-marker-icon">🎱</div>';
+    } else if (!vehicle.bearingReported) {
+      circleInner = '<div class="vehicle-marker-icon">🧭</div>';
+    } else if (!isBus) {
+      circleInner = `<div class="vehicle-marker-speed">${speed.toFixed(0)}</div>`;
+    } else {
+      circleInner = '';
+    }
+
+    // Suppress the direction arrow when bearing is unknown — no direction to show.
+    const directionArrow = vehicle.bearingReported ? '<div class="vehicle-marker-direction"></div>' : '';
+
     const delaySeconds = vehicle.delaySeconds ?? 0;
     const hasCriticalDelay = delaySeconds > 900;
     const hasSevereDelay = delaySeconds >= 1800;
@@ -361,9 +380,10 @@ export class MapService {
       staleHtml = `<div style="color:#e65100;margin-top:4px;">&#9888; Position not reported<br>Last seen ${ageMin} min ago &mdash; ${movingText}</div>`;
     }
 
+    const pirateFlag = vehicle.positionStale ? ' 🏴‍☠️' : '';
     const labelContent = vehicle.tripName
-      ? `<div><strong>ID:</strong> ${vehicle.vehicleId}</div><div><strong class="${tripLabelClass}">Trip:</strong> <span class="${tripNameClass}">${vehicle.tripName}</span></div>${staleHtml}`
-      : `<div><strong>ID:</strong> ${vehicle.vehicleId}</div>${staleHtml}`;
+      ? `<div><strong>ID:</strong> ${vehicle.vehicleId}${pirateFlag}</div><div><strong class="${tripLabelClass}">Trip:</strong> <span class="${tripNameClass}">${vehicle.tripName}</span></div>${staleHtml}`
+      : `<div><strong>ID:</strong> ${vehicle.vehicleId}${pirateFlag}</div>${staleHtml}`;
 
     const tooltipClass = isOutbound ? 'vehicle-tooltip-outbound' : 'vehicle-tooltip';
     const labelPos = isOutbound
@@ -379,9 +399,9 @@ export class MapService {
             background-color: ${markerBackgroundColor};
             border: 2px solid #ffffff;
           ">
-            ${isBus ? '' : `<div class="vehicle-marker-speed">${speed.toFixed(0)}</div>`}
+            ${circleInner}
           </div>
-          <div class="vehicle-marker-direction"></div>
+          ${directionArrow}
         </div>
         <div class="${tooltipClass}" style="position: absolute; ${labelPos} pointer-events: none;">${labelContent}</div>
       </div>
