@@ -51,6 +51,7 @@ class MBTAService extends Actor with ActorLogging {
         "speed"                -> v.speed.toJson,
         "updatedAt"            -> v.updatedAt.toJson,
         "stopName"             -> v.stopName.toJson,
+        "platformName"         -> v.platformName.toJson,
         "timeStamp"            -> v.timeStamp.toJson,
         "direction"            -> v.direction.toJson,
         "destination"          -> v.destination.toJson,

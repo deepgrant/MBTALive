@@ -9,6 +9,7 @@ export interface Vehicle {
   destination: string;
   currentStatus: string;
   stopName: string;
+  platformName?: string;
   updatedAt: string;
   positionValid: boolean;
   positionStale?: boolean;
@@ -34,6 +35,7 @@ export interface VehicleResponse {
   destination?: string;
   currentStatus?: string;
   stopName?: string;
+  platformName?: string;
   updatedAt?: string;
   tripName?: string;
   routeType?: number;

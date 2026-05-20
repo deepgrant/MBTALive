@@ -46,6 +46,7 @@ export class ApiService {
             destination:         vehicle.destination ?? 'Unknown',
             currentStatus:       vehicle.currentStatus ?? 'Unknown',
             stopName:            vehicle.stopName ?? 'Unknown',
+            platformName:        vehicle.platformName,
             updatedAt:           vehicle.updatedAt ?? '',
             routeType:           vehicle.routeType,
             predictedArrivalTime: vehicle.predictedArrivalTime,

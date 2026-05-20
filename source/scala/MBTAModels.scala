@@ -27,6 +27,7 @@ object ModelData {
     speed                : Option[Double] = None,
     updatedAt            : Option[String] = None,
     stopName             : Option[String] = None,
+    platformName         : Option[String] = None,
     timeStamp            : Long           = java.time.Instant.now().toEpochMilli(),
     direction            : Option[String] = None,
     destination          : Option[String] = None,

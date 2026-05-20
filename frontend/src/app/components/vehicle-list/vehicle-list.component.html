@@ -86,6 +86,13 @@
                   <span>{{vehicle.formattedStatus || vehicle.currentStatus || 'Unknown'}}</span>
                 </div>
 
+                @if (vehicle.platformName) {
+                  <div class="detail-row">
+                    <mat-icon>meeting_room</mat-icon>
+                    <span>{{vehicle.platformName}}</span>
+                  </div>
+                }
+
                 <div class="detail-row">
                   <mat-icon>update</mat-icon>
                   <span>{{fmt.formatTime(vehicle.updatedAt)}}</span>

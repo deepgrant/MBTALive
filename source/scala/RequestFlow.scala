@@ -179,7 +179,8 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
         vehicles.map { vehicle =>
           vehicle.stopId.flatMap(stopMap.get).fold(vehicle) { stop =>
             vehicle.copy(
-              stopName         = stop.name,
+              stopName     = stop.name,
+              platformName = stop.platformName,
             )
           }
         }
