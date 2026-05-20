@@ -4,8 +4,10 @@ Real-time vehicle tracking for the MBTA network. Select a route in the sidebar a
 
 **Live:** https://mbta.critmind.com/
 
-<img width="2992" height="1692" alt="Screenshot 2026-05-09 at 7 31 48 PM" src="https://github.com/user-attachments/assets/3f6f1130-8155-4094-8d1a-b2410686b733" />
-<img width="2992" height="1692" alt="Screenshot 2026-05-09 at 7 32 11 PM" src="https://github.com/user-attachments/assets/25dbb7c8-eaaf-413d-a21b-4e8daf686ba0" />
+<img width="2992" height="1692" alt="Screenshot 2026-05-09 at 7 31 48 PM" src="https://github.com/user-attachments/assets/b362caaa-5c10-45db-8507-664d915f87a1" />
+<img width="2992" height="1692" alt="Screenshot 2026-05-09 at 7 32 11 PM" src="https://github.com/user-attachments/assets/6667a9b5-5522-4d42-9b92-fdbc4c95c29d" />
+<img width="2636" height="1465" alt="Screenshot 2026-05-20 at 8 38 37 AM" src="https://github.com/user-attachments/assets/aa4852e5-7a64-4a08-bc65-9b2491d2f1aa" />
+<img width="2636" height="1465" alt="Screenshot 2026-05-20 at 8 38 49 AM" src="https://github.com/user-attachments/assets/aa5c647b-815d-4ebe-934f-d6839059e915" />
 
 ## What it does
 
