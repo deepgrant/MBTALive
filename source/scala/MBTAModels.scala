@@ -22,14 +22,12 @@ object ModelData {
     bearing              : Option[Int]    = None,
     directionId          : Option[Int]    = None,
     currentStatus        : Option[String] = None,
-    currentStopSequence  : Option[Int]    = None,
     latitude             : Option[Double] = None,
     longitude            : Option[Double] = None,
     speed                : Option[Double] = None,
     updatedAt            : Option[String] = None,
     stopName             : Option[String] = None,
-    stopPlatformName     : Option[String] = None,
-    stopZone             : Option[String] = None,
+    platformName         : Option[String] = None,
     timeStamp            : Long           = java.time.Instant.now().toEpochMilli(),
     direction            : Option[String] = None,
     destination          : Option[String] = None,
@@ -38,6 +36,9 @@ object ModelData {
     delaySeconds         : Option[Int]    = None,
     formattedStatus      : Option[String] = None,
     delayStatus          : Option[String] = None,
+    positionValid        : Boolean        = false,
+    bearingReported      : Boolean        = false,
+    speedReported        : Boolean        = false,
   ) extends VehicleMsg
 }
 
@@ -48,7 +49,7 @@ object ModelAPIResponse {
 
   case class RouteInfo(id: String, long_name: String, short_name: String, color: String, text_color: String, route_type: Int) extends ModelAPIResponse
   case class StopInfo(id: String, name: String, latitude: Double, longitude: Double) extends ModelAPIResponse
-  case class ShapeInfo(id: String, polyline: String, priority: Int, directionId: Int) extends ModelAPIResponse
+  case class ShapeInfo(id: String, polyline: String, priority: Int, directionId: Int, typicality: Int = 1) extends ModelAPIResponse
 
   case class AlertInfo(
     id          : String,
@@ -60,5 +61,6 @@ object ModelAPIResponse {
     description : Option[String]  = None,
     cause       : Option[String]  = None,
     routeIds    : Vector[String]  = Vector.empty,
+    stopIds     : Vector[String]  = Vector.empty,
   ) extends ModelAPIResponse
 }

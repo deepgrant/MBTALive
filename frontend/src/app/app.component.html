@@ -90,15 +90,5 @@
 
   </mat-sidenav-container>
 
-  @if (dialogData) {
-    <app-vehicle-completion-dialog
-      [vehicleId]="dialogData.vehicleId"
-      [routeId]="dialogData.routeId"
-      [completedNormally]="dialogData.completedNormally"
-      [finalArrivalTime]="dialogData.finalArrivalTime"
-      [lastUpdateTime]="dialogData.lastUpdateTime"
-      (closed)="onDialogClose()">
-    </app-vehicle-completion-dialog>
-  }
 
 </div>

@@ -104,23 +104,29 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
         rawVehicles.map { r =>
           val directionId = Try(r.getInt("attributes.direction_id"))
           val tripId      = Try(r.getString("relationships.trip.data.id")).toOption
+          val bearing     = Try(r.getInt("attributes.bearing")).toOption
+          val latitude    = Try(r.getDouble("attributes.latitude")).toOption
+          val longitude   = Try(r.getDouble("attributes.longitude")).toOption
+          val speed       = Try(r.getDouble("attributes.speed")).toOption
 
           VehicleData(
-            routeId             = route.route,
-            vehicleId           = Try(r.getString("attributes.label")).toOption,
-            stopId              = Try(r.getString("relationships.stop.data.id")).toOption,
-            tripId              = tripId,
-            tripName            = tripId.flatMap(tripNameMap.get),
-            bearing             = Try(r.getInt("attributes.bearing")).toOption,
-            directionId         = directionId.toOption,
-            currentStatus       = Try(r.getString("attributes.current_status")).toOption,
-            currentStopSequence = Try(r.getInt("attributes.current_stop_sequence")).toOption,
-            latitude            = Try(r.getDouble("attributes.latitude")).toOption,
-            longitude           = Try(r.getDouble("attributes.longitude")).toOption,
-            speed               = Try(r.getDouble("attributes.speed")).toOption,
-            updatedAt           = Try(r.getString("attributes.updated_at")).toOption,
-            direction           = directionId.flatMap(id => Try(directionNames(id))).toOption,
-            destination         = directionId.flatMap(id => Try(destinationNames(id))).toOption,
+            routeId         = route.route,
+            vehicleId       = Try(r.getString("attributes.label")).toOption,
+            stopId          = Try(r.getString("relationships.stop.data.id")).toOption,
+            tripId          = tripId,
+            tripName        = tripId.flatMap(tripNameMap.get),
+            bearing         = bearing,
+            directionId     = directionId.toOption,
+            currentStatus   = Try(r.getString("attributes.current_status")).toOption,
+            latitude        = latitude,
+            longitude       = longitude,
+            speed           = speed,
+            updatedAt       = Try(r.getString("attributes.updated_at")).toOption,
+            direction       = directionId.flatMap(id => Try(directionNames(id))).toOption,
+            destination     = directionId.flatMap(id => Try(destinationNames(id))).toOption,
+            positionValid   = latitude.isDefined && longitude.isDefined,
+            bearingReported = bearing.isDefined,
+            speedReported   = speed.isDefined,
           )
         }
 
@@ -173,9 +179,8 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
         vehicles.map { vehicle =>
           vehicle.stopId.flatMap(stopMap.get).fold(vehicle) { stop =>
             vehicle.copy(
-              stopName         = stop.name,
-              stopPlatformName = stop.platformName,
-              stopZone         = stop.zone,
+              stopName     = stop.name,
+              platformName = stop.platformName,
             )
           }
         }
@@ -458,7 +463,9 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
     Source.future(fetchRawShapes(routeId))
       .zipWith(Source.future(fetchShapeTypicality(routeId))) { (shapes, typicalityMap) =>
         if (typicalityMap.nonEmpty)
-          shapes.filter(s => typicalityMap.get(s.id).contains(1))
+          shapes
+            .filter(s => typicalityMap.get(s.id).forall(_ <= 3))
+            .map(s => s.copy(typicality = typicalityMap.get(s.id).getOrElse(1)))
         else
           shapes
       }
@@ -534,6 +541,12 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
         Try(r.getObjectList("relationships.routes.data").asScala.toVector)
           .getOrElse(Vector.empty)
           .flatMap(obj => Try(obj.toConfig.getString("id")).toOption)
+    val stopIds: Vector[String] =
+      Try(r.getObjectList("attributes.informed_entity").asScala.toVector)
+        .getOrElse(Vector.empty)
+        .flatMap(obj => Try(obj.toConfig.getString("stop")).toOption)
+        .filter(_.nonEmpty)
+        .distinct
     AlertInfo(
       id          = r.getString("id"),
       header      = Try(r.getString("attributes.header")).getOrElse(""),
@@ -544,6 +557,7 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
       description = Try(r.getString("attributes.description")).toOption,
       cause       = Try(r.getString("attributes.cause")).toOption,
       routeIds    = routeIds,
+      stopIds     = stopIds,
     )
   }
 }

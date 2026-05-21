@@ -11,18 +11,16 @@
       <mat-list>
         @for (vehicle of vehicles; track vehicle.vehicleId) {
           <mat-list-item
-                         (click)="selectVehicle(vehicle.vehicleId)"
-                         [class.selected]="selectedVehicle === vehicle.vehicleId"
                          [class]="'vehicle-item ' + (vehicle.delayStatus || 'on-time')">
             <div class="vehicle-info">
               <div class="vehicle-header">
                 <span class="vehicle-id">{{vehicle.vehicleId}}</span>
                 <div class="vehicle-status-indicators">
                   <div class="delay-indicator"
-                       [style.background-color]="getDelayColor(vehicle.delayStatus)"
-                       [title]="formatDelayTime(vehicle.delaySeconds)">
+                       [style.background-color]="fmt.getDelayColor(vehicle.delayStatus)"
+                       [title]="fmt.formatDelayTime(vehicle.delaySeconds)">
                   </div>
-                  <mat-icon class="vehicle-type-icon">{{isBus(vehicle) ? 'directions_bus' : 'train'}}</mat-icon>
+                  <mat-icon class="vehicle-type-icon">{{fmt.isBus(vehicle) ? 'directions_bus' : 'train'}}</mat-icon>
                   @if (vehicle.tripName) {
                     <span class="trip-name">{{vehicle.tripName}}</span>
                   }
@@ -40,17 +38,28 @@
                   <span>{{vehicle.destination}}</span>
                 </div>
 
-                @if (!isBus(vehicle)) {
-                  <div class="detail-row">
-                    <mat-icon>speed</mat-icon>
-                    <span>{{formatSpeed(vehicle.speed)}}</span>
-                  </div>
-                }
+                <div class="detail-row" [class.detail-row--unreported]="!vehicle.speedReported">
+                  <mat-icon>speed</mat-icon>
+                  @if (vehicle.speedReported) {
+                    <span>{{fmt.formatSpeed(vehicle.speed)}}</span>
+                  } @else {
+                    <span class="unreported">Not Reported 🎱</span>
+                  }
+                </div>
+
+                <div class="detail-row" [class.detail-row--unreported]="!vehicle.bearingReported">
+                  <mat-icon>explore</mat-icon>
+                  @if (vehicle.bearingReported) {
+                    <span>{{vehicle.bearing}}°</span>
+                  } @else {
+                    <span class="unreported">Not Reported 🧭</span>
+                  }
+                </div>
 
                 <div class="detail-row delay-info" [ngClass]="vehicle.delayStatus || 'on-time'">
                   <mat-icon>schedule</mat-icon>
-                  <span [style.color]="getDelayColor(vehicle.delayStatus)">
-                    {{formatDelayTime(vehicle.delaySeconds)}}
+                  <span [style.color]="fmt.getDelayColor(vehicle.delayStatus)">
+                    {{fmt.formatDelayTime(vehicle.delaySeconds)}}
                   </span>
                 </div>
 
@@ -60,12 +69,12 @@
                     <span>
                       @if (vehicle.scheduledArrivalTime) {
                         <div class="time-info">
-                          <strong>Scheduled:</strong> {{formatTime(vehicle.scheduledArrivalTime)}}
+                          <strong>Scheduled:</strong> {{fmt.formatTime(vehicle.scheduledArrivalTime)}}
                         </div>
                       }
                       @if (vehicle.predictedArrivalTime) {
                         <div class="time-info">
-                          <strong>Predicted:</strong> {{formatTime(vehicle.predictedArrivalTime)}}
+                          <strong>Predicted:</strong> {{fmt.formatTime(vehicle.predictedArrivalTime)}}
                         </div>
                       }
                     </span>
@@ -77,10 +86,24 @@
                   <span>{{vehicle.formattedStatus || vehicle.currentStatus || 'Unknown'}}</span>
                 </div>
 
+                @if (vehicle.platformName) {
+                  <div class="detail-row">
+                    <mat-icon>meeting_room</mat-icon>
+                    <span>{{vehicle.platformName}}</span>
+                  </div>
+                }
+
                 <div class="detail-row">
                   <mat-icon>update</mat-icon>
-                  <span>{{formatTime(vehicle.updatedAt)}}</span>
+                  <span>{{fmt.formatTime(vehicle.updatedAt)}}</span>
                 </div>
+
+                @if (!vehicle.positionValid && !vehicle.positionStale) {
+                  <div class="detail-row detail-row--unreported">
+                    <mat-icon>my_location</mat-icon>
+                    <span class="unreported">Not Reported 👻</span>
+                  </div>
+                }
 
                 @if (vehicle.positionStale) {
                   <div class="detail-row position-stale-badge">

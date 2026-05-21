@@ -35,7 +35,7 @@ class MBTAService extends Actor with ActorLogging {
   object JsonProtocol extends DefaultJsonProtocol {
     implicit val routeInfoFormat:   RootJsonFormat[RouteInfo]   = jsonFormat6(RouteInfo.apply)
     implicit val stopInfoFormat:    RootJsonFormat[StopInfo]    = jsonFormat4(StopInfo.apply)
-    implicit val shapeInfoFormat:   RootJsonFormat[ShapeInfo]   = jsonFormat4(ShapeInfo.apply)
+    implicit val shapeInfoFormat:   RootJsonFormat[ShapeInfo]   = jsonFormat5(ShapeInfo.apply)
     implicit val vehicleDataFormat: RootJsonFormat[VehicleData] = new RootJsonFormat[VehicleData] {
       def write(v: VehicleData): JsValue = JsObject(
         "routeId"              -> v.routeId.toJson,
@@ -46,14 +46,12 @@ class MBTAService extends Actor with ActorLogging {
         "bearing"              -> v.bearing.toJson,
         "directionId"          -> v.directionId.toJson,
         "currentStatus"        -> v.currentStatus.toJson,
-        "currentStopSequence"  -> v.currentStopSequence.toJson,
         "latitude"             -> v.latitude.toJson,
         "longitude"            -> v.longitude.toJson,
         "speed"                -> v.speed.toJson,
         "updatedAt"            -> v.updatedAt.toJson,
         "stopName"             -> v.stopName.toJson,
-        "stopPlatformName"     -> v.stopPlatformName.toJson,
-        "stopZone"             -> v.stopZone.toJson,
+        "platformName"         -> v.platformName.toJson,
         "timeStamp"            -> v.timeStamp.toJson,
         "direction"            -> v.direction.toJson,
         "destination"          -> v.destination.toJson,
@@ -62,6 +60,9 @@ class MBTAService extends Actor with ActorLogging {
         "delaySeconds"         -> v.delaySeconds.toJson,
         "formattedStatus"      -> v.formattedStatus.toJson,
         "delayStatus"          -> v.delayStatus.toJson,
+        "positionValid"        -> v.positionValid.toJson,
+        "bearingReported"      -> v.bearingReported.toJson,
+        "speedReported"        -> v.speedReported.toJson,
       )
       def read(json: JsValue): VehicleData = deserializationError("VehicleData read not supported")
     }
@@ -71,7 +72,7 @@ class MBTAService extends Actor with ActorLogging {
         HttpEntity(ContentTypes.`application/json`, xs.toJson.compactPrint)
       }
 
-    implicit val alertInfoFormat: RootJsonFormat[AlertInfo] = jsonFormat9(AlertInfo.apply)
+    implicit val alertInfoFormat: RootJsonFormat[AlertInfo] = jsonFormat10(AlertInfo.apply)
 
     implicit val routeInfoListMarshaller:   Marshaller[Vector[RouteInfo],   HttpEntity.Strict] = jsonMarshaller[RouteInfo]
     implicit val stopInfoListMarshaller:    Marshaller[Vector[StopInfo],    HttpEntity.Strict] = jsonMarshaller[StopInfo]

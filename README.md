@@ -4,8 +4,10 @@ Real-time vehicle tracking for the MBTA network. Select a route in the sidebar a
 
 **Live:** https://mbta.critmind.com/
 
-<img width="2992" height="1692" alt="Screenshot 2026-05-09 at 7 31 48 PM" src="https://github.com/user-attachments/assets/3f6f1130-8155-4094-8d1a-b2410686b733" />
-<img width="2992" height="1692" alt="Screenshot 2026-05-09 at 7 32 11 PM" src="https://github.com/user-attachments/assets/25dbb7c8-eaaf-413d-a21b-4e8daf686ba0" />
+<table><tr>
+<td><img height="350" alt="Screenshot 2026-05-20 at 8 18 29 PM" src="https://github.com/user-attachments/assets/e528cea6-18cd-4808-b04f-f961cc1a8e24" /></td>
+<td><img height="350" alt="iPhone17 Safari" src="https://github.com/user-attachments/assets/9a4abbe6-0573-41b8-a104-2ddcd56075c0" /></td>
+</tr></table>
 
 ## What it does
 
@@ -25,7 +27,9 @@ You need JDK 17+, Node.js 20+, and npm.
 ./gradlew run
 
 # Terminal 2 — frontend dev server on http://localhost:4200
-cd frontend && npm start
+# Updates to frontend files are automatically recompiled and the UI updated.
+cd frontend
+ng serve --proxy-config proxy.conf.json --host=0.0.0.0
 ```
 
 The backend generates a self-signed TLS certificate at startup using Bouncy Castle — no keystore file or external `keytool` step needed. The dev proxy (`frontend/proxy.conf.json`) forwards `/api/**` to `https://localhost:8443` with certificate validation disabled (`secure: false`), so no CORS config is needed locally.

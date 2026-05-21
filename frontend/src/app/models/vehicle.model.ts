@@ -9,9 +9,12 @@ export interface Vehicle {
   destination: string;
   currentStatus: string;
   stopName: string;
+  platformName?: string;
   updatedAt: string;
   positionValid: boolean;
   positionStale?: boolean;
+  bearingReported?: boolean;
+  speedReported?: boolean;
   routeType?: number;
   predictedArrivalTime?: string;
   scheduledArrivalTime?: string;
@@ -32,17 +35,16 @@ export interface VehicleResponse {
   destination?: string;
   currentStatus?: string;
   stopName?: string;
+  platformName?: string;
   updatedAt?: string;
-  directionId?: number;
-  stopId?: string;
-  tripId?: string;
   tripName?: string;
-  currentStopSequence?: number;
-  timeStamp: number;
   routeType?: number;
   predictedArrivalTime?: string;
   scheduledArrivalTime?: string;
   delaySeconds?: number;
   formattedStatus?: string;
   delayStatus?: string;
+  positionValid: boolean;
+  bearingReported: boolean;
+  speedReported: boolean;
 }
