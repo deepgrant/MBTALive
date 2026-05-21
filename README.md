@@ -27,7 +27,9 @@ You need JDK 17+, Node.js 20+, and npm.
 ./gradlew run
 
 # Terminal 2 — frontend dev server on http://localhost:4200
-cd frontend && npm start
+# Updates to frontend files are automatically recompiled and the UI updated.
+cd frontend
+ng serve --proxy-config proxy.conf.json --host=0.0.0.0
 ```
 
 The backend generates a self-signed TLS certificate at startup using Bouncy Castle — no keystore file or external `keytool` step needed. The dev proxy (`frontend/proxy.conf.json`) forwards `/api/**` to `https://localhost:8443` with certificate validation disabled (`secure: false`), so no CORS config is needed locally.
