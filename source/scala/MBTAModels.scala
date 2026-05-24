@@ -63,4 +63,42 @@ object ModelAPIResponse {
     routeIds    : Vector[String]  = Vector.empty,
     stopIds     : Vector[String]  = Vector.empty,
   ) extends ModelAPIResponse
+
+  case class BoardStopInfo(
+    id:          String,
+    name:        String,
+    latitude:    Double,
+    longitude:   Double,
+    directionId: Int,
+    sequence:    Int,
+  ) extends ModelAPIResponse
+
+  case class StopPrediction(
+    stopId:        String,
+    stopName:      String,
+    sequence:      Int,
+    predictedTime: Option[String],
+    scheduledTime: Option[String],
+    status:        String,
+  ) extends ModelAPIResponse
+
+  case class TrainBoardData(
+    vehicleId:           String,
+    tripId:              Option[String],
+    tripName:            Option[String],
+    directionId:         Option[Int],
+    direction:           Option[String],
+    currentStopId:       Option[String],
+    currentStopSequence: Int,
+    delaySeconds:        Option[Int],
+    delayStatus:         Option[String],
+    predictions:         Vector[StopPrediction],
+  ) extends ModelAPIResponse
+
+  case class RouteBoardData(
+    routeId:       String,
+    inboundStops:  Vector[BoardStopInfo],
+    outboundStops: Vector[BoardStopInfo],
+    trains:        Vector[TrainBoardData],
+  ) extends ModelAPIResponse
 }

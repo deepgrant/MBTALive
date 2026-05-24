@@ -307,6 +307,138 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
     if (sortOrder.toLowerCase == "asc") sorted else sorted.reverse
   }
 
+  // ── Board Data ────────────────────────────────────────────────────────────
+
+  private def fetchOrderedStops(routeId: String, directionId: Int): Future[Vector[BoardStopInfo]] =
+    access.queueRequest(
+      HttpRequest(uri = access.mbtaUri(
+        path  = "/stops",
+        query = access.mbtaQuery(Map(
+          "filter[route]"        -> routeId,
+          "filter[direction_id]" -> directionId.toString,
+        ))
+      ))
+    ).flatMap {
+      case HttpResponse(StatusCodes.OK, _, entity, _) =>
+        access.parseMbtaResponse(entity).map { response =>
+          response.getObjectList("data").asScala.toVector.zipWithIndex.map { case (stop, idx) =>
+            val s = stop.toConfig
+            BoardStopInfo(
+              id          = s.getString("id"),
+              name        = s.getString("attributes.name"),
+              latitude    = Try(s.getDouble("attributes.latitude")).getOrElse(0.0),
+              longitude   = Try(s.getDouble("attributes.longitude")).getOrElse(0.0),
+              directionId = directionId,
+              sequence    = idx,
+            )
+          }
+        }
+      case HttpResponse(code, _, entity, _) =>
+        log.error("fetchOrderedStops({}, {}) unexpected status: {}", routeId, directionId, code)
+        entity.discardBytes()
+        Future.successful(Vector.empty)
+    }
+
+  private def fetchTripPredictions(tripId: String, stopsForDir: Vector[BoardStopInfo]): Future[Vector[StopPrediction]] = {
+    val stopSeqMap  = stopsForDir.map(s => s.id -> s.sequence).toMap
+    val stopNameMap = stopsForDir.map(s => s.id -> s.name).toMap
+
+    access.queueRequest(
+      HttpRequest(uri = access.mbtaUri(
+        path  = "/predictions",
+        query = access.mbtaQuery(Map(
+          "filter[trip]" -> tripId,
+          "include"      -> "stop,schedule",
+          "sort"         -> "stop_sequence",
+        ))
+      ))
+    ).flatMap {
+      case HttpResponse(StatusCodes.OK, _, entity, _) =>
+        access.parseMbtaResponse(entity).map { resp =>
+          val included = Try(resp.getObjectList("included").asScala.toVector.map(_.toConfig)).getOrElse(Vector.empty)
+
+          // Predictions reference child stop IDs (e.g. "70031"); ordered stops use parent
+          // place IDs (e.g. "place-welln"). Map child → parent via included stop objects.
+          val childToParent: Map[String, String] = included
+            .filter(r => Try(r.getString("type")).getOrElse("") == "stop")
+            .flatMap { s =>
+              for {
+                childId  <- Try(s.getString("id")).toOption
+                parentId <- Try(s.getString("relationships.parent_station.data.id")).toOption
+              } yield childId -> parentId
+            }
+            .toMap
+
+          val scheduleMap = included
+            .filter(r => Try(r.getString("type")).getOrElse("") == "schedule")
+            .flatMap(s => Try(s.getString("id")).toOption.map(_ -> s))
+            .toMap
+
+          Try(resp.getObjectList("data").asScala.toVector.map(_.toConfig))
+            .getOrElse(Vector.empty)
+            .flatMap { pred =>
+              for {
+                childStopId <- Try(pred.getString("relationships.stop.data.id")).toOption
+                placeId      = childToParent.getOrElse(childStopId, childStopId)
+                sequence    <- stopSeqMap.get(placeId)
+              } yield StopPrediction(
+                stopId        = placeId,
+                stopName      = stopNameMap.getOrElse(placeId, placeId),
+                sequence      = sequence,
+                predictedTime = Try(pred.getString("attributes.arrival_time")).toOption,
+                scheduledTime = Try(pred.getString("relationships.schedule.data.id")).toOption
+                                  .flatMap(scheduleMap.get)
+                                  .flatMap(s => Try(s.getString("attributes.arrival_time")).toOption),
+                status        = "upcoming",
+              )
+            }
+            .sortBy(_.sequence)
+        }
+      case HttpResponse(code, _, entity, _) =>
+        log.error("fetchTripPredictions({}) unexpected status: {}", tripId, code)
+        entity.discardBytes()
+        Future.successful(Vector.empty)
+    }
+  }
+
+  def fetchBoardData(routeId: String): Future[RouteBoardData] = {
+    val vehiclesFut = fetchVehiclesForRoute(routeId)
+    val inboundFut  = fetchOrderedStops(routeId, 1)
+    val outboundFut = fetchOrderedStops(routeId, 0)
+
+    for {
+      vehicles      <- vehiclesFut
+      inboundStops  <- inboundFut
+      outboundStops <- outboundFut
+      trains        <- {
+        val active = vehicles.filter(_.tripId.isDefined)
+        Source(active)
+          .mapAsync(parallelism = 4) { v =>
+            val stopsForDir = if (v.directionId.getOrElse(0) == 1) inboundStops else outboundStops
+            v.tripId.fold(Future.successful(Option.empty[TrainBoardData])) { tripId =>
+              fetchTripPredictions(tripId, stopsForDir).map { preds =>
+                val minSeq = if (preds.nonEmpty) preds.map(_.sequence).min else 0
+                Some(TrainBoardData(
+                  vehicleId           = v.vehicleId.getOrElse(""),
+                  tripId              = v.tripId,
+                  tripName            = v.tripName,
+                  directionId         = v.directionId,
+                  direction           = v.direction,
+                  currentStopId       = v.stopId,
+                  currentStopSequence = minSeq,
+                  delaySeconds        = v.delaySeconds,
+                  delayStatus         = v.delayStatus,
+                  predictions         = preds,
+                ))
+              }
+            }
+          }
+          .runWith(Sink.seq)
+          .map(_.flatten.toVector)
+      }
+    } yield RouteBoardData(routeId, inboundStops, outboundStops, trains)
+  }
+
   // ── Public API ────────────────────────────────────────────────────────────
 
   private def fetchFromMbta(routeId: String): Future[Vector[VehicleData]] = {
