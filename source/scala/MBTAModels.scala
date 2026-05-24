@@ -88,6 +88,7 @@ object ModelAPIResponse {
     tripName:            Option[String],
     directionId:         Option[Int],
     direction:           Option[String],
+    destination:         Option[String],
     currentStopId:       Option[String],
     currentStopSequence: Int,
     delaySeconds:        Option[Int],

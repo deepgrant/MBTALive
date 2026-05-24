@@ -76,7 +76,7 @@ class MBTAService extends Actor with ActorLogging {
 
     implicit val boardStopInfoFormat:  RootJsonFormat[BoardStopInfo]  = jsonFormat6(BoardStopInfo.apply)
     implicit val stopPredictionFormat: RootJsonFormat[StopPrediction] = jsonFormat6(StopPrediction.apply)
-    implicit val trainBoardDataFormat: RootJsonFormat[TrainBoardData] = jsonFormat10(TrainBoardData.apply)
+    implicit val trainBoardDataFormat: RootJsonFormat[TrainBoardData] = jsonFormat11(TrainBoardData.apply)
     implicit val routeBoardDataFormat: RootJsonFormat[RouteBoardData] = jsonFormat4(RouteBoardData.apply)
 
     implicit val routeBoardDataMarshaller: Marshaller[RouteBoardData, HttpEntity.Strict] =
