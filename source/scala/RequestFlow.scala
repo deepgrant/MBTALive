@@ -17,6 +17,11 @@ import pekko.NotUsed
 import pekko.stream.{Materializer, SystemMaterializer}
 import pekko.stream.scaladsl.{Flow, Sink, Source}
 
+object RequestFlow {
+  sealed trait T
+  case class BoardData(vehicles: Vector[VehicleData], inboundStops: Vector[BoardStopInfo], outboundStops: Vector[BoardStopInfo]) extends T
+}
+
 class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: LoggingAdapter) {
   private implicit val ec:  ExecutionContext = system.dispatcher
   private implicit val mat: Materializer    = SystemMaterializer(system).materializer
@@ -402,41 +407,48 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
   }
 
   def fetchBoardData(routeId: String): Future[RouteBoardData] = {
-    val vehiclesFut = fetchVehiclesForRoute(routeId)
-    val inboundFut  = fetchOrderedStops(routeId, 1)
-    val outboundFut = fetchOrderedStops(routeId, 0)
-
-    for {
-      vehicles      <- vehiclesFut
-      inboundStops  <- inboundFut
-      outboundStops <- outboundFut
-      trains        <- {
-        val active = vehicles.filter(_.tripId.isDefined)
-        Source(active)
-          .mapAsync(parallelism = 4) { v =>
-            val stopsForDir = if (v.directionId.getOrElse(0) == 1) inboundStops else outboundStops
-            v.tripId.fold(Future.successful(Option.empty[TrainBoardData])) { tripId =>
-              fetchTripPredictions(tripId, stopsForDir).map { preds =>
-                val minSeq = if (preds.nonEmpty) preds.map(_.sequence).min else 0
-                Some(TrainBoardData(
-                  vehicleId           = v.vehicleId.getOrElse(""),
-                  tripId              = v.tripId,
-                  tripName            = v.tripName,
-                  directionId         = v.directionId,
-                  direction           = v.direction,
-                  currentStopId       = v.stopId,
-                  currentStopSequence = minSeq,
-                  delaySeconds        = v.delaySeconds,
-                  delayStatus         = v.delayStatus,
-                  predictions         = preds,
-                ))
-              }
-            }
+    Source
+      .future(fetchVehiclesForRoute(routeId))
+      .mapAsync(parallelism = 1) { vehicles =>
+        fetchOrderedStops(routeId, 1).flatMap { inboundStops =>
+          fetchOrderedStops(routeId, 0).map { outboundStops =>
+            RequestFlow.BoardData(vehicles, inboundStops, outboundStops)
           }
-          .runWith(Sink.seq)
-          .map(_.flatten.toVector)
+        }
       }
-    } yield RouteBoardData(routeId, inboundStops, outboundStops, trains)
+      .mapAsync(parallelism = 1) { 
+        case RequestFlow.BoardData(vehicles, inboundStops, outboundStops) => {
+          Source(vehicles)
+            .collect { case v if v.tripId.isDefined => (v, v.tripId.get) }
+            .mapAsync(parallelism = 4) { case (v, tripId) =>
+              val stopsForDir = if (v.directionId.getOrElse(0) == 1) inboundStops else outboundStops
+                fetchTripPredictions(tripId, stopsForDir).map { preds =>
+                  val minSeq = if (preds.nonEmpty) preds.map(_.sequence).min else 0
+                  TrainBoardData(
+                    vehicleId           = v.vehicleId.getOrElse(""),
+                    tripId              = v.tripId,
+                    tripName            = v.tripName,
+                    directionId         = v.directionId,
+                    direction           = v.direction,
+                    currentStopId       = v.stopId,
+                    currentStopSequence = minSeq,
+                    delaySeconds        = v.delaySeconds,
+                    delayStatus         = v.delayStatus,
+                    predictions         = preds,
+                  )
+                }
+            }
+            .runWith(Sink.seq)
+            .map { tdb =>
+              RouteBoardData(routeId, inboundStops, outboundStops, tdb.toVector)
+            }
+        }
+      }
+      .runWith(Sink.head)
+      .recoverWith { case e: Throwable => 
+        log.error("fetchBoardData({}) unexpected error: {}", routeId, e)
+        Future.failed(e) 
+      }
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
