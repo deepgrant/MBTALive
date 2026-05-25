@@ -1,24 +1,23 @@
-<div class="board-root">
+@if (loading && !boardData) {
+  <div class="status-msg">Loading…</div>
+}
 
-  @if (loading && !boardData) {
-    <div class="status-msg">Loading…</div>
-  }
-
-  <!-- Station list picker (no station selected yet) -->
-  @if (boardData && !selectedStation) {
-    <div class="station-picker-view">
-      <div class="station-picker-title">Select a boarding station</div>
-      <div class="station-picker-list">
-        @for (station of stationList; track station) {
-          <button class="station-item" (click)="onStationChange(station)">
-            {{ station }}
-          </button>
-        }
-      </div>
+<!-- Station list picker — direct :host child so height:100% resolves correctly -->
+@if (boardData && !selectedStation) {
+  <div class="station-picker-view">
+    <div class="station-picker-title">Select a boarding station</div>
+    <div class="station-picker-list">
+      @for (station of stationList; track station) {
+        <button class="station-item" (click)="onStationChange(station)">
+          {{ station }}
+        </button>
+      }
     </div>
-  }
+  </div>
+}
 
-  @if (boardData && selectedStation) {
+@if (boardData && selectedStation) {
+<div class="board-root">
 
     <!-- Compact station bar with direction toggle and change button -->
     <div class="station-bar">
@@ -235,6 +234,5 @@
       <div class="li"><div class="ld" style="background: #63b3ed"></div>Early</div>
     </div>
 
-  }
-
 </div>
+}
