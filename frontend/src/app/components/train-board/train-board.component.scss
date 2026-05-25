@@ -16,10 +16,55 @@
   font-size: 14px;
 }
 
-// ── Station picker ────────────────────────────────────────────────────────────
+// ── Station list picker (full-screen, no station selected) ────────────────────
 
-.station-picker {
-  padding: 10px 12px;
+.station-picker-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0f1117;
+}
+
+.station-picker-title {
+  padding: 16px 16px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: #ED8B00;
+  border-bottom: 1px solid #1a202c;
+  flex-shrink: 0;
+}
+
+.station-picker-list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.station-item {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  text-align: right;
+  font-size: 14px;
+  color: #e2e8f0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #1a202c;
+  cursor: pointer;
+  font-family: inherit;
+
+  &:active { background: rgba(255, 255, 255, .05); }
+}
+
+// ── Station bar (compact, shown when station is selected) ─────────────────────
+
+.station-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
   background: #0f1117;
   border-bottom: 1px solid #1a202c;
   position: sticky;
@@ -27,31 +72,54 @@
   z-index: 20;
 }
 
-.station-select {
-  width: 100%;
-  background: #161b22;
-  color: #e2e8f0;
+.station-bar-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ED8B00;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+.dir-toggle {
+  display: flex;
+  background: #1a202c;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
   border: 1px solid #2d3748;
-  border-radius: 8px;
-  padding: 9px 12px;
-  font-size: 14px;
+}
+
+.dir-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  color: #4a5568;
+  background: none;
+  border: none;
+  cursor: pointer;
   font-family: inherit;
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234a5568' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  padding-right: 32px;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 
-  &:focus {
-    outline: none;
-    border-color: #4a90d9;
+  &.active {
+    background: #2d3748;
+    color: #90cdf4;
   }
+}
 
-  option {
-    background: #1a202c;
-    color: #e2e8f0;
-  }
+.station-bar-change {
+  font-size: 11px;
+  color: #4a5568;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 2px 4px;
+
+  &:active { color: #a0aec0; }
 }
 
 // ── Status / hint messages ────────────────────────────────────────────────────
@@ -61,18 +129,6 @@
   color: #4a5568;
   font-size: 13px;
   text-align: center;
-}
-
-.pick-hint {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 24px 16px;
-  color: #4a5568;
-  font-size: 13px;
-
-  svg { color: #2d3748; flex-shrink: 0; }
 }
 
 .no-trains {
@@ -158,9 +214,6 @@
   justify-content: space-between;
   border-bottom: 1px solid #2d3748;
   border-top: 1px solid #0d1117;
-  position: sticky;
-  top: 45px;
-  z-index: 5;
 }
 
 .sec-dir {
@@ -195,6 +248,25 @@
 .dots {
   letter-spacing: 3px;
   color: #2d3748;
+}
+
+// ── Selected-station row highlight ───────────────────────────────────────────
+
+.gc-sel {
+  background: rgba(237, 139, 0, .09);
+
+  &.gc-st { color: #ED8B00; font-weight: 700; }
+}
+
+// ── Grid scroll container ─────────────────────────────────────────────────────
+
+.grid-scroll {
+  max-height: 42vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
 }
 
 // ── Schedule grid ─────────────────────────────────────────────────────────────

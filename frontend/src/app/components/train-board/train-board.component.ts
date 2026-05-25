@@ -27,6 +27,7 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
 
   boardData: RouteBoardData | null = null;
   selectedStation: string | null = null;
+  selectedDirection: 'inbound' | 'outbound' = 'inbound';
   loading = false;
 
   private routeId$ = new Subject<string | null>();
@@ -117,20 +118,14 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
 
   // ── Stop rows ─────────────────────────────────────────────────────────────
 
-  get inboundStopsBeforeStation(): BoardStopInfo[] {
-    const sel = this.selectedInboundStop;
-    if (!sel || !this.boardData) return [];
-    return this.boardData.inboundStops
-      .filter(s => s.sequence < sel.sequence)
-      .sort((a, b) => a.sequence - b.sequence);
+  get inboundAllStops(): BoardStopInfo[] {
+    if (!this.boardData) return [];
+    return [...this.boardData.inboundStops].sort((a, b) => a.sequence - b.sequence);
   }
 
-  get outboundStopsAfterStation(): BoardStopInfo[] {
-    const sel = this.selectedOutboundStop;
-    if (!sel || !this.boardData) return [];
-    return this.boardData.outboundStops
-      .filter(s => s.sequence > sel.sequence)
-      .sort((a, b) => a.sequence - b.sequence);
+  get outboundAllStops(): BoardStopInfo[] {
+    if (!this.boardData) return [];
+    return [...this.boardData.outboundStops].sort((a, b) => a.sequence - b.sequence);
   }
 
   // ── Grid column templates ─────────────────────────────────────────────────
@@ -169,6 +164,14 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
 
   get outboundTrainNames(): string {
     return this.approachingOutbound.map(t => '#' + (t.tripName ?? t.vehicleId)).join(' · ');
+  }
+
+  get inboundDirectionName(): string {
+    return this.boardData?.trains.find(t => t.directionId === 1 && t.direction)?.direction ?? 'Inbound';
+  }
+
+  get outboundDirectionName(): string {
+    return this.boardData?.trains.find(t => t.directionId === 0 && t.direction)?.direction ?? 'Outbound';
   }
 
   // ── Cell helpers ──────────────────────────────────────────────────────────
