@@ -6,6 +6,7 @@ import { MatSidenavModule, MatSidenav } from '@angular/material/sidenav';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { RoutesComponent } from './components/routes/routes.component';
 import { MapComponent } from './components/map/map.component';
+import { TrainBoardComponent } from './components/train-board/train-board.component';
 import { VehicleListComponent } from './components/vehicle-list/vehicle-list.component';
 import { VehicleService } from './services/vehicle.service';
 import { CookieService } from './services/cookie.service';
@@ -23,6 +24,7 @@ import { Subscription } from 'rxjs';
         AlertTickerComponent,
         RoutesComponent,
         MapComponent,
+        TrainBoardComponent,
         VehicleListComponent,
     ],
     templateUrl: './app.component.html',
@@ -34,6 +36,7 @@ export class AppComponent implements OnInit, OnDestroy {
   routesPanelVisible = true;
   routeAlerts: Alert[] = [];
   isMobile = signal(false);
+  viewMode: 'board' | 'map' = 'board';
 
   @ViewChild('routesDrawer') routesDrawer!: MatSidenav;
   @ViewChild('vehicleDrawer') vehicleDrawer!: MatSidenav;
@@ -68,6 +71,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.vehicleService.selectedRoute$.subscribe({
         next: (routeId) => {
           this.selectedRoute = routeId;
+          if (routeId) this.viewMode = 'board';
           // On mobile: close the vehicle drawer when a route is deselected.
           // Do NOT auto-open on selection — the user opens it via the toolbar button.
           if (this.isMobile() && !routeId) {
@@ -96,6 +100,10 @@ export class AppComponent implements OnInit, OnDestroy {
       currentSettings.routesPanelVisible = this.routesPanelVisible;
       this.cookieService.setSettingsCookie(currentSettings);
     }
+  }
+
+  toggleView(): void {
+    this.viewMode = this.viewMode === 'board' ? 'map' : 'board';
   }
 
   toggleVehiclePanel(): void {

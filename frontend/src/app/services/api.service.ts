@@ -5,6 +5,7 @@ import { Vehicle, VehicleResponse } from '../models/vehicle.model';
 import { Route, Shape } from '../models/route.model';
 import { Station } from '../models/station.model';
 import { Alert } from '../models/alert.model';
+import { RouteBoardData } from '../models/board.model';
 
 @Injectable({
   providedIn: 'root'
@@ -88,6 +89,20 @@ export class ApiService {
           return of([]);
         })
       );
+  }
+
+  getRouteBoardData(routeId: string, intervalMs: number = 15000): Observable<RouteBoardData | null> {
+    return interval(intervalMs).pipe(
+      startWith(0),
+      switchMap(() =>
+        this.http.get<RouteBoardData>(`${this.baseUrl}/route/${routeId}/board`).pipe(
+          catchError((error: HttpErrorResponse) => {
+            console.error('ApiService: Error fetching board data for route:', routeId, error);
+            return of(null);
+          })
+        )
+      )
+    );
   }
 
   getAlertsGlobal(): Observable<Alert[]> {

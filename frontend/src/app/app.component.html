@@ -20,6 +20,9 @@
         (click)="toggleVehiclePanel()">
         <mat-icon>directions_bus</mat-icon>
       </button>
+      <button type="button" class="view-toggle-btn" (click)="toggleView()">
+        {{ viewMode === 'board' ? 'Map' : 'Board' }}
+      </button>
     }
     <button
       type="button"
@@ -79,11 +82,16 @@
           </div>
         }
 
-        <div class="main-content">
-          <div class="content">
-            <app-map></app-map>
+        @if (!isMobile() || viewMode === 'map') {
+          <div class="main-content">
+            <div class="content">
+              <app-map></app-map>
+            </div>
           </div>
-        </div>
+        }
+        @if (isMobile() && viewMode === 'board') {
+          <app-train-board class="main-content" [routeId]="selectedRoute"></app-train-board>
+        }
 
       </div>
     </mat-sidenav-content>
