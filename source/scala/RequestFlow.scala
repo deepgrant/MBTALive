@@ -46,6 +46,7 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
   // ── Caches (thread-safe) ──────────────────────────────────────────────────
 
   private val stopCache:         TrieMap[String, (StopDetails, Long)]          = TrieMap.empty
+  private val boardStopCache:   TrieMap[String, (Vector[BoardStopInfo], Long)] = TrieMap.empty
   private val vehicleCache:     TrieMap[String, (Vector[VehicleData], Long)]   = TrieMap.empty
   private val vehicleInflight:  TrieMap[String, Future[Vector[VehicleData]]]   = TrieMap.empty
   private val alertByRouteCache: TrieMap[String, (Vector[AlertInfo], Long)]    = TrieMap.empty
@@ -314,7 +315,7 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
 
   // ── Board Data ────────────────────────────────────────────────────────────
 
-  private def fetchOrderedStops(routeId: String, directionId: Int): Future[Vector[BoardStopInfo]] =
+  private def fetchOrderedStopsFromApi(routeId: String, directionId: Int): Future[Vector[BoardStopInfo]] =
     access.queueRequest(
       HttpRequest(uri = access.mbtaUri(
         path  = "/stops",
@@ -343,6 +344,20 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
         entity.discardBytes()
         Future.successful(Vector.empty)
     }
+
+  private def fetchOrderedStops(routeId: String, directionId: Int): Future[Vector[BoardStopInfo]] = {
+    val key = s"$routeId:$directionId"
+    val now = java.time.Instant.now().toEpochMilli()
+    boardStopCache.get(key) match {
+      case Some((stops, expiry)) if expiry > now =>
+        Future.successful(stops)
+      case _ =>
+        fetchOrderedStopsFromApi(routeId, directionId).map { stops =>
+          boardStopCache.put(key, (stops, now + StopCacheTtlMillis))
+          stops
+        }
+    }
+  }
 
   private def fetchTripPredictions(tripId: String, stopsForDir: Vector[BoardStopInfo]): Future[Vector[StopPrediction]] = {
     val stopSeqMap  = stopsForDir.map(s => s.id -> s.sequence).toMap
