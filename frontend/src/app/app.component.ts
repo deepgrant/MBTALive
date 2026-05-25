@@ -70,8 +70,9 @@ export class AppComponent implements OnInit, OnDestroy {
 
       this.vehicleService.selectedRoute$.subscribe({
         next: (routeId) => {
+          const prevRoute = this.selectedRoute;
           this.selectedRoute = routeId;
-          if (routeId) this.viewMode = 'board';
+          if (routeId && routeId !== prevRoute) this.viewMode = 'board';
           // On mobile: close the vehicle drawer when a route is deselected.
           // Do NOT auto-open on selection — the user opens it via the toolbar button.
           if (this.isMobile() && !routeId) {
