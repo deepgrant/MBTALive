@@ -31,42 +31,6 @@
       <button class="station-bar-change" (click)="onStationChange('')">Change</button>
     </div>
 
-    <!-- Arrivals banner (selected direction only) -->
-    <div class="arrivals-banner">
-      @if (selectedDirection === 'inbound') {
-        <div class="arr-row">
-          <span class="arr-dir">{{ inboundDirectionName }}</span>
-          <div class="arr-times">
-            @if (nextInboundArrivals.length === 0) {
-              <span class="arr-none">no arrivals</span>
-            }
-            @for (a of nextInboundArrivals; track a.train.vehicleId; let last = $last) {
-              <span class="at" [ngClass]="arrivalTimeClass(a)">
-                {{ a.time }}@if (a.mins !== null) {<span class="at-tag">{{ a.mins }}m</span>}
-              </span>
-              @if (!last) { <span class="at-dot">·</span> }
-            }
-          </div>
-        </div>
-      }
-      @if (selectedDirection === 'outbound') {
-        <div class="arr-row">
-          <span class="arr-dir">{{ outboundDirectionName }}</span>
-          <div class="arr-times">
-            @if (nextOutboundArrivals.length === 0) {
-              <span class="arr-none">no arrivals</span>
-            }
-            @for (a of nextOutboundArrivals; track a.train.vehicleId; let last = $last) {
-              <span class="at" [ngClass]="arrivalTimeClass(a)">
-                {{ a.time }}@if (a.mins !== null) {<span class="at-tag">{{ a.mins }}m</span>}
-              </span>
-              @if (!last) { <span class="at-dot">·</span> }
-            }
-          </div>
-        </div>
-      }
-    </div>
-
     <!-- ── Inbound section (shown when direction = inbound) ── -->
     @if (selectedDirection === 'inbound') {
       @if (approachingInbound.length > 0) {
