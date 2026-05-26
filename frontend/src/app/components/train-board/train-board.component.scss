@@ -312,27 +312,6 @@
   padding: 10px 12px 12px;
 }
 
-.sa-name {
-  font-size: 13px;
-  font-weight: 800;
-  color: #ED8B00;
-  text-transform: uppercase;
-  letter-spacing: .6px;
-  margin-bottom: 9px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  &::before {
-    content: '';
-    display: inline-block;
-    width: 3px;
-    height: 15px;
-    background: #ED8B00;
-    border-radius: 2px;
-    flex-shrink: 0;
-  }
-}
 
 .sa-dir-lbl {
   font-size: 9.5px;
@@ -418,24 +397,24 @@
 // ── Legend ────────────────────────────────────────────────────────────────────
 
 .legend {
-  padding: 10px 12px 20px;
+  padding: 5px 12px 8px;
   border-top: 1px solid #1a202c;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 7px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
 }
 
 .li {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 10px;
+  gap: 4px;
+  font-size: 9px;
   color: #6b7280;
 }
 
 .ld {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 2px;
   flex-shrink: 0;
 }

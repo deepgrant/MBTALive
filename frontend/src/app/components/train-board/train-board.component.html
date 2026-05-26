@@ -31,6 +31,53 @@
       <button class="station-bar-change" (click)="onStationChange('')">Change</button>
     </div>
 
+    <!-- ── Selected-station band ── -->
+    <div class="sa-band">
+
+      @if (selectedDirection === 'inbound' && nextInboundArrivals.length > 0) {
+        <div class="sa-dir-lbl">{{ inboundDirectionName }} arrivals</div>
+        <div class="sa-cards">
+          @for (a of nextInboundArrivals; track a.train.vehicleId) {
+            <div class="sa-card">
+              <div class="sa-card-lbl">#{{ a.train.tripName ?? a.train.vehicleId }}</div>
+              <div class="sa-card-time" [ngClass]="cardTimeClass(a)">{{ a.time }}</div>
+              <div class="sa-card-row">
+                @if (a.mins !== null) { <span class="sa-min">{{ a.mins }} min</span> }
+                @if (delayLabel(a.train)) {
+                  <span class="sa-chip" [ngClass]="delayClass(a.train)">{{ delayLabel(a.train) }}</span>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      @if (selectedDirection === 'outbound' && nextOutboundArrivals.length > 0) {
+        <div class="sa-dir-lbl">{{ outboundDirectionName }} arrivals</div>
+        <div class="sa-cards">
+          @for (a of nextOutboundArrivals; track a.train.vehicleId) {
+            <div class="sa-card">
+              <div class="sa-card-lbl">#{{ a.train.tripName ?? a.train.vehicleId }}</div>
+              <div class="sa-card-time" [ngClass]="cardTimeClass(a)">{{ a.time }}</div>
+              <div class="sa-card-row">
+                @if (a.mins !== null) { <span class="sa-min">{{ a.mins }} min</span> }
+                @if (delayLabel(a.train)) {
+                  <span class="sa-chip" [ngClass]="delayClass(a.train)">{{ delayLabel(a.train) }}</span>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      @if (selectedDirection === 'inbound' && nextInboundArrivals.length === 0) {
+        <div class="sa-empty">No {{ inboundDirectionName }} trains approaching this station.</div>
+      }
+      @if (selectedDirection === 'outbound' && nextOutboundArrivals.length === 0) {
+        <div class="sa-empty">No {{ outboundDirectionName }} trains approaching this station.</div>
+      }
+    </div>
+
     <!-- ── Inbound section (shown when direction = inbound) ── -->
     @if (selectedDirection === 'inbound') {
       @if (approachingInbound.length > 0) {
@@ -87,54 +134,6 @@
         <div class="no-trains">No {{ inboundDirectionName }} trains approaching {{ selectedStation }}</div>
       }
     }
-
-    <!-- ── Selected-station band ── -->
-    <div class="sa-band">
-      <div class="sa-name">{{ selectedStation }}</div>
-
-      @if (selectedDirection === 'inbound' && nextInboundArrivals.length > 0) {
-        <div class="sa-dir-lbl">{{ inboundDirectionName }} arrivals</div>
-        <div class="sa-cards">
-          @for (a of nextInboundArrivals; track a.train.vehicleId) {
-            <div class="sa-card">
-              <div class="sa-card-lbl">#{{ a.train.tripName ?? a.train.vehicleId }}</div>
-              <div class="sa-card-time" [ngClass]="cardTimeClass(a)">{{ a.time }}</div>
-              <div class="sa-card-row">
-                @if (a.mins !== null) { <span class="sa-min">{{ a.mins }} min</span> }
-                @if (delayLabel(a.train)) {
-                  <span class="sa-chip" [ngClass]="delayClass(a.train)">{{ delayLabel(a.train) }}</span>
-                }
-              </div>
-            </div>
-          }
-        </div>
-      }
-
-      @if (selectedDirection === 'outbound' && nextOutboundArrivals.length > 0) {
-        <div class="sa-dir-lbl">{{ outboundDirectionName }} arrivals</div>
-        <div class="sa-cards">
-          @for (a of nextOutboundArrivals; track a.train.vehicleId) {
-            <div class="sa-card">
-              <div class="sa-card-lbl">#{{ a.train.tripName ?? a.train.vehicleId }}</div>
-              <div class="sa-card-time" [ngClass]="cardTimeClass(a)">{{ a.time }}</div>
-              <div class="sa-card-row">
-                @if (a.mins !== null) { <span class="sa-min">{{ a.mins }} min</span> }
-                @if (delayLabel(a.train)) {
-                  <span class="sa-chip" [ngClass]="delayClass(a.train)">{{ delayLabel(a.train) }}</span>
-                }
-              </div>
-            </div>
-          }
-        </div>
-      }
-
-      @if (selectedDirection === 'inbound' && nextInboundArrivals.length === 0) {
-        <div class="sa-empty">No {{ inboundDirectionName }} trains approaching this station.</div>
-      }
-      @if (selectedDirection === 'outbound' && nextOutboundArrivals.length === 0) {
-        <div class="sa-empty">No {{ outboundDirectionName }} trains approaching this station.</div>
-      }
-    </div>
 
     <!-- ── Outbound section (shown when direction = outbound) ── -->
     @if (selectedDirection === 'outbound') {
