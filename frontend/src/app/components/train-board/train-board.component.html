@@ -24,9 +24,9 @@
       <span class="station-bar-name">{{ selectedStation }}</span>
       <div class="dir-toggle">
         <button class="dir-btn" [class.active]="selectedDirection === 'inbound'"
-                (click)="selectedDirection = 'inbound'">{{ inboundDirectionName }}</button>
+                (click)="setDirection('inbound')">{{ inbound.directionName }}</button>
         <button class="dir-btn" [class.active]="selectedDirection === 'outbound'"
-                (click)="selectedDirection = 'outbound'">{{ outboundDirectionName }}</button>
+                (click)="setDirection('outbound')">{{ outbound.directionName }}</button>
       </div>
       <button class="station-bar-change" (click)="onStationChange('')">Change</button>
     </div>
@@ -34,17 +34,17 @@
     <!-- ── Selected-station band ── -->
     <div class="sa-band">
 
-      @if (selectedDirection === 'inbound' && nextInboundArrivals.length > 0) {
-        <div class="sa-dir-lbl">{{ inboundDirectionName }} arrivals</div>
+      @if (selectedDirection === 'inbound' && inbound.arrivals.length > 0) {
+        <div class="sa-dir-lbl">{{ inbound.directionName }} arrivals</div>
         <div class="sa-cards">
-          @for (a of nextInboundArrivals; track a.train.vehicleId) {
+          @for (a of inbound.arrivals; track a.key) {
             <div class="sa-card">
-              <div class="sa-card-lbl">#{{ a.train.tripName ?? a.train.vehicleId }}</div>
-              <div class="sa-card-time" [ngClass]="cardTimeClass(a)">{{ a.time }}</div>
+              <div class="sa-card-lbl">{{ a.label }}</div>
+              <div class="sa-card-time" [ngClass]="a.timeClass">{{ a.time }}</div>
               <div class="sa-card-row">
                 @if (a.mins !== null) { <span class="sa-min">{{ a.mins }} min</span> }
-                @if (delayLabel(a.train)) {
-                  <span class="sa-chip" [ngClass]="delayClass(a.train)">{{ delayLabel(a.train) }}</span>
+                @if (a.delayLabel) {
+                  <span class="sa-chip" [ngClass]="a.chipClass">{{ a.delayLabel }}</span>
                 }
               </div>
             </div>
@@ -52,17 +52,17 @@
         </div>
       }
 
-      @if (selectedDirection === 'outbound' && nextOutboundArrivals.length > 0) {
-        <div class="sa-dir-lbl">{{ outboundDirectionName }} arrivals</div>
+      @if (selectedDirection === 'outbound' && outbound.arrivals.length > 0) {
+        <div class="sa-dir-lbl">{{ outbound.directionName }} arrivals</div>
         <div class="sa-cards">
-          @for (a of nextOutboundArrivals; track a.train.vehicleId) {
+          @for (a of outbound.arrivals; track a.key) {
             <div class="sa-card">
-              <div class="sa-card-lbl">#{{ a.train.tripName ?? a.train.vehicleId }}</div>
-              <div class="sa-card-time" [ngClass]="cardTimeClass(a)">{{ a.time }}</div>
+              <div class="sa-card-lbl">{{ a.label }}</div>
+              <div class="sa-card-time" [ngClass]="a.timeClass">{{ a.time }}</div>
               <div class="sa-card-row">
                 @if (a.mins !== null) { <span class="sa-min">{{ a.mins }} min</span> }
-                @if (delayLabel(a.train)) {
-                  <span class="sa-chip" [ngClass]="delayClass(a.train)">{{ delayLabel(a.train) }}</span>
+                @if (a.delayLabel) {
+                  <span class="sa-chip" [ngClass]="a.chipClass">{{ a.delayLabel }}</span>
                 }
               </div>
             </div>
@@ -70,49 +70,49 @@
         </div>
       }
 
-      @if (selectedDirection === 'inbound' && nextInboundArrivals.length === 0) {
-        <div class="sa-empty">No {{ inboundDirectionName }} trains approaching this station.</div>
+      @if (selectedDirection === 'inbound' && inbound.arrivals.length === 0) {
+        <div class="sa-empty">No {{ inbound.directionName }} trains approaching this station.</div>
       }
-      @if (selectedDirection === 'outbound' && nextOutboundArrivals.length === 0) {
-        <div class="sa-empty">No {{ outboundDirectionName }} trains approaching this station.</div>
+      @if (selectedDirection === 'outbound' && outbound.arrivals.length === 0) {
+        <div class="sa-empty">No {{ outbound.directionName }} trains approaching this station.</div>
       }
     </div>
 
     <!-- ── Inbound section (shown when direction = inbound) ── -->
     @if (selectedDirection === 'inbound') {
-      @if (approachingInbound.length > 0) {
+      @if (inbound.columns.length > 0) {
         <div class="sec-hdr">
-          <span class="sec-dir">{{ inboundDirectionName }}{{ inboundDest ? ' · to ' + inboundDest : '' }}</span>
-          <span class="sec-trains">{{ inboundTrainNames }}</span>
+          <span class="sec-dir">{{ inbound.directionName }}{{ inbound.dest ? ' · to ' + inbound.dest : '' }}</span>
+          <span class="sec-trains">{{ inbound.trainNames }}</span>
         </div>
 
-        @if (inboundAllStops.length > 0) {
+        @if (inbound.rows.length > 0) {
           <div class="cont-hint">
             <span class="dots">· · ·</span>
-            <span>approaching{{ inboundDest ? ' from ' + inboundDest + ' direction' : '' }}</span>
+            <span>approaching{{ inbound.dest ? ' from ' + inbound.dest + ' direction' : '' }}</span>
           </div>
 
           <div class="grid-scroll">
-            <div class="sgrid" [style.grid-template-columns]="inboundGridCols">
+            <div class="sgrid" [style.grid-template-columns]="inbound.gridCols">
               <!-- header row -->
               <div class="gc gh gc-st">Station</div>
-              @for (train of approachingInbound; track train.vehicleId) {
-                <div class="gc gh" [ngClass]="headerClass(train)">
-                  #{{ train.tripName ?? train.vehicleId }} {{ delayLabel(train) }}
+              @for (col of inbound.columns; track col.key) {
+                <div class="gc gh" [ngClass]="col.headerClass">
+                  {{ col.title }} {{ col.delayLabel }}
                 </div>
               }
               <!-- stop rows (full route) -->
-              @for (stop of inboundAllStops; track stop.id) {
-                <div class="gc gc-st" [class.gc-sel]="stop.name === selectedStation">{{ stop.name }}</div>
-                @for (train of approachingInbound; track train.vehicleId) {
-                  <div class="gc" [ngClass]="cellClass(train, stop)" [class.gc-sel]="stop.name === selectedStation">
-                    @if (isCurrentStop(train, stop)) {
+              @for (row of inbound.rows; track row.stopId) {
+                <div class="gc gc-st" [class.gc-sel]="row.selected">{{ row.stopName }}</div>
+                @for (cell of row.cells; track $index) {
+                  <div class="gc" [ngClass]="cell.cls" [class.gc-sel]="row.selected">
+                    @if (cell.isHere) {
                       <span class="here-r"><span class="hdot"></span>HERE</span>
-                      @if (delayLabel(train)) { <span class="sm lc">{{ delayLabel(train) }}</span> }
+                      @if (cell.delayLabel) { <span class="sm lc">{{ cell.delayLabel }}</span> }
                     } @else {
-                      <span class="t">{{ formatTime(predAt(train, stop)?.predictedTime ?? predAt(train, stop)?.scheduledTime) }}</span>
-                      @if (predAt(train, stop) && delayLabelClass(train); as labelCls) {
-                        <span class="sm" [ngClass]="labelCls">{{ delayLabel(train) }}</span>
+                      <span class="t">{{ cell.time }}</span>
+                      @if (cell.delayLabelCls) {
+                        <span class="sm" [ngClass]="cell.delayLabelCls">{{ cell.delayLabel }}</span>
                       }
                     }
                   </div>
@@ -121,65 +121,65 @@
             </div>
           </div>
           <div class="cont-hint right">
-            <span>continuing to {{ inboundDest || 'terminus' }}</span>
+            <span>continuing to {{ inbound.dest || 'terminus' }}</span>
             <span class="dots">· · ·</span>
           </div>
         }
       } @else {
         <div class="sec-hdr">
-          <span class="sec-dir">{{ inboundDirectionName }}</span>
+          <span class="sec-dir">{{ inbound.directionName }}</span>
         </div>
-        <div class="no-trains">No {{ inboundDirectionName }} trains approaching {{ selectedStation }}</div>
+        <div class="no-trains">No {{ inbound.directionName }} trains approaching {{ selectedStation }}</div>
       }
     }
 
     <!-- ── Outbound section (shown when direction = outbound) ── -->
     @if (selectedDirection === 'outbound') {
-      @if (approachingOutbound.length > 0) {
+      @if (outbound.columns.length > 0) {
         <div class="sec-hdr">
-          <span class="sec-dir">{{ outboundDirectionName }}{{ outboundDest ? ' · to ' + outboundDest : '' }}</span>
-          <span class="sec-trains">{{ outboundTrainNames }}</span>
+          <span class="sec-dir">{{ outbound.directionName }}{{ outbound.dest ? ' · to ' + outbound.dest : '' }}</span>
+          <span class="sec-trains">{{ outbound.trainNames }}</span>
         </div>
 
-        @if (outboundAllStops.length > 0) {
+        @if (outbound.rows.length > 0) {
           <div class="grid-scroll">
-            <div class="sgrid" [style.grid-template-columns]="outboundGridCols">
+            <div class="sgrid" [style.grid-template-columns]="outbound.gridCols">
               <!-- header row -->
-              @for (train of approachingOutbound; track train.vehicleId) {
-                <div class="gc gh" [ngClass]="headerClass(train)">
-                  #{{ train.tripName ?? train.vehicleId }} {{ delayLabel(train) }}
+              @for (col of outbound.columns; track col.key) {
+                <div class="gc gh" [ngClass]="col.headerClass">
+                  {{ col.title }} {{ col.delayLabel }}
                 </div>
               }
               <div class="gc gh gc-st r">Station</div>
               <!-- stop rows (full route) -->
-              @for (stop of outboundAllStops; track stop.id) {
-                @for (train of approachingOutbound; track train.vehicleId) {
-                  <div class="gc" [ngClass]="cellClass(train, stop)" [class.gc-sel]="stop.name === selectedStation">
-                    @if (isCurrentStop(train, stop)) {
+              @for (row of outbound.rows; track row.stopId) {
+                @for (cell of row.cells; track $index) {
+                  <div class="gc" [ngClass]="cell.cls" [class.gc-sel]="row.selected">
+                    @if (cell.isHere) {
                       <span class="here-r"><span class="hdot"></span>HERE</span>
-                      @if (delayLabel(train)) { <span class="sm lc">{{ delayLabel(train) }}</span> }
+                      @if (cell.delayLabel) { <span class="sm lc">{{ cell.delayLabel }}</span> }
                     } @else {
-                      <span class="t">{{ formatTime(predAt(train, stop)?.predictedTime ?? predAt(train, stop)?.scheduledTime) }}</span>
-                      @if (predAt(train, stop) && delayLabelClass(train); as labelCls) {
-                        <span class="sm" [ngClass]="labelCls">{{ delayLabel(train) }}</span>
+                      <span class="t">{{ cell.time }}</span>
+                      @if (cell.delayLabelCls) {
+                        <span class="sm" [ngClass]="cell.delayLabelCls">{{ cell.delayLabel }}</span>
                       }
                     }
                   </div>
                 }
-                <div class="gc gc-st r" [class.gc-sel]="stop.name === selectedStation">{{ stop.name }}</div>
+                <div class="gc gc-st r" [class.gc-sel]="row.selected">{{ row.stopName }}</div>
               }
             </div>
           </div>
           <div class="cont-hint right">
-            <span>continuing to {{ outboundDest || 'terminus' }}</span>
+            <span>continuing to {{ outbound.dest || 'terminus' }}</span>
             <span class="dots">· · ·</span>
           </div>
         }
       } @else {
         <div class="sec-hdr">
-          <span class="sec-dir">{{ outboundDirectionName }}</span>
+          <span class="sec-dir">{{ outbound.directionName }}</span>
         </div>
-        <div class="no-trains">No {{ outboundDirectionName }} trains approaching {{ selectedStation }}</div>
+        <div class="no-trains">No {{ outbound.directionName }} trains approaching {{ selectedStation }}</div>
       }
     }
 
