@@ -30,7 +30,9 @@ export class MapService {
   private map: MaplibreMap | null = null;
   private mapLoaded = false;
   private vehicleMarkers: Map<string, Marker> = new Map();
+  private vehicleMarkerHtml: Map<string, string> = new Map();
   private stationMarkers: Map<string, Marker> = new Map();
+  private stationMarkerHtml: Map<string, string> = new Map();
   private currentStations: Station[] = [];
   private alertedStationIds: Set<string> = new Set();
   private delayedStationIds: Set<string> = new Set();
@@ -81,9 +83,16 @@ export class MapService {
 
   initializeMap(containerId: string): void {
     if (this.map) {
+      // remove() destroys all marker DOM along with the map, so the cached
+      // Marker objects are dead — drop them or the next sync would "update"
+      // markers that no longer exist on screen (mobile board↔map toggle).
       this.map.remove();
       this.mapLoaded = false;
       this.boundsRestored = false;
+      this.vehicleMarkers.clear();
+      this.vehicleMarkerHtml.clear();
+      this.stationMarkers.clear();
+      this.stationMarkerHtml.clear();
     }
 
     this.map = new maplibregl.Map({
@@ -152,34 +161,67 @@ export class MapService {
     });
   }
 
-  getMap(): MaplibreMap | null {
-    return this.map;
-  }
-
-  addVehicleMarker(vehicle: Vehicle): void {
-    if (!this.map) return;
-    const markerId = vehicle.vehicleId ?? '';
-    if (!markerId) return;
-
-    const existing = this.vehicleMarkers.get(markerId);
-    if (existing) existing.remove();
-
-    const el = document.createElement('div');
-    el.style.zIndex = '2';
-    el.innerHTML = this.createVehicleMarkerHtml(vehicle);
-
-    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
-      .setLngLat([vehicle.longitude, vehicle.latitude])
-      .addTo(this.map);
-
-    this.vehicleMarkers.set(markerId, marker);
-  }
-
   updateVehicleMarkers(vehicles: Vehicle[]): void {
-    if (!this.map) return;
-    this.vehicleMarkers.forEach(m => m.remove());
-    this.vehicleMarkers.clear();
-    vehicles.forEach(vehicle => this.addVehicleMarker(vehicle));
+    this.syncMarkers(this.vehicleMarkers, this.vehicleMarkerHtml, vehicles, {
+      id: v => v.vehicleId ?? '',
+      lngLat: v => [v.longitude, v.latitude],
+      html: v => this.createVehicleMarkerHtml(v),
+      zIndex: '2',
+    });
+  }
+
+  /**
+   * Diffs markers against `items` instead of recreating them: existing markers
+   * are moved with setLngLat (so they glide rather than blink on each poll) and
+   * their HTML is only rewritten when the rendered string actually changed;
+   * markers whose id is absent from `items` are removed.
+   */
+  private syncMarkers<T>(
+    markers: Map<string, Marker>,
+    htmlCache: Map<string, string>,
+    items: T[],
+    opts: {
+      id: (item: T) => string;
+      lngLat: (item: T) => [number, number];
+      html: (item: T) => string;
+      zIndex: string;
+    }
+  ): void {
+    const map = this.map;
+    if (!map) return;
+
+    const seen = new Set<string>();
+    for (const item of items) {
+      const id = opts.id(item);
+      if (!id) continue;
+      seen.add(id);
+
+      const html = opts.html(item);
+      const existing = markers.get(id);
+      if (existing) {
+        existing.setLngLat(opts.lngLat(item));
+        if (htmlCache.get(id) !== html) {
+          existing.getElement().innerHTML = html;
+          htmlCache.set(id, html);
+        }
+      } else {
+        const el = document.createElement('div');
+        el.style.zIndex = opts.zIndex;
+        el.innerHTML = html;
+        markers.set(id, new maplibregl.Marker({ element: el, anchor: 'center' })
+          .setLngLat(opts.lngLat(item))
+          .addTo(map));
+        htmlCache.set(id, html);
+      }
+    }
+
+    for (const [id, marker] of markers) {
+      if (!seen.has(id)) {
+        marker.remove();
+        markers.delete(id);
+        htmlCache.delete(id);
+      }
+    }
   }
 
   addRouteLayer(route: Route, shapes: Shape[]): void {
@@ -240,37 +282,18 @@ export class MapService {
     });
   }
 
-  addStationMarker(station: Station): void {
-    if (!this.map) return;
-    const markerId = station.id;
-    const existing = this.stationMarkers.get(markerId);
-    if (existing) existing.remove();
-
-    const el = document.createElement('div');
-    el.style.zIndex = '1';
-    el.innerHTML = this.createStationMarkerHtml(station, this.alertedStationIds.has(station.id), this.delayedStationIds.has(station.id));
-
-    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
-      .setLngLat([station.longitude, station.latitude])
-      .addTo(this.map);
-
-    this.stationMarkers.set(markerId, marker);
-  }
-
   updateStationAlerts(alertedStopIds: Set<string>, delayedStopIds: Set<string> = new Set()): void {
     this.alertedStationIds = alertedStopIds;
     this.delayedStationIds = delayedStopIds;
-    if (!this.map || this.currentStations.length === 0) return;
-    this.stationMarkers.forEach(m => m.remove());
-    this.stationMarkers.clear();
-    this.currentStations.forEach(station => this.addStationMarker(station));
+    if (this.currentStations.length === 0) return;
+    // The HTML diff in syncMarkers re-renders only stations whose
+    // alerted/delayed membership actually changed.
+    this.syncStationMarkers(this.currentStations);
   }
 
   updateStationMarkers(stations: Station[]): void {
     this.currentStations = stations;
-    if (!this.map) return;
-    this.stationMarkers.forEach(m => m.remove());
-    this.stationMarkers.clear();
+    this.syncStationMarkers(stations);
 
     const bounds: SimpleBounds = {
       minLat: Infinity, maxLat: -Infinity,
@@ -278,7 +301,6 @@ export class MapService {
     };
 
     stations.forEach(station => {
-      this.addStationMarker(station);
       if (station.latitude < bounds.minLat) bounds.minLat = station.latitude;
       if (station.latitude > bounds.maxLat) bounds.maxLat = station.latitude;
       if (station.longitude < bounds.minLng) bounds.minLng = station.longitude;
@@ -288,14 +310,25 @@ export class MapService {
     this.stationBounds = stations.length > 0 ? bounds : null;
   }
 
+  private syncStationMarkers(stations: Station[]): void {
+    this.syncMarkers(this.stationMarkers, this.stationMarkerHtml, stations, {
+      id: s => s.id,
+      lngLat: s => [s.longitude, s.latitude],
+      html: s => this.createStationMarkerHtml(
+        s, this.alertedStationIds.has(s.id), this.delayedStationIds.has(s.id)),
+      zIndex: '1',
+    });
+  }
+
   clearStationMarkers(): void {
     this.currentStations = [];
     this.alertedStationIds = new Set();
     this.delayedStationIds = new Set();
+    this.stationBounds = null;
     if (!this.map) return;
     this.stationMarkers.forEach(m => m.remove());
     this.stationMarkers.clear();
-    this.stationBounds = null;
+    this.stationMarkerHtml.clear();
   }
 
   fitBoundsToRoute(): void {
