@@ -1,4 +1,4 @@
-$mobile-bp: 767.98px;
+@use 'shared/breakpoints' as *;
 
 // Root: column flex so toolbar and sidenav container stack vertically.
 // This keeps drawers confined to the area below the toolbar.

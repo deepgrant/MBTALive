@@ -7,6 +7,7 @@ import { Alert } from '../../models/alert.model';
 import { VehicleService } from '../../services/vehicle.service';
 import { MapService } from '../../services/map.service';
 import { AlertTickerComponent } from '../alert-ticker/alert-ticker.component';
+import { MAP_FRAME_DELAY_MS, MAP_INIT_DELAY_MS } from '../../shared/timing.constants';
 
 @Component({
     selector: 'app-map',
@@ -79,7 +80,7 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
       } catch (error) {
         console.error('MapComponent: Error initializing map:', error);
       }
-    }, 300);
+    }, MAP_INIT_DELAY_MS);
   }
 
   ngOnDestroy(): void {
@@ -147,7 +148,7 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
           this.routeFramed = true;
           this.isInitialRouteLoad = false;
           this.mapService.markSessionInitialized();
-        }, 200);
+        }, MAP_FRAME_DELAY_MS);
       } else {
         this.routeFramed = true;
         this.isInitialRouteLoad = false;

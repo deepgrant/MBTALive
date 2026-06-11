@@ -6,6 +6,7 @@ import { Route, Shape } from '../models/route.model';
 import { Station } from '../models/station.model';
 import { Alert } from '../models/alert.model';
 import { RouteBoardData } from '../models/board.model';
+import { BOARD_POLL_MS, VEHICLE_POLL_MS } from '../shared/timing.constants';
 
 @Injectable({
   providedIn: 'root'
@@ -65,7 +66,7 @@ export class ApiService {
       );
   }
 
-  getRealTimeVehiclesByRoute(routeId: string, intervalMs: number = 10000): Observable<Vehicle[]> {
+  getRealTimeVehiclesByRoute(routeId: string, intervalMs: number = VEHICLE_POLL_MS): Observable<Vehicle[]> {
     return interval(intervalMs)
       .pipe(
         startWith(0),
@@ -91,7 +92,7 @@ export class ApiService {
       );
   }
 
-  getRouteBoardData(routeId: string, intervalMs: number = 15000): Observable<RouteBoardData | null> {
+  getRouteBoardData(routeId: string, intervalMs: number = BOARD_POLL_MS): Observable<RouteBoardData | null> {
     return interval(intervalMs).pipe(
       startWith(0),
       switchMap(() =>

@@ -67,6 +67,15 @@ export class CookieService {
   }
 
   /**
+   * Merge partial settings into the saved settings cookie.
+   * Setting a key to undefined removes it: JSON.stringify drops undefined
+   * properties when the cookie is serialized.
+   */
+  updateSettings(partial: Partial<AppSettings>): void {
+    this.setSettingsCookie({ ...(this.getSettingsCookie() ?? {}), ...partial });
+  }
+
+  /**
    * Delete app settings cookie
    */
   deleteSettingsCookie(): void {

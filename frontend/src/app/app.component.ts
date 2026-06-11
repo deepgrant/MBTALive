@@ -12,6 +12,7 @@ import { VehicleService } from './services/vehicle.service';
 import { CookieService } from './services/cookie.service';
 import { AlertTickerComponent } from './components/alert-ticker/alert-ticker.component';
 import { Alert } from './models/alert.model';
+import { MOBILE_BREAKPOINT_QUERY, ROUTE_RESTORE_DELAY_MS, SWIPE_DISMISS_PX } from './shared/timing.constants';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -52,7 +53,7 @@ export class AppComponent implements OnInit, OnDestroy {
   ) {
     // Set synchronously so the template renders with the correct mode on first
     // paint and avoids a flash of the desktop layout on mobile.
-    this.isMobile.set(breakpointObserver.isMatched('(max-width: 767.98px)'));
+    this.isMobile.set(breakpointObserver.isMatched(MOBILE_BREAKPOINT_QUERY));
   }
 
   ngOnInit(): void {
@@ -61,12 +62,12 @@ export class AppComponent implements OnInit, OnDestroy {
       this.routesPanelVisible = settings.routesPanelVisible;
     }
 
-    // Restore route (and station via selectedRoute$ subscription below).
-    // 800 ms delay lets the map initialize on desktop before the route is selected.
-    setTimeout(() => this.vehicleService.restoreRouteFromCookie(), 800);
+    // Restore route (and station via selectedRoute$ subscription below) once
+    // the map has had time to initialize on desktop.
+    setTimeout(() => this.vehicleService.restoreRouteFromCookie(), ROUTE_RESTORE_DELAY_MS);
 
     this.subscriptions.push(
-      this.breakpointObserver.observe('(max-width: 767.98px)').subscribe(state => {
+      this.breakpointObserver.observe(MOBILE_BREAKPOINT_QUERY).subscribe(state => {
         this.isMobile.set(state.matches);
         if (!state.matches) {
           this.vehicleDrawer?.close();
@@ -85,7 +86,7 @@ export class AppComponent implements OnInit, OnDestroy {
             } else {
               this.selectedStation = null;
               if (saved?.selectedStation) {
-                this.cookieService.setSettingsCookie({ ...saved, selectedStation: null });
+                this.cookieService.updateSettings({ selectedStation: null });
               }
             }
           }
@@ -111,9 +112,7 @@ export class AppComponent implements OnInit, OnDestroy {
   toggleRoutesPanel(): void {
     if (!this.isMobile()) {
       this.routesPanelVisible = !this.routesPanelVisible;
-      const currentSettings = this.cookieService.getSettingsCookie() ?? {};
-      currentSettings.routesPanelVisible = this.routesPanelVisible;
-      this.cookieService.setSettingsCookie(currentSettings);
+      this.cookieService.updateSettings({ routesPanelVisible: this.routesPanelVisible });
     }
   }
 
@@ -124,9 +123,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   onStationSelected(station: string | null): void {
     this.selectedStation = station;
-    const currentSettings = this.cookieService.getSettingsCookie() ?? {};
-    currentSettings.selectedStation = station;
-    this.cookieService.setSettingsCookie(currentSettings);
+    this.cookieService.updateSettings({ selectedStation: station });
   }
 
   toggleView(): void {
@@ -143,14 +140,14 @@ export class AppComponent implements OnInit, OnDestroy {
 
   onSwipeEnd(event: TouchEvent): void {
     const deltaX = event.changedTouches[0].clientX - this.swipeStartX;
-    if (deltaX > 60) {
+    if (deltaX > SWIPE_DISMISS_PX) {
       this.vehicleDrawer.close();
     }
   }
 
   onRoutesSwipeEnd(event: TouchEvent): void {
     const deltaX = event.changedTouches[0].clientX - this.swipeStartX;
-    if (deltaX < -60) {
+    if (deltaX < -SWIPE_DISMISS_PX) {
       this.routesDrawer.close();
     }
   }

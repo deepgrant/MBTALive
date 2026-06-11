@@ -111,10 +111,8 @@
                       @if (delayLabel(train)) { <span class="sm lc">{{ delayLabel(train) }}</span> }
                     } @else {
                       <span class="t">{{ formatTime(predAt(train, stop)?.predictedTime ?? predAt(train, stop)?.scheduledTime) }}</span>
-                      @if ((train.delaySeconds ?? 0) > 300 && predAt(train, stop)) {
-                        <span class="sm lc">{{ delayLabel(train) }}</span>
-                      } @else if ((train.delaySeconds ?? 0) < -60 && predAt(train, stop)) {
-                        <span class="sm ec">{{ delayLabel(train) }}</span>
+                      @if (predAt(train, stop) && delayLabelClass(train); as labelCls) {
+                        <span class="sm" [ngClass]="labelCls">{{ delayLabel(train) }}</span>
                       }
                     }
                   </div>
@@ -162,10 +160,8 @@
                       @if (delayLabel(train)) { <span class="sm lc">{{ delayLabel(train) }}</span> }
                     } @else {
                       <span class="t">{{ formatTime(predAt(train, stop)?.predictedTime ?? predAt(train, stop)?.scheduledTime) }}</span>
-                      @if ((train.delaySeconds ?? 0) > 300 && predAt(train, stop)) {
-                        <span class="sm lc">{{ delayLabel(train) }}</span>
-                      } @else if ((train.delaySeconds ?? 0) < -60 && predAt(train, stop)) {
-                        <span class="sm ec">{{ delayLabel(train) }}</span>
+                      @if (predAt(train, stop) && delayLabelClass(train); as labelCls) {
+                        <span class="sm" [ngClass]="labelCls">{{ delayLabel(train) }}</span>
                       }
                     }
                   </div>

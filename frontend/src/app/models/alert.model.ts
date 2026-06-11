@@ -22,6 +22,11 @@ export function alertSeverityLevel(alert: Alert): AlertSeverityLevel {
   return 'info';
 }
 
+/** Turns an MBTA effect code like "SIGNIFICANT_DELAYS" into display text. */
+export function formatAlertEffect(effect: string): string {
+  return effect.replace(/_/g, ' ');
+}
+
 export function highestSeverityLevel(alerts: Alert[]): AlertSeverityLevel | null {
   if (alerts.length === 0) return null;
   const levels = alerts.map(alertSeverityLevel);

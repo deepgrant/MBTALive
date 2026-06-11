@@ -1,3 +1,5 @@
+@use '../../shared/breakpoints' as *;
+
 .map-wrapper {
   position: relative;
   width: 100%;
@@ -17,7 +19,7 @@
   right: 0;
   z-index: 500;
 
-  @media (max-width: 767.98px) {
+  @media (max-width: $mobile-bp) {
     display: none;
   }
 }

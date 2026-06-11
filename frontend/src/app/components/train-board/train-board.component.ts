@@ -5,9 +5,17 @@ import { Subject, Subscription, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { ApiService } from '../../services/api.service';
 import { RouteBoardData, BoardStopInfo, StopPrediction, TrainBoardData } from '../../models/board.model';
+import { DelayCategory, delayCategory } from '../../shared/delay.utils';
 
 const MAX_COLS = 3;
 const SOON_MINS = 5;
+
+const HEADER_CLASS:     Record<DelayCategory, string> = { late: 'g-late',    early: 'g-early',    ontime: 'g-ontime' };
+const CHIP_CLASS:       Record<DelayCategory, string> = { late: 'chip-late', early: 'chip-early', ontime: 'chip-ok' };
+const CELL_CLASS:       Record<DelayCategory, string> = { late: 's-delayed', early: 's-early',    ontime: 's-ontime' };
+const CARD_TIME_CLASS:  Record<DelayCategory, string> = { late: 'amber',     early: 'blue',       ontime: 'green' };
+// Small late/early label shown beside a cell time; on-time cells show none.
+const CELL_LABEL_CLASS: Record<DelayCategory, string | null> = { late: 'lc', early: 'ec', ontime: null };
 
 interface ArrivalSummary {
   time: string;
@@ -43,7 +51,7 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
         switchMap(routeId => {
           if (!routeId) return of(null);
           this.loading = true;
-          return this.api.getRouteBoardData(routeId, 15000).pipe(catchError(() => of(null)));
+          return this.api.getRouteBoardData(routeId).pipe(catchError(() => of(null)));
         })
       ).subscribe(data => {
         this.loading = false;
@@ -195,17 +203,11 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
     const time = pred.predictedTime ?? pred.scheduledTime!;
     const mins = this.minsUntil(time);
     if (mins !== null && mins <= SOON_MINS) return 's-soon';
-    const d = train.delaySeconds ?? 0;
-    if (d > 300) return 's-delayed';
-    if (d < -60) return 's-early';
-    return 's-ontime';
+    return CELL_CLASS[delayCategory(train.delaySeconds)];
   }
 
   headerClass(train: TrainBoardData): string {
-    const d = train.delaySeconds ?? 0;
-    if (d > 300) return 'g-late';
-    if (d < -60) return 'g-early';
-    return 'g-ontime';
+    return HEADER_CLASS[delayCategory(train.delaySeconds)];
   }
 
   formatTime(isoString: string | null | undefined): string {
@@ -231,10 +233,11 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   delayClass(train: TrainBoardData): string {
-    const d = train.delaySeconds ?? 0;
-    if (d > 300) return 'chip-late';
-    if (d < -60) return 'chip-early';
-    return 'chip-ok';
+    return CHIP_CLASS[delayCategory(train.delaySeconds)];
+  }
+
+  delayLabelClass(train: TrainBoardData): string | null {
+    return CELL_LABEL_CLASS[delayCategory(train.delaySeconds)];
   }
 
   // ── Arrivals banner data ──────────────────────────────────────────────────
@@ -267,19 +270,6 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
 
   cardTimeClass(a: ArrivalSummary): string {
     if (a.mins !== null && a.mins <= SOON_MINS) return 'gold';
-    const d = a.train.delaySeconds ?? 0;
-    if (d > 300) return 'amber';
-    if (d < -60) return 'blue';
-    return 'green';
-  }
-
-  arrivalTimeClass(a: ArrivalSummary): Record<string, boolean> {
-    const d = a.train.delaySeconds ?? 0;
-    return {
-      soon:    a.mins !== null && a.mins <= SOON_MINS,
-      delayed: d > 300,
-      early:   d < -60,
-      ontime:  d >= -60 && d <= 300 && !(a.mins !== null && a.mins <= SOON_MINS),
-    };
+    return CARD_TIME_CLASS[delayCategory(a.train.delaySeconds)];
   }
 }

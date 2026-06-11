@@ -1,0 +1,3 @@
+// Mobile/desktop split. Must match MOBILE_BREAKPOINT_QUERY in
+// src/app/shared/timing.constants.ts (SCSS and TS cannot share one source).
+$mobile-bp: 767.98px;
