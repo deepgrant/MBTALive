@@ -39,6 +39,7 @@ export class MapService {
   private boundsSaveTimeout: ReturnType<typeof setTimeout> | null = null;
   private readonly BOUNDS_SAVE_DELAY = 2500;
   private boundsRestored = false;
+  private sessionInitialized = false;
   private pendingShapes: { shapes: Shape[]; route: Route } | null = null;
 
   private readonly SOURCE_ROUTE = 'route-source';
@@ -329,6 +330,14 @@ export class MapService {
 
   wereBoundsRestored(): boolean {
     return this.boundsRestored;
+  }
+
+  isSessionInitialized(): boolean {
+    return this.sessionInitialized;
+  }
+
+  markSessionInitialized(): void {
+    this.sessionInitialized = true;
   }
 
   private createVehicleMarkerHtml(vehicle: Vehicle): string {
