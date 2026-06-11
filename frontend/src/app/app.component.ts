@@ -62,7 +62,7 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     // Restore route (and station via selectedRoute$ subscription below).
-    // 800 ms delay lets Leaflet initialize on desktop before the route is selected.
+    // 800 ms delay lets the map initialize on desktop before the route is selected.
     setTimeout(() => this.vehicleService.restoreRouteFromCookie(), 800);
 
     this.subscriptions.push(

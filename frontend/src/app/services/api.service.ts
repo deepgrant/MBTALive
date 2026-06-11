@@ -28,7 +28,7 @@ export class ApiService {
       );
   }
 
-  getVehiclesByRoute(routeId: string): Observable<Vehicle[]> {
+  private getVehiclesByRoute(routeId: string): Observable<Vehicle[]> {
     return this.http.get<VehicleResponse[]>(`${this.baseUrl}/route/${routeId}/vehicles`)
       .pipe(
         map((vehicles: VehicleResponse[]) =>

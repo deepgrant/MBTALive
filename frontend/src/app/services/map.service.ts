@@ -292,16 +292,6 @@ export class MapService {
     this.stationBounds = null;
   }
 
-  fitBoundsToVehicles(vehicles: Vehicle[]): void {
-    if (!this.map || vehicles.length === 0) return;
-    const lats = vehicles.map(v => v.latitude);
-    const lngs = vehicles.map(v => v.longitude);
-    this.map.fitBounds(
-      [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
-      { padding: 20, pitch: 45 }
-    );
-  }
-
   fitBoundsToRoute(): void {
     if (!this.map) return;
 
