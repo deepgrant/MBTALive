@@ -76,6 +76,16 @@ $mobile-bp: 767.98px;
   min-height: 0;
 }
 
+.mobile-routes-fullscreen {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 .spacer {
   flex: 1 1 auto;
 }

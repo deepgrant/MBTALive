@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, OnDestroy, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, OnChanges, SimpleChanges } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject, Subscription, of } from 'rxjs';
@@ -24,6 +24,8 @@ interface ArrivalSummary {
 })
 export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
   @Input() routeId: string | null = null;
+  @Input() initialStation: string | null = null;
+  @Output() stationSelected = new EventEmitter<string | null>();
 
   boardData: RouteBoardData | null = null;
   selectedStation: string | null = null;
@@ -52,6 +54,7 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
         }
       })
     );
+    this.selectedStation = this.initialStation ?? null;
     this.routeId$.next(this.routeId);
   }
 
@@ -76,6 +79,7 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
 
   onStationChange(value: string): void {
     this.selectedStation = value || null;
+    this.stationSelected.emit(this.selectedStation);
   }
 
   // ── Selected stop lookup ──────────────────────────────────────────────────

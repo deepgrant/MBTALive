@@ -63,8 +63,6 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
       try {
         this.mapService.initializeMap('map');
         this.mapInitialized = true;
-        // Wait for map style load + bounds restoration before restoring route
-        setTimeout(() => { this.vehicleService.restoreRouteFromCookie(); }, 800);
       } catch (error) {
         console.error('MapComponent: Error initializing map:', error);
       }

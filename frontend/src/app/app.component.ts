@@ -33,6 +33,7 @@ import { Subscription } from 'rxjs';
 export class AppComponent implements OnInit, OnDestroy {
   title = 'MBTA Tracker';
   selectedRoute: string | null = null;
+  selectedStation: string | null = null;
   routesPanelVisible = true;
   routeAlerts: Alert[] = [];
   isMobile = signal(false);
@@ -60,6 +61,10 @@ export class AppComponent implements OnInit, OnDestroy {
       this.routesPanelVisible = settings.routesPanelVisible;
     }
 
+    // Restore route (and station via selectedRoute$ subscription below).
+    // 800 ms delay lets Leaflet initialize on desktop before the route is selected.
+    setTimeout(() => this.vehicleService.restoreRouteFromCookie(), 800);
+
     this.subscriptions.push(
       this.breakpointObserver.observe('(max-width: 767.98px)').subscribe(state => {
         this.isMobile.set(state.matches);
@@ -73,6 +78,17 @@ export class AppComponent implements OnInit, OnDestroy {
           const prevRoute = this.selectedRoute;
           this.selectedRoute = routeId;
           if (routeId && routeId !== prevRoute) this.viewMode = 'board';
+          if (routeId !== prevRoute) {
+            const saved = this.cookieService.getSettingsCookie();
+            if (routeId && routeId === saved?.selectedRoute) {
+              this.selectedStation = saved?.selectedStation ?? null;
+            } else {
+              this.selectedStation = null;
+              if (saved?.selectedStation) {
+                this.cookieService.setSettingsCookie({ ...saved, selectedStation: null });
+              }
+            }
+          }
           // On mobile: close the vehicle drawer when a route is deselected.
           // Do NOT auto-open on selection — the user opens it via the toolbar button.
           if (this.isMobile() && !routeId) {
@@ -93,14 +109,24 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   toggleRoutesPanel(): void {
-    if (this.isMobile()) {
-      this.routesDrawer.toggle();
-    } else {
+    if (!this.isMobile()) {
       this.routesPanelVisible = !this.routesPanelVisible;
       const currentSettings = this.cookieService.getSettingsCookie() ?? {};
       currentSettings.routesPanelVisible = this.routesPanelVisible;
       this.cookieService.setSettingsCookie(currentSettings);
     }
+  }
+
+  backToRoutes(): void {
+    this.vehicleService.selectRoute(null);
+    this.viewMode = 'board';
+  }
+
+  onStationSelected(station: string | null): void {
+    this.selectedStation = station;
+    const currentSettings = this.cookieService.getSettingsCookie() ?? {};
+    currentSettings.selectedStation = station;
+    this.cookieService.setSettingsCookie(currentSettings);
   }
 
   toggleView(): void {
@@ -132,6 +158,7 @@ export class AppComponent implements OnInit, OnDestroy {
   resetToInitialState(): void {
     this.cookieService.deleteSettingsCookie();
     this.vehicleService.selectRoute(null, true);
+    this.selectedStation = null;
     this.routesPanelVisible = true;
     if (this.isMobile()) {
       this.routesDrawer?.close();
