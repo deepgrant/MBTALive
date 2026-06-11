@@ -105,14 +105,14 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    this.vehicleService.getRouteById(routeId).subscribe(route => {
-      if (route) {
+    this.subscriptions.push(
+      this.vehicleService.getRouteById(routeId).subscribe(route => {
         this.currentRoute = route;
         if (isRouteChange) {
           this.isInitialRouteLoad = false;
         }
-      }
-    });
+      })
+    );
   }
 
   private updateMapWithStations(stations: Station[]): void {

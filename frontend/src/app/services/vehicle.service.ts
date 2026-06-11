@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, EMPTY, of, timer } from 'rxjs';
-import { map, switchMap, catchError, take, shareReplay, withLatestFrom } from 'rxjs/operators';
+import { map, filter, switchMap, catchError, take, shareReplay, withLatestFrom } from 'rxjs/operators';
 import { Vehicle } from '../models/vehicle.model';
 import { Route } from '../models/route.model';
 import { Station } from '../models/station.model';
@@ -149,9 +149,13 @@ export class VehicleService {
     }
   }
 
-  getRouteById(routeId: string): Observable<Route | undefined> {
+  // Waits until the route appears in routes$ (which starts empty and fills in
+  // asynchronously — e.g. during cookie restore on cold start), then completes.
+  getRouteById(routeId: string): Observable<Route> {
     return this.routes$.pipe(
-      map(routes => routes.find(route => route.id === routeId))
+      map(routes => routes.find(route => route.id === routeId)),
+      filter((route): route is Route => route !== undefined),
+      take(1)
     );
   }
 
