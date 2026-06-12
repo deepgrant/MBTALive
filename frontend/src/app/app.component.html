@@ -67,7 +67,10 @@
       <div class="vehicle-drawer-swipe-area"
            (touchstart)="onSwipeStart($event)"
            (touchend)="onSwipeEnd($event)">
-        @if (isMobile()) {
+        <!-- Gate on the drawer being open: sidenav content renders eagerly even
+             when closed, and an instantiated vehicle list keeps the 10 s vehicle
+             poll running underneath the board view for nothing. -->
+        @if (isMobile() && vehicleDrawer.opened) {
           <app-vehicle-list></app-vehicle-list>
         }
       </div>
