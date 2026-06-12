@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Full-stack real-time MBTA vehicle tracking app. The Scala/Pekko backend proxies the MBTA REST API and the Angular frontend displays live vehicle positions on a Leaflet map.
+Full-stack real-time MBTA vehicle tracking app. The Scala/Pekko backend proxies the MBTA REST API and the Angular frontend displays live vehicle positions on a MapLibre GL map.
 
 ## Commands
 
@@ -35,7 +35,7 @@ To run a single Karma test: `ng test --include='**/path/to/foo.spec.ts' --watch=
 
 ### Stack
 - **Backend:** Scala 3.3, Apache Pekko 1.4, Pekko HTTP 1.3, Spray JSON
-- **Frontend:** Angular 20 (standalone components), RxJS 7.8, Leaflet 1.9, Angular Material
+- **Frontend:** Angular 20 (standalone components), RxJS 7.8, MapLibre GL 5, Angular Material
 
 ### Backend (`source/`)
 Thin proxy over the MBTA v3 REST API with data enrichment. All logic lives in `source/scala/`:
@@ -52,7 +52,7 @@ Thin proxy over the MBTA v3 REST API with data enrichment. All logic lives in `s
 ```
 AppComponent
 ├── RoutesComponent       — sidebar route list
-├── MapComponent          — Leaflet map (main view)
+├── MapComponent          — MapLibre GL map (main view)
 ├── VehicleListComponent  — selected vehicle details panel
 └── VehicleCompletionDialogComponent
 ```
@@ -60,7 +60,7 @@ AppComponent
 **Services (state management via RxJS BehaviorSubjects):**
 - **`VehicleService`** — owns all global state (`vehicles$`, `routes$`, `selectedRoute$`, `selectedVehicle$`); drives polling (vehicles every 10 s, routes every 30 s) via `switchMap`
 - **`ApiService`** — HTTP wrapper; all calls go to `/api/**` which the dev proxy forwards to the backend
-- **`MapService`** — Leaflet integration; manages markers, polylines, stop markers, and vehicle tracking
+- **`MapService`** — MapLibre GL integration; manages vehicle/station HTML markers, route shapes as GeoJSON line layers (polylines decoded via `@mapbox/polyline`), and vehicle tracking
 - **`CookieService`** — persists `AppSettings` (selected route, map center/zoom, panel visibility) to a 30-day cookie
 
 **Data flow:**
@@ -77,7 +77,7 @@ selectedRoute$ change
 ### Key Config Files
 - `source/resources/MBTA.conf` — optional API key
 - `source/resources/application.conf` — Pekko HTTP tuning (timeouts, max connections)
-- `frontend/angular.json` — build budgets (500 kb initial warning, 1 mb error), CommonJS allowlist for Leaflet/polyline-encoded
+- `frontend/angular.json` — build budgets (500 kb initial warning, 1 mb error), CommonJS allowlist for `maplibre-gl`/`@mapbox/polyline`
 - `frontend/src/styles.scss` — MBTA brand colors: navy `#003DA5`, orange `#ED8B00`, purple `#80276C`
 
 ### Scalafix Rules
