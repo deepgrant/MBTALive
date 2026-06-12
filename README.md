@@ -5,8 +5,8 @@ Real-time vehicle tracking for the MBTA network. Select a route in the sidebar a
 **Live:** https://mbta.critmind.com/
 
 <table><tr>
-<td><img height="350" alt="Screenshot 2026-05-20 at 8 18 29 PM" src="https://github.com/user-attachments/assets/e528cea6-18cd-4808-b04f-f961cc1a8e24" /></td>
-<td><img height="350" alt="iPhone17 Safari" src="https://github.com/user-attachments/assets/9a4abbe6-0573-41b8-a104-2ddcd56075c0" /></td>
+<td><img height="350" alt="Desktop map view" src="documents/map-desktop.png" /></td>
+<td><img height="350" alt="iPhone17 Safari" src="documents/map-iphone.png" /></td>
 <td><img height="350" alt="Train departure board for the Orange Line at Wellington, showing per-stop arrival predictions, HERE markers, and delay chips" src="documents/board-screen.png" /></td>
 </tr></table>
 
