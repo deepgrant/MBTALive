@@ -159,8 +159,13 @@ export class VehicleService {
   }
 
   restoreRouteFromCookie(): void {
-    this.routes$.pipe(take(1)).subscribe(routes => {
-      if (routes.length === 0) return;
+    // Wait for the first real routes emission: the caller fires this on a
+    // fixed delay, and racing a slow /api/routes response with take(1) on the
+    // []-seeded BehaviorSubject used to silently drop the saved route.
+    this.routes$.pipe(
+      filter(routes => routes.length > 0),
+      take(1)
+    ).subscribe(routes => {
       const settings = this.cookieService.getSettingsCookie();
       const savedRoute = settings?.selectedRoute;
       if (!savedRoute) return;

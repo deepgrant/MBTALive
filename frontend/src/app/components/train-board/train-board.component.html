@@ -108,7 +108,7 @@
                   <div class="gc" [ngClass]="cell.cls" [class.gc-sel]="row.selected">
                     @if (cell.isHere) {
                       <span class="here-r"><span class="hdot"></span>HERE</span>
-                      @if (cell.delayLabel) { <span class="sm lc">{{ cell.delayLabel }}</span> }
+                      @if (cell.delayLabel) { <span class="sm" [ngClass]="cell.delayLabelCls">{{ cell.delayLabel }}</span> }
                     } @else {
                       <span class="t">{{ cell.time }}</span>
                       @if (cell.delayLabelCls) {
@@ -157,7 +157,7 @@
                   <div class="gc" [ngClass]="cell.cls" [class.gc-sel]="row.selected">
                     @if (cell.isHere) {
                       <span class="here-r"><span class="hdot"></span>HERE</span>
-                      @if (cell.delayLabel) { <span class="sm lc">{{ cell.delayLabel }}</span> }
+                      @if (cell.delayLabel) { <span class="sm" [ngClass]="cell.delayLabelCls">{{ cell.delayLabel }}</span> }
                     } @else {
                       <span class="t">{{ cell.time }}</span>
                       @if (cell.delayLabelCls) {

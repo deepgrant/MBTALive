@@ -103,8 +103,14 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
         this.loading = false;
         this.boardData = data;
         if (data && this.selectedStation) {
-          const still = data.inboundStops.some(s => s.name === this.selectedStation);
-          if (!still) this.selectedStation = null;
+          const still = data.inboundStops.some(s => s.name === this.selectedStation)
+            || data.outboundStops.some(s => s.name === this.selectedStation);
+          if (!still) {
+            this.selectedStation = null;
+            // Tell the parent so the cookie clears too — otherwise the stale
+            // station resurrects via [initialStation] on every recreation.
+            this.stationSelected.emit(null);
+          }
         }
         this.rebuildDerivedState();
       })
@@ -140,7 +146,14 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
   // ── View-model construction ───────────────────────────────────────────────
 
   private rebuildDerivedState(): void {
-    this.stationList = this.boardData?.inboundStops.map(s => s.name) ?? [];
+    // Union of both directions: stop sets can differ (one-way loops, branch
+    // patterns), and an outbound-only station must still be pickable.
+    const inboundNames = this.boardData?.inboundStops.map(s => s.name) ?? [];
+    const seen = new Set(inboundNames);
+    const outboundOnly = (this.boardData?.outboundStops ?? [])
+      .map(s => s.name)
+      .filter(name => !seen.has(name));
+    this.stationList = [...inboundNames, ...outboundOnly];
     this.inbound = this.buildDirectionBoard(1, 'Inbound');
     this.outbound = this.buildDirectionBoard(0, 'Outbound');
   }
@@ -194,7 +207,9 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
   private buildCell(train: TrainBoardData, stop: BoardStopInfo): GridCell {
     if (train.currentStopId === stop.id) {
       const label = this.delayLabel(train);
-      return { cls: 's-here', isHere: true, time: '', delayLabel: label, delayLabelCls: label ? 'lc' : null };
+      // Late/early color like any other cell; on-time '✓' renders in the
+      // neutral .sm style (null class), not the late amber it used to get.
+      return { cls: 's-here', isHere: true, time: '', delayLabel: label, delayLabelCls: label ? CELL_LABEL_CLASS[delayCategory(train.delaySeconds)] : null };
     }
 
     const pred = train.predictions.find(p => p.stopId === stop.id);
@@ -240,7 +255,8 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
   // ── Formatting helpers ────────────────────────────────────────────────────
 
   private trainTitle(train: TrainBoardData): string {
-    return '#' + (train.tripName ?? train.vehicleId);
+    // || not ??: the wire sends tripName as "" for subway trains.
+    return '#' + (train.tripName || train.vehicleId);
   }
 
   private sortByPredAt(a: TrainBoardData, b: TrainBoardData, stop: BoardStopInfo): number {
@@ -263,7 +279,10 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
     const dt = new Date(isoString);
     if (isNaN(dt.getTime())) return null;
     const diff = (dt.getTime() - Date.now()) / 60000;
-    return diff > 0 ? Math.round(diff) : null;
+    // Predictions refresh on a 15 s poll, so a just-due train sits slightly
+    // past "now" between polls — clamp to "0 min" instead of dropping the
+    // chip and the soon/gold urgency styling at the exact moment it matters.
+    return diff > -1 ? Math.max(0, Math.round(diff)) : null;
   }
 
   private delayLabel(train: TrainBoardData): string {
