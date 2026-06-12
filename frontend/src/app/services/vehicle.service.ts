@@ -1,12 +1,13 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, EMPTY, of, timer } from 'rxjs';
-import { map, switchMap, catchError, take, shareReplay, withLatestFrom } from 'rxjs/operators';
+import { map, filter, switchMap, catchError, take, shareReplay, withLatestFrom } from 'rxjs/operators';
 import { Vehicle } from '../models/vehicle.model';
-import { Route } from '../models/route.model';
+import { Route, Shape } from '../models/route.model';
 import { Station } from '../models/station.model';
 import { Alert } from '../models/alert.model';
 import { ApiService } from './api.service';
 import { CookieService } from './cookie.service';
+import { ALERT_POLL_MS, ROUTE_RESTORE_SELECT_DELAY_MS } from '../shared/timing.constants';
 
 @Injectable({
   providedIn: 'root'
@@ -29,7 +30,7 @@ export class VehicleService {
 
   public filteredVehicles$: Observable<Vehicle[]>;
   public selectedRouteStations$: Observable<Station[]>;
-  public selectedRouteShapes$: Observable<any[]>;
+  public selectedRouteShapes$: Observable<Shape[]>;
   public selectedRouteAlerts$: Observable<Alert[]>;
   public allAlerts$: Observable<Alert[]>;
 
@@ -42,7 +43,7 @@ export class VehicleService {
     this.filteredVehicles$ = this.selectedRoute$.pipe(
       switchMap(selectedRoute => {
         if (!selectedRoute) return of([]);
-        return this.apiService.getRealTimeVehiclesByRoute(selectedRoute, 10000).pipe(
+        return this.apiService.getRealTimeVehiclesByRoute(selectedRoute).pipe(
           withLatestFrom(this.routes$),
           map(([vehicles, routes]) => {
             const route = routes.find(r => r.id === selectedRoute);
@@ -72,14 +73,14 @@ export class VehicleService {
     this.selectedRouteAlerts$ = this.selectedRoute$.pipe(
       switchMap(routeId => {
         if (!routeId) return of([]);
-        return timer(0, 90000).pipe(
+        return timer(0, ALERT_POLL_MS).pipe(
           switchMap(() => this.apiService.getAlertsForRoute(routeId)),
           catchError(() => of([]))
         );
       })
     );
 
-    this.allAlerts$ = timer(0, 90000).pipe(
+    this.allAlerts$ = timer(0, ALERT_POLL_MS).pipe(
       switchMap(() => this.apiService.getAlertsGlobal()),
       catchError(() => of([])),
       shareReplay(1)
@@ -143,28 +144,35 @@ export class VehicleService {
     this.selectedRouteSubject.next(routeId);
 
     if (!skipCookieSave) {
-      const currentSettings = this.cookieService.getSettingsCookie() ?? {};
-      currentSettings.selectedRoute = routeId;
-      this.cookieService.setSettingsCookie(currentSettings);
+      this.cookieService.updateSettings({ selectedRoute: routeId });
     }
   }
 
-  getRouteById(routeId: string): Observable<Route | undefined> {
+  // Waits until the route appears in routes$ (which starts empty and fills in
+  // asynchronously — e.g. during cookie restore on cold start), then completes.
+  getRouteById(routeId: string): Observable<Route> {
     return this.routes$.pipe(
-      map(routes => routes.find(route => route.id === routeId))
+      map(routes => routes.find(route => route.id === routeId)),
+      filter((route): route is Route => route !== undefined),
+      take(1)
     );
   }
 
   restoreRouteFromCookie(): void {
-    this.routes$.pipe(take(1)).subscribe(routes => {
-      if (routes.length === 0) return;
+    // Wait for the first real routes emission: the caller fires this on a
+    // fixed delay, and racing a slow /api/routes response with take(1) on the
+    // []-seeded BehaviorSubject used to silently drop the saved route.
+    this.routes$.pipe(
+      filter(routes => routes.length > 0),
+      take(1)
+    ).subscribe(routes => {
       const settings = this.cookieService.getSettingsCookie();
       const savedRoute = settings?.selectedRoute;
       if (!savedRoute) return;
 
       const routeExists = routes.some(route => route.id === savedRoute);
       if (routeExists) {
-        setTimeout(() => this.selectRoute(savedRoute, true), 100);
+        setTimeout(() => this.selectRoute(savedRoute, true), ROUTE_RESTORE_SELECT_DELAY_MS);
       } else {
         this.cookieService.setSettingsCookie({ ...settings, selectedRoute: null });
       }

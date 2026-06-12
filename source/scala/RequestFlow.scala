@@ -1,5 +1,6 @@
 package mbta.actor
 
+import com.typesafe.config.Config
 import mbta.actor.ModelAPIResponse._
 import mbta.actor.ModelData._
 import org.apache.pekko
@@ -27,6 +28,9 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
   private val StopCacheTtlMillis:    Long = 60L * 60L * 1000L  // 1 hour
   private val VehicleCacheTtlMillis: Long = 8L * 1000L         // 8 s (just under client poll)
   private val AlertCacheTtlMillis:   Long = 2L * 60L * 1000L  // 2 minutes
+  // Slightly over the client's 15 s board poll so consecutive polls (and
+  // concurrent clients) share one upstream fetch instead of missing every time.
+  private val BoardDataCacheTtlMillis: Long = 16L * 1000L
 
   // ── Internal types ────────────────────────────────────────────────────────
 
@@ -41,8 +45,11 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
   // ── Caches (thread-safe) ──────────────────────────────────────────────────
 
   private val stopCache:         TrieMap[String, (StopDetails, Long)]          = TrieMap.empty
-  private val vehicleCache:     TrieMap[String, (Vector[VehicleData], Long)]   = TrieMap.empty
-  private val vehicleInflight:  TrieMap[String, Future[Vector[VehicleData]]]   = TrieMap.empty
+  private val boardStopCache:    TrieMap[String, (Vector[BoardStopInfo], Long)] = TrieMap.empty
+  private val boardDataCache:    TrieMap[String, (RouteBoardData, Long)]        = TrieMap.empty
+  private val boardDataInflight: TrieMap[String, Future[RouteBoardData]]        = TrieMap.empty
+  private val vehicleCache:      TrieMap[String, (Vector[VehicleData], Long)]   = TrieMap.empty
+  private val vehicleInflight:   TrieMap[String, Future[Vector[VehicleData]]]   = TrieMap.empty
   private val alertByRouteCache: TrieMap[String, (Vector[AlertInfo], Long)]    = TrieMap.empty
   private val alertGlobalCache:  TrieMap[String, (Vector[AlertInfo], Long)]    = TrieMap.empty
 
@@ -307,6 +314,242 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
     if (sortOrder.toLowerCase == "asc") sorted else sorted.reverse
   }
 
+  // ── Board Data ────────────────────────────────────────────────────────────
+
+  // None on upstream failure — distinct from a genuinely empty stop list, so
+  // failures are never cached (a transient 429 must not blank the board for
+  // the full StopCacheTtlMillis hour).
+  private def fetchOrderedStopsFromApi(routeId: String, directionId: Int): Future[Option[Vector[BoardStopInfo]]] =
+    access.queueRequest(
+      HttpRequest(uri = access.mbtaUri(
+        path  = "/stops",
+        query = access.mbtaQuery(Map(
+          "filter[route]"        -> routeId,
+          "filter[direction_id]" -> directionId.toString,
+        ))
+      ))
+    ).flatMap {
+      case HttpResponse(StatusCodes.OK, _, entity, _) =>
+        access.parseMbtaResponse(entity).map { response =>
+          Some(response.getObjectList("data").asScala.toVector.zipWithIndex.map { case (stop, idx) =>
+            val s = stop.toConfig
+            BoardStopInfo(
+              id          = s.getString("id"),
+              name        = s.getString("attributes.name"),
+              latitude    = Try(s.getDouble("attributes.latitude")).getOrElse(0.0),
+              longitude   = Try(s.getDouble("attributes.longitude")).getOrElse(0.0),
+              directionId = directionId,
+              sequence    = idx,
+            )
+          })
+        }
+      case HttpResponse(code, _, entity, _) =>
+        log.error("fetchOrderedStops({}, {}) unexpected status: {}", routeId, directionId, code)
+        entity.discardBytes()
+        Future.successful(None)
+    }
+
+  private def fetchOrderedStops(routeId: String, directionId: Int): Future[Vector[BoardStopInfo]] = {
+    val key = s"$routeId:$directionId"
+    val now = java.time.Instant.now().toEpochMilli()
+    boardStopCache.get(key) match {
+      case Some((stops, expiry)) if expiry > now =>
+        Future.successful(stops)
+      case _ =>
+        fetchOrderedStopsFromApi(routeId, directionId).map {
+          case Some(stops) =>
+            boardStopCache.put(key, (stops, now + StopCacheTtlMillis))
+            stops
+          case None =>
+            // Serve the empty list this once but leave the cache untouched so
+            // the next board fetch retries.
+            Vector.empty
+        }
+    }
+  }
+
+  /**
+   * Raw parsed payload of a batched /predictions call covering many trips.
+   * Per-train board rows are assembled from this without further HTTP calls.
+   */
+  private case class BoardPredictionsRaw(
+    predsByTrip:   Map[String, Vector[Config]],
+    childToParent: Map[String, String],
+    scheduleMap:   Map[String, Config],
+  ) {
+    def merge(other: BoardPredictionsRaw): BoardPredictionsRaw = BoardPredictionsRaw(
+      predsByTrip   = predsByTrip ++ other.predsByTrip,
+      childToParent = childToParent ++ other.childToParent,
+      scheduleMap   = scheduleMap ++ other.scheduleMap,
+    )
+  }
+
+  // One /predictions request per PredictionBatchSize trips (mirrors
+  // fetchPredictionBatch) instead of the previous one-request-per-train,
+  // which alone exceeded the unkeyed 10 req/min MBTA quota on busy routes.
+  // Fails the Future on a non-OK status: a failed batch must neither be
+  // cached nor rendered as trains-with-no-predictions (ghost columns).
+  private def fetchBoardPredictionsBatch(tripIds: Vector[String]): Future[BoardPredictionsRaw] =
+    access.queueRequest(
+      HttpRequest(uri = access.mbtaUri(
+        path  = "/predictions",
+        query = access.mbtaQuery(Map(
+          "filter[trip]" -> tripIds.mkString(","),
+          "include"      -> "stop,schedule",
+          "sort"         -> "stop_sequence",
+        ))
+      ))
+    ).flatMap {
+      case HttpResponse(StatusCodes.OK, _, entity, _) =>
+        access.parseMbtaResponse(entity).map { resp =>
+          val included = Try(resp.getObjectList("included").asScala.toVector.map(_.toConfig)).getOrElse(Vector.empty)
+
+          // Predictions reference child stop IDs (e.g. "70031"); ordered stops use parent
+          // place IDs (e.g. "place-welln"). Map child → parent via included stop objects.
+          val childToParent: Map[String, String] = included
+            .filter(r => Try(r.getString("type")).getOrElse("") == "stop")
+            .flatMap { s =>
+              for {
+                childId  <- Try(s.getString("id")).toOption
+                parentId <- Try(s.getString("relationships.parent_station.data.id")).toOption
+              } yield childId -> parentId
+            }
+            .toMap
+
+          val scheduleMap = included
+            .filter(r => Try(r.getString("type")).getOrElse("") == "schedule")
+            .flatMap(s => Try(s.getString("id")).toOption.map(_ -> s))
+            .toMap
+
+          val predsByTrip = Try(resp.getObjectList("data").asScala.toVector.map(_.toConfig))
+            .getOrElse(Vector.empty)
+            .flatMap(p => Try(p.getString("relationships.trip.data.id")).toOption.map(_ -> p))
+            .groupMap(_._1)(_._2)
+
+          BoardPredictionsRaw(predsByTrip, childToParent, scheduleMap)
+        }
+      case HttpResponse(code, _, entity, _) =>
+        log.error("fetchBoardPredictionsBatch({} trips) unexpected status: {}", tripIds.size, code)
+        entity.discardBytes()
+        Future.failed(new RuntimeException(s"board predictions batch failed with $code"))
+    }
+
+  private def fetchAllBoardPredictions(tripIds: Vector[String]): Future[BoardPredictionsRaw] =
+    if (tripIds.isEmpty) Future.successful(BoardPredictionsRaw(Map.empty, Map.empty, Map.empty))
+    else Source(tripIds.grouped(PredictionBatchSize).toVector)
+      .mapAsync(parallelism = 4)(fetchBoardPredictionsBatch)
+      .runWith(Sink.seq)
+      .map(_.reduce(_ merge _))
+
+  // Pure assembly: builds one train's board row from the already-fetched batch.
+  private def buildTrainBoardData(
+    v:           VehicleData,
+    tripId:      String,
+    raw:         BoardPredictionsRaw,
+    stopsForDir: Vector[BoardStopInfo],
+  ): TrainBoardData = {
+    val stopSeqMap  = stopsForDir.map(s => s.id -> s.sequence).toMap
+    val stopNameMap = stopsForDir.map(s => s.id -> s.name).toMap
+
+    val preds = raw.predsByTrip.getOrElse(tripId, Vector.empty)
+      .flatMap { pred =>
+        for {
+          childStopId <- Try(pred.getString("relationships.stop.data.id")).toOption
+          placeId      = raw.childToParent.getOrElse(childStopId, childStopId)
+          sequence    <- stopSeqMap.get(placeId)
+        } yield StopPrediction(
+          stopId        = placeId,
+          stopName      = stopNameMap.getOrElse(placeId, placeId),
+          sequence      = sequence,
+          predictedTime = Try(pred.getString("attributes.arrival_time")).toOption,
+          scheduledTime = Try(pred.getString("relationships.schedule.data.id")).toOption
+                            .flatMap(raw.scheduleMap.get)
+                            .flatMap(s => Try(s.getString("attributes.arrival_time")).toOption),
+          status        = "upcoming",
+        )
+      }
+      .sortBy(_.sequence)
+
+    // Resolve vehicle's actual current stop via childToParent (vehicle position is
+    // real-time accurate; min(predictions.sequence) can lag after a train passes a stop).
+    // Fall back to min prediction sequence if the vehicle stop can't be resolved.
+    val resolvedStop = v.stopId.flatMap { childId =>
+      val parentId = raw.childToParent.getOrElse(childId, childId)
+      stopSeqMap.get(parentId).map(seq => (parentId, seq))
+    }
+
+    val (curStopId, curSeq) = (preds, resolvedStop) match {
+      case (_, Some((id, seq))) => (Some(id), seq)
+      case (ps, None) if ps.nonEmpty =>
+        val minSeq = ps.map(_.sequence).min
+        (stopsForDir.find(_.sequence == minSeq).map(_.id), minSeq)
+      case _ =>
+        // No predictions and no resolvable stop: park the train past every
+        // stop so the frontend's "approaching" filter (seq <= station.seq)
+        // never shows it as a ghost column of empty cells.
+        (None, Int.MaxValue)
+    }
+
+    TrainBoardData(
+      vehicleId           = v.vehicleId.getOrElse(""),
+      tripId              = v.tripId,
+      tripName            = v.tripName,
+      directionId         = v.directionId,
+      direction           = v.direction,
+      destination         = v.destination,
+      currentStopId       = curStopId.filter(_.nonEmpty),
+      currentStopSequence = curSeq,
+      delaySeconds        = v.delaySeconds,
+      delayStatus         = v.delayStatus,
+      predictions         = preds,
+    )
+  }
+
+  private def fetchBoardDataFromMbta(routeId: String): Future[RouteBoardData] = {
+    // The three sources are independent — start them all before combining so
+    // the cold path pays max(RTT) instead of three sequential round-trips.
+    val vehiclesFut = fetchVehiclesForRoute(routeId)
+    val inboundFut  = fetchOrderedStops(routeId, 1)
+    val outboundFut = fetchOrderedStops(routeId, 0)
+
+    val boardFut = for {
+      vehicles      <- vehiclesFut
+      inboundStops  <- inboundFut
+      outboundStops <- outboundFut
+      withTrips      = vehicles.flatMap(v => v.tripId.map(v -> _))
+      raw           <- fetchAllBoardPredictions(withTrips.map(_._2).distinct)
+    } yield {
+      val trains = withTrips.map { case (v, tripId) =>
+        val stopsForDir = if (v.directionId.getOrElse(0) == 1) inboundStops else outboundStops
+        buildTrainBoardData(v, tripId, raw, stopsForDir)
+      }
+      RouteBoardData(routeId, inboundStops, outboundStops, trains)
+    }
+
+    boardFut
+      .recoverWith { case e: Throwable =>
+        log.error("fetchBoardData({}) unexpected error: {}", routeId, e)
+        Future.failed(e)
+      }
+      // Cache BEFORE dropping the inflight entry: the reverse order left a
+      // window where a concurrent request saw neither and re-fanned out.
+      .map { data =>
+        boardDataCache.update(routeId, (data, java.time.Instant.now().toEpochMilli() + BoardDataCacheTtlMillis))
+        data
+      }
+      .andThen { case _ => boardDataInflight.remove(routeId) }
+  }
+
+  def fetchBoardData(routeId: String): Future[RouteBoardData] = {
+    val now = java.time.Instant.now().toEpochMilli()
+    boardDataCache.get(routeId) match {
+      case Some((data, expiry)) if expiry > now =>
+        Future.successful(data)
+      case _ =>
+        boardDataInflight.getOrElseUpdate(routeId, fetchBoardDataFromMbta(routeId))
+    }
+  }
+
   // ── Public API ────────────────────────────────────────────────────────────
 
   private def fetchFromMbta(routeId: String): Future[Vector[VehicleData]] = {
@@ -325,12 +568,14 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
           mergeEnrichments(withStops, withPreds)
         }
       }
-      .andThen { case _ =>
-        vehicleInflight.remove(routeId)
-      }
+      // Cache BEFORE dropping the inflight entry: the reverse order left a
+      // window where a concurrent request saw neither and re-fanned out.
       .map { vehicles =>
         vehicleCache.update(routeId, (vehicles, now + VehicleCacheTtlMillis))
         vehicles
+      }
+      .andThen { case _ =>
+        vehicleInflight.remove(routeId)
       }
   }
 

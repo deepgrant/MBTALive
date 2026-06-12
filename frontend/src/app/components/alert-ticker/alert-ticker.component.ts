@@ -1,5 +1,5 @@
 import { Component, Input } from '@angular/core';
-import { Alert, AlertSeverityLevel, highestSeverityLevel } from '../../models/alert.model';
+import { Alert, AlertSeverityLevel, formatAlertEffect, highestSeverityLevel } from '../../models/alert.model';
 
 @Component({
   selector: 'app-alert-ticker',
@@ -15,7 +15,7 @@ export class AlertTickerComponent {
   }
 
   get tickerText(): string {
-    return this.alerts.map(a => `${a.effect.replace(/_/g, ' ')}: ${a.header}`).join(' \u25C6 ');
+    return this.alerts.map(a => `${formatAlertEffect(a.effect)}: ${a.header}`).join(' \u25C6 ');
   }
 
   get animationDuration(): string {

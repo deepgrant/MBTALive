@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { NgClass } from '@angular/common';
 import { MatListModule } from '@angular/material/list';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -10,10 +10,24 @@ import { VehicleService } from '../../services/vehicle.service';
 import { VehicleFormatService } from '../../services/vehicle-format.service';
 import { AlertBannerComponent } from '../alert-banner/alert-banner.component';
 
+// Display strings precomputed once per 10 s poll so the template binds plain
+// fields instead of calling formatters on every change-detection cycle.
+interface VehicleView {
+  vehicle: Vehicle;
+  statusClass: string;
+  delayColor: string;
+  delayText: string;
+  speedText: string;
+  scheduledText: string | null;
+  predictedText: string | null;
+  updatedText: string;
+  typeIcon: string;
+}
+
 @Component({
     selector: 'app-vehicle-list',
     imports: [
-        CommonModule,
+        NgClass,
         MatListModule,
         MatCardModule,
         MatIconModule,
@@ -23,20 +37,20 @@ import { AlertBannerComponent } from '../alert-banner/alert-banner.component';
     styleUrls: ['./vehicle-list.component.scss']
 })
 export class VehicleListComponent implements OnInit, OnDestroy {
-  vehicles: Vehicle[] = [];
+  vehicleViews: VehicleView[] = [];
   alerts: Alert[] = [];
   selectedRoute: string | null = null;
   private subscriptions: Subscription[] = [];
 
   constructor(
     private vehicleService: VehicleService,
-    readonly fmt: VehicleFormatService
+    private fmt: VehicleFormatService
   ) { }
 
   ngOnInit(): void {
     this.subscriptions.push(
       this.vehicleService.filteredVehicles$.subscribe({
-        next: (vehicles) => { this.vehicles = vehicles; },
+        next: (vehicles) => { this.vehicleViews = vehicles.map(v => this.toView(v)); },
         error: (error) => { console.error('VehicleListComponent: Error receiving vehicles:', error); }
       }),
       this.vehicleService.selectedRoute$.subscribe({
@@ -54,4 +68,17 @@ export class VehicleListComponent implements OnInit, OnDestroy {
     this.subscriptions.forEach(sub => sub.unsubscribe());
   }
 
+  private toView(vehicle: Vehicle): VehicleView {
+    return {
+      vehicle,
+      statusClass: vehicle.delayStatus || 'on-time',
+      delayColor: this.fmt.getDelayColor(vehicle.delayStatus),
+      delayText: this.fmt.formatDelayTime(vehicle.delaySeconds),
+      speedText: this.fmt.formatSpeed(vehicle.speed),
+      scheduledText: vehicle.scheduledArrivalTime ? this.fmt.formatTime(vehicle.scheduledArrivalTime) : null,
+      predictedText: vehicle.predictedArrivalTime ? this.fmt.formatTime(vehicle.predictedArrivalTime) : null,
+      updatedText: this.fmt.formatTime(vehicle.updatedAt),
+      typeIcon: this.fmt.isBus(vehicle) ? 'directions_bus' : 'train',
+    };
+  }
 }

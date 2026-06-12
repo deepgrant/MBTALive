@@ -6,11 +6,13 @@ import { MatSidenavModule, MatSidenav } from '@angular/material/sidenav';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { RoutesComponent } from './components/routes/routes.component';
 import { MapComponent } from './components/map/map.component';
+import { TrainBoardComponent } from './components/train-board/train-board.component';
 import { VehicleListComponent } from './components/vehicle-list/vehicle-list.component';
 import { VehicleService } from './services/vehicle.service';
 import { CookieService } from './services/cookie.service';
 import { AlertTickerComponent } from './components/alert-ticker/alert-ticker.component';
 import { Alert } from './models/alert.model';
+import { MOBILE_BREAKPOINT_QUERY, ROUTE_RESTORE_DELAY_MS, SWIPE_DISMISS_PX } from './shared/timing.constants';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -23,6 +25,7 @@ import { Subscription } from 'rxjs';
         AlertTickerComponent,
         RoutesComponent,
         MapComponent,
+        TrainBoardComponent,
         VehicleListComponent,
     ],
     templateUrl: './app.component.html',
@@ -31,9 +34,11 @@ import { Subscription } from 'rxjs';
 export class AppComponent implements OnInit, OnDestroy {
   title = 'MBTA Tracker';
   selectedRoute: string | null = null;
+  selectedStation: string | null = null;
   routesPanelVisible = true;
   routeAlerts: Alert[] = [];
   isMobile = signal(false);
+  viewMode: 'board' | 'map' = 'board';
 
   @ViewChild('routesDrawer') routesDrawer!: MatSidenav;
   @ViewChild('vehicleDrawer') vehicleDrawer!: MatSidenav;
@@ -48,7 +53,7 @@ export class AppComponent implements OnInit, OnDestroy {
   ) {
     // Set synchronously so the template renders with the correct mode on first
     // paint and avoids a flash of the desktop layout on mobile.
-    this.isMobile.set(breakpointObserver.isMatched('(max-width: 767.98px)'));
+    this.isMobile.set(breakpointObserver.isMatched(MOBILE_BREAKPOINT_QUERY));
   }
 
   ngOnInit(): void {
@@ -57,8 +62,12 @@ export class AppComponent implements OnInit, OnDestroy {
       this.routesPanelVisible = settings.routesPanelVisible;
     }
 
+    // Restore route (and station via selectedRoute$ subscription below) once
+    // the map has had time to initialize on desktop.
+    setTimeout(() => this.vehicleService.restoreRouteFromCookie(), ROUTE_RESTORE_DELAY_MS);
+
     this.subscriptions.push(
-      this.breakpointObserver.observe('(max-width: 767.98px)').subscribe(state => {
+      this.breakpointObserver.observe(MOBILE_BREAKPOINT_QUERY).subscribe(state => {
         this.isMobile.set(state.matches);
         if (!state.matches) {
           this.vehicleDrawer?.close();
@@ -67,7 +76,20 @@ export class AppComponent implements OnInit, OnDestroy {
 
       this.vehicleService.selectedRoute$.subscribe({
         next: (routeId) => {
+          const prevRoute = this.selectedRoute;
           this.selectedRoute = routeId;
+          if (routeId && routeId !== prevRoute) this.viewMode = 'board';
+          if (routeId !== prevRoute) {
+            const saved = this.cookieService.getSettingsCookie();
+            if (routeId && routeId === saved?.selectedRoute) {
+              this.selectedStation = saved?.selectedStation ?? null;
+            } else {
+              this.selectedStation = null;
+              if (saved?.selectedStation) {
+                this.cookieService.updateSettings({ selectedStation: null });
+              }
+            }
+          }
           // On mobile: close the vehicle drawer when a route is deselected.
           // Do NOT auto-open on selection — the user opens it via the toolbar button.
           if (this.isMobile() && !routeId) {
@@ -88,14 +110,24 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   toggleRoutesPanel(): void {
-    if (this.isMobile()) {
-      this.routesDrawer.toggle();
-    } else {
+    if (!this.isMobile()) {
       this.routesPanelVisible = !this.routesPanelVisible;
-      const currentSettings = this.cookieService.getSettingsCookie() ?? {};
-      currentSettings.routesPanelVisible = this.routesPanelVisible;
-      this.cookieService.setSettingsCookie(currentSettings);
+      this.cookieService.updateSettings({ routesPanelVisible: this.routesPanelVisible });
     }
+  }
+
+  backToRoutes(): void {
+    this.vehicleService.selectRoute(null);
+    this.viewMode = 'board';
+  }
+
+  onStationSelected(station: string | null): void {
+    this.selectedStation = station;
+    this.cookieService.updateSettings({ selectedStation: station });
+  }
+
+  toggleView(): void {
+    this.viewMode = this.viewMode === 'board' ? 'map' : 'board';
   }
 
   toggleVehiclePanel(): void {
@@ -108,14 +140,14 @@ export class AppComponent implements OnInit, OnDestroy {
 
   onSwipeEnd(event: TouchEvent): void {
     const deltaX = event.changedTouches[0].clientX - this.swipeStartX;
-    if (deltaX > 60) {
+    if (deltaX > SWIPE_DISMISS_PX) {
       this.vehicleDrawer.close();
     }
   }
 
   onRoutesSwipeEnd(event: TouchEvent): void {
     const deltaX = event.changedTouches[0].clientX - this.swipeStartX;
-    if (deltaX < -60) {
+    if (deltaX < -SWIPE_DISMISS_PX) {
       this.routesDrawer.close();
     }
   }
@@ -123,6 +155,7 @@ export class AppComponent implements OnInit, OnDestroy {
   resetToInitialState(): void {
     this.cookieService.deleteSettingsCookie();
     this.vehicleService.selectRoute(null, true);
+    this.selectedStation = null;
     this.routesPanelVisible = true;
     if (this.isMobile()) {
       this.routesDrawer?.close();

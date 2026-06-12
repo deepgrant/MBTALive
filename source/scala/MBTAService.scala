@@ -74,6 +74,16 @@ class MBTAService extends Actor with ActorLogging {
 
     implicit val alertInfoFormat: RootJsonFormat[AlertInfo] = jsonFormat10(AlertInfo.apply)
 
+    implicit val boardStopInfoFormat:  RootJsonFormat[BoardStopInfo]  = jsonFormat6(BoardStopInfo.apply)
+    implicit val stopPredictionFormat: RootJsonFormat[StopPrediction] = jsonFormat6(StopPrediction.apply)
+    implicit val trainBoardDataFormat: RootJsonFormat[TrainBoardData] = jsonFormat11(TrainBoardData.apply)
+    implicit val routeBoardDataFormat: RootJsonFormat[RouteBoardData] = jsonFormat4(RouteBoardData.apply)
+
+    implicit val routeBoardDataMarshaller: Marshaller[RouteBoardData, HttpEntity.Strict] =
+      Marshaller.withFixedContentType(ContentTypes.`application/json`) { data =>
+        HttpEntity(ContentTypes.`application/json`, data.toJson.compactPrint)
+      }
+
     implicit val routeInfoListMarshaller:   Marshaller[Vector[RouteInfo],   HttpEntity.Strict] = jsonMarshaller[RouteInfo]
     implicit val stopInfoListMarshaller:    Marshaller[Vector[StopInfo],    HttpEntity.Strict] = jsonMarshaller[StopInfo]
     implicit val shapeInfoListMarshaller:   Marshaller[Vector[ShapeInfo],   HttpEntity.Strict] = jsonMarshaller[ShapeInfo]
@@ -150,6 +160,11 @@ class MBTAService extends Actor with ActorLogging {
             path("alerts") {
               get {
                 onSuccess(flow.fetchAlertsGlobal()) { complete(_) }
+              }
+            },
+            path("route" / Segment / "board") { routeId =>
+              get {
+                onSuccess(flow.fetchBoardData(routeId)) { complete(_) }
               }
             },
           )

@@ -1,4 +1,4 @@
-$mobile-bp: 767.98px;
+@use 'shared/breakpoints' as *;
 
 // Root: column flex so toolbar and sidenav container stack vertically.
 // This keeps drawers confined to the area below the toolbar.
@@ -76,6 +76,16 @@ $mobile-bp: 767.98px;
   min-height: 0;
 }
 
+.mobile-routes-fullscreen {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 .spacer {
   flex: 1 1 auto;
 }
@@ -108,4 +118,21 @@ $mobile-bp: 767.98px;
 .content {
   height: 100%;
   overflow: hidden;
+}
+
+.view-toggle-btn {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .4px;
+  color: white;
+  background: rgba(255, 255, 255, .15);
+  border: 1px solid rgba(255, 255, 255, .3);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:active {
+    background: rgba(255, 255, 255, .25);
+  }
 }

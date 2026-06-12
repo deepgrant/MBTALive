@@ -1,7 +1,7 @@
 import { Component, Input } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
-import { Alert, AlertSeverityLevel, alertSeverityLevel, highestSeverityLevel } from '../../models/alert.model';
+import { Alert, AlertSeverityLevel, alertSeverityLevel, formatAlertEffect, highestSeverityLevel } from '../../models/alert.model';
 
 @Component({
   selector: 'app-alert-banner',
@@ -23,7 +23,7 @@ export class AlertBannerComponent {
   }
 
   formatEffect(effect: string): string {
-    return effect.replace(/_/g, ' ');
+    return formatAlertEffect(effect);
   }
 
   toggleExpanded(): void {

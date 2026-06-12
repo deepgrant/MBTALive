@@ -9,6 +9,7 @@ import { Route } from '../../models/route.model';
 import { Alert, AlertSeverityLevel, alertSeverityLevel, highestSeverityLevel } from '../../models/alert.model';
 import { VehicleService } from '../../services/vehicle.service';
 import { ROUTE_TYPE } from '../../services/vehicle-format.service';
+import { REFRESH_SPINNER_MS } from '../../shared/timing.constants';
 
 @Component({
     selector: 'app-routes',
@@ -77,7 +78,7 @@ export class RoutesComponent implements OnInit, OnDestroy {
   refreshRoutes(): void {
     this.isRefreshing = true;
     this.vehicleService.refreshRoutes();
-    setTimeout(() => { this.isRefreshing = false; }, 500);
+    setTimeout(() => { this.isRefreshing = false; }, REFRESH_SPINNER_MS);
   }
 
   setRouteTypeFilter(type: string): void {

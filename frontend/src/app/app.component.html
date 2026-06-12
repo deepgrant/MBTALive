@@ -4,10 +4,10 @@
   <mat-toolbar color="primary">
     <button
       type="button"
-      [attr.aria-label]="isMobile() ? 'Open routes menu' : (routesPanelVisible ? 'Close routes panel' : 'Open routes panel')"
+      [attr.aria-label]="isMobile() && selectedRoute ? 'Back to routes' : (isMobile() ? 'Routes' : (routesPanelVisible ? 'Close routes panel' : 'Open routes panel'))"
       mat-icon-button
-      (click)="toggleRoutesPanel()">
-      <mat-icon>{{isMobile() ? 'menu' : (routesPanelVisible ? 'chevron_left' : 'chevron_right')}}</mat-icon>
+      (click)="isMobile() && selectedRoute ? backToRoutes() : toggleRoutesPanel()">
+      <mat-icon>{{ isMobile() && selectedRoute ? 'arrow_back' : (isMobile() ? 'menu' : (routesPanelVisible ? 'chevron_left' : 'chevron_right')) }}</mat-icon>
     </button>
     <img src="assets/favicon.png" alt="MBTA Logo" class="toolbar-favicon">
     <span class="toolbar-title">{{title}}</span>
@@ -19,6 +19,9 @@
         mat-icon-button
         (click)="toggleVehiclePanel()">
         <mat-icon>directions_bus</mat-icon>
+      </button>
+      <button type="button" class="view-toggle-btn" (click)="toggleView()">
+        {{ viewMode === 'board' ? 'Map' : 'Board' }}
       </button>
     }
     <button
@@ -39,18 +42,19 @@
   <!-- Sidenav container fills the remaining height below the toolbar -->
   <mat-sidenav-container class="sidenav-container" [hasBackdrop]="isMobile()">
 
-    <!-- Routes drawer: side-by-side on desktop, overlay on mobile -->
+    <!-- Routes drawer: side-by-side on desktop only.
+         On mobile, routes are shown full-screen in the content area instead. -->
     <mat-sidenav
       #routesDrawer
       [mode]="isMobile() ? 'over' : 'side'"
       [opened]="!isMobile() && routesPanelVisible"
       position="start"
       class="routes-sidenav">
-      <div class="routes-drawer-swipe-area"
-           (touchstart)="onSwipeStart($event)"
-           (touchend)="onRoutesSwipeEnd($event)">
-        <app-routes></app-routes>
-      </div>
+      @if (!isMobile()) {
+        <div class="routes-drawer-swipe-area">
+          <app-routes></app-routes>
+        </div>
+      }
     </mat-sidenav>
 
     <!-- Vehicle drawer: right-side overlay, mobile only.
@@ -63,7 +67,10 @@
       <div class="vehicle-drawer-swipe-area"
            (touchstart)="onSwipeStart($event)"
            (touchend)="onSwipeEnd($event)">
-        @if (isMobile()) {
+        <!-- Gate on the drawer being open: sidenav content renders eagerly even
+             when closed, and an instantiated vehicle list keeps the 10 s vehicle
+             poll running underneath the board view for nothing. -->
+        @if (isMobile() && vehicleDrawer.opened) {
           <app-vehicle-list></app-vehicle-list>
         }
       </div>
@@ -79,11 +86,30 @@
           </div>
         }
 
-        <div class="main-content">
-          <div class="content">
-            <app-map></app-map>
+        <!-- Mobile: no route selected → full-screen routes list -->
+        @if (isMobile() && !selectedRoute) {
+          <div class="mobile-routes-fullscreen">
+            <app-routes></app-routes>
           </div>
-        </div>
+        }
+
+        <!-- Map: always on desktop; on mobile only when route selected + map mode -->
+        @if (!isMobile() || (selectedRoute && viewMode === 'map')) {
+          <div class="main-content">
+            <div class="content">
+              <app-map></app-map>
+            </div>
+          </div>
+        }
+
+        <!-- Mobile board: only when route selected + board mode -->
+        @if (isMobile() && selectedRoute && viewMode === 'board') {
+          <app-train-board class="main-content"
+            [routeId]="selectedRoute"
+            [initialStation]="selectedStation"
+            (stationSelected)="onStationSelected($event)">
+          </app-train-board>
+        }
 
       </div>
     </mat-sidenav-content>

@@ -1,16 +1,22 @@
-export interface Route {
-  id: string;
-  long_name: string;
-  short_name: string;
-  color: string;
-  text_color: string;
-  route_type: number;
-}
+import { z } from 'zod';
 
-export interface Shape {
-  id: string;
-  polyline: string;
-  priority: number;
-  directionId: number;
-  typicality: number;
-}
+export const RouteSchema = z.object({
+  id: z.string(),
+  long_name: z.string(),
+  short_name: z.string(),
+  color: z.string(),
+  text_color: z.string(),
+  route_type: z.number(),
+});
+
+export type Route = z.infer<typeof RouteSchema>;
+
+export const ShapeSchema = z.object({
+  id: z.string(),
+  polyline: z.string(),
+  priority: z.number(),
+  directionId: z.number(),
+  typicality: z.number(),
+});
+
+export type Shape = z.infer<typeof ShapeSchema>;

@@ -1,0 +1,197 @@
+@if (loading && !boardData) {
+  <div class="status-msg">Loading…</div>
+}
+
+<!-- Station list picker — direct :host child so height:100% resolves correctly -->
+@if (boardData && !selectedStation) {
+  <div class="station-picker-view">
+    <div class="station-picker-title">Select a boarding station</div>
+    <div class="station-picker-list">
+      @for (station of stationList; track station) {
+        <button class="station-item" (click)="onStationChange(station)">
+          {{ station }}
+        </button>
+      }
+    </div>
+  </div>
+}
+
+@if (boardData && selectedStation) {
+<div class="board-root">
+
+    <!-- Compact station bar with direction toggle and change button -->
+    <div class="station-bar">
+      <span class="station-bar-name">{{ selectedStation }}</span>
+      <div class="dir-toggle">
+        <button class="dir-btn" [class.active]="selectedDirection === 'inbound'"
+                (click)="setDirection('inbound')">{{ inbound.directionName }}</button>
+        <button class="dir-btn" [class.active]="selectedDirection === 'outbound'"
+                (click)="setDirection('outbound')">{{ outbound.directionName }}</button>
+      </div>
+      <button class="station-bar-change" (click)="onStationChange('')">Change</button>
+    </div>
+
+    <!-- ── Selected-station band ── -->
+    <div class="sa-band">
+
+      @if (selectedDirection === 'inbound' && inbound.arrivals.length > 0) {
+        <div class="sa-dir-lbl">{{ inbound.directionName }} arrivals</div>
+        <div class="sa-cards">
+          @for (a of inbound.arrivals; track a.key) {
+            <div class="sa-card">
+              <div class="sa-card-lbl">{{ a.label }}</div>
+              <div class="sa-card-time" [ngClass]="a.timeClass">{{ a.time }}</div>
+              <div class="sa-card-row">
+                @if (a.mins !== null) { <span class="sa-min">{{ a.mins }} min</span> }
+                @if (a.delayLabel) {
+                  <span class="sa-chip" [ngClass]="a.chipClass">{{ a.delayLabel }}</span>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      @if (selectedDirection === 'outbound' && outbound.arrivals.length > 0) {
+        <div class="sa-dir-lbl">{{ outbound.directionName }} arrivals</div>
+        <div class="sa-cards">
+          @for (a of outbound.arrivals; track a.key) {
+            <div class="sa-card">
+              <div class="sa-card-lbl">{{ a.label }}</div>
+              <div class="sa-card-time" [ngClass]="a.timeClass">{{ a.time }}</div>
+              <div class="sa-card-row">
+                @if (a.mins !== null) { <span class="sa-min">{{ a.mins }} min</span> }
+                @if (a.delayLabel) {
+                  <span class="sa-chip" [ngClass]="a.chipClass">{{ a.delayLabel }}</span>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      @if (selectedDirection === 'inbound' && inbound.arrivals.length === 0) {
+        <div class="sa-empty">No {{ inbound.directionName }} trains approaching this station.</div>
+      }
+      @if (selectedDirection === 'outbound' && outbound.arrivals.length === 0) {
+        <div class="sa-empty">No {{ outbound.directionName }} trains approaching this station.</div>
+      }
+    </div>
+
+    <!-- ── Inbound section (shown when direction = inbound) ── -->
+    @if (selectedDirection === 'inbound') {
+      @if (inbound.columns.length > 0) {
+        <div class="sec-hdr">
+          <span class="sec-dir">{{ inbound.directionName }}{{ inbound.dest ? ' · to ' + inbound.dest : '' }}</span>
+          <span class="sec-trains">{{ inbound.trainNames }}</span>
+        </div>
+
+        @if (inbound.rows.length > 0) {
+          <div class="cont-hint">
+            <span class="dots">· · ·</span>
+            <span>approaching{{ inbound.dest ? ' from ' + inbound.dest + ' direction' : '' }}</span>
+          </div>
+
+          <div class="grid-scroll">
+            <div class="sgrid" [style.grid-template-columns]="inbound.gridCols">
+              <!-- header row -->
+              <div class="gc gh gc-st">Station</div>
+              @for (col of inbound.columns; track col.key) {
+                <div class="gc gh" [ngClass]="col.headerClass">
+                  {{ col.title }} {{ col.delayLabel }}
+                </div>
+              }
+              <!-- stop rows (full route) -->
+              @for (row of inbound.rows; track row.stopId) {
+                <div class="gc gc-st" [class.gc-sel]="row.selected">{{ row.stopName }}</div>
+                @for (cell of row.cells; track $index) {
+                  <div class="gc" [ngClass]="cell.cls" [class.gc-sel]="row.selected">
+                    @if (cell.isHere) {
+                      <span class="here-r"><span class="hdot"></span>HERE</span>
+                      @if (cell.delayLabel) { <span class="sm" [ngClass]="cell.delayLabelCls">{{ cell.delayLabel }}</span> }
+                    } @else {
+                      <span class="t">{{ cell.time }}</span>
+                      @if (cell.delayLabelCls) {
+                        <span class="sm" [ngClass]="cell.delayLabelCls">{{ cell.delayLabel }}</span>
+                      }
+                    }
+                  </div>
+                }
+              }
+            </div>
+          </div>
+          <div class="cont-hint right">
+            <span>continuing to {{ inbound.dest || 'terminus' }}</span>
+            <span class="dots">· · ·</span>
+          </div>
+        }
+      } @else {
+        <div class="sec-hdr">
+          <span class="sec-dir">{{ inbound.directionName }}</span>
+        </div>
+        <div class="no-trains">No {{ inbound.directionName }} trains approaching {{ selectedStation }}</div>
+      }
+    }
+
+    <!-- ── Outbound section (shown when direction = outbound) ── -->
+    @if (selectedDirection === 'outbound') {
+      @if (outbound.columns.length > 0) {
+        <div class="sec-hdr">
+          <span class="sec-dir">{{ outbound.directionName }}{{ outbound.dest ? ' · to ' + outbound.dest : '' }}</span>
+          <span class="sec-trains">{{ outbound.trainNames }}</span>
+        </div>
+
+        @if (outbound.rows.length > 0) {
+          <div class="grid-scroll">
+            <div class="sgrid" [style.grid-template-columns]="outbound.gridCols">
+              <!-- header row -->
+              @for (col of outbound.columns; track col.key) {
+                <div class="gc gh" [ngClass]="col.headerClass">
+                  {{ col.title }} {{ col.delayLabel }}
+                </div>
+              }
+              <div class="gc gh gc-st r">Station</div>
+              <!-- stop rows (full route) -->
+              @for (row of outbound.rows; track row.stopId) {
+                @for (cell of row.cells; track $index) {
+                  <div class="gc" [ngClass]="cell.cls" [class.gc-sel]="row.selected">
+                    @if (cell.isHere) {
+                      <span class="here-r"><span class="hdot"></span>HERE</span>
+                      @if (cell.delayLabel) { <span class="sm" [ngClass]="cell.delayLabelCls">{{ cell.delayLabel }}</span> }
+                    } @else {
+                      <span class="t">{{ cell.time }}</span>
+                      @if (cell.delayLabelCls) {
+                        <span class="sm" [ngClass]="cell.delayLabelCls">{{ cell.delayLabel }}</span>
+                      }
+                    }
+                  </div>
+                }
+                <div class="gc gc-st r" [class.gc-sel]="row.selected">{{ row.stopName }}</div>
+              }
+            </div>
+          </div>
+          <div class="cont-hint right">
+            <span>continuing to {{ outbound.dest || 'terminus' }}</span>
+            <span class="dots">· · ·</span>
+          </div>
+        }
+      } @else {
+        <div class="sec-hdr">
+          <span class="sec-dir">{{ outbound.directionName }}</span>
+        </div>
+        <div class="no-trains">No {{ outbound.directionName }} trains approaching {{ selectedStation }}</div>
+      }
+    }
+
+    <!-- Legend -->
+    <div class="legend">
+      <div class="li"><div class="ld" style="background: #374151"></div>Passed</div>
+      <div class="li"><div class="ld" style="background: #f6ad55; border-radius: 50%"></div>Stopped</div>
+      <div class="li"><div class="ld" style="background: #fef08a"></div>Soon</div>
+      <div class="li"><div class="ld" style="background: #48bb78"></div>On time</div>
+      <div class="li"><div class="ld" style="background: #f6ad55"></div>Delayed</div>
+      <div class="li"><div class="ld" style="background: #63b3ed"></div>Early</div>
+    </div>
+
+</div>
+}

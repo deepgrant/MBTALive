@@ -1,10 +1,13 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Observable, interval, switchMap, startWith, map, catchError, of } from 'rxjs';
-import { Vehicle, VehicleResponse } from '../models/vehicle.model';
-import { Route, Shape } from '../models/route.model';
-import { Station } from '../models/station.model';
-import { Alert } from '../models/alert.model';
+import { Observable, interval, switchMap, startWith, catchError, of } from 'rxjs';
+import { Vehicle, VehicleSchema } from '../models/vehicle.model';
+import { Route, RouteSchema, Shape, ShapeSchema } from '../models/route.model';
+import { Station, StationSchema } from '../models/station.model';
+import { Alert, AlertSchema } from '../models/alert.model';
+import { RouteBoardData, RouteBoardDataSchema } from '../models/board.model';
+import { parseArrayWith, parseWith } from '../shared/validation';
+import { BOARD_POLL_MS, VEHICLE_POLL_MS } from '../shared/timing.constants';
 
 @Injectable({
   providedIn: 'root'
@@ -18,53 +21,28 @@ export class ApiService {
 
   getRoutes(typeFilter?: string): Observable<Route[]> {
     const url = typeFilter ? `${this.baseUrl}/routes?type=${typeFilter}` : `${this.baseUrl}/routes`;
-    return this.http.get<Route[]>(url)
+    return this.http.get<unknown>(url)
       .pipe(
+        parseArrayWith(RouteSchema, 'GET /routes'),
         catchError((error: HttpErrorResponse) => {
           console.error('Error fetching routes:', error);
-          return of([]);
+          return of([] as Route[]);
         })
       );
   }
 
-  getVehiclesByRoute(routeId: string): Observable<Vehicle[]> {
-    return this.http.get<VehicleResponse[]>(`${this.baseUrl}/route/${routeId}/vehicles`)
+  private getVehiclesByRoute(routeId: string): Observable<Vehicle[]> {
+    return this.http.get<unknown>(`${this.baseUrl}/route/${routeId}/vehicles`)
       .pipe(
-        map((vehicles: VehicleResponse[]) =>
-          vehicles.map(vehicle => ({
-            routeId:             vehicle.routeId,
-            vehicleId:           vehicle.vehicleId ?? 'unknown',
-            positionValid:       vehicle.positionValid,
-            positionStale:       false,
-            bearingReported:     vehicle.bearingReported,
-            speedReported:       vehicle.speedReported,
-            latitude:            vehicle.latitude ?? 0,
-            longitude:           vehicle.longitude ?? 0,
-            bearing:             vehicle.bearing ?? 0,
-            speed:               vehicle.speed ?? 0,
-            direction:           vehicle.direction ?? 'Unknown',
-            destination:         vehicle.destination ?? 'Unknown',
-            currentStatus:       vehicle.currentStatus ?? 'Unknown',
-            stopName:            vehicle.stopName ?? 'Unknown',
-            platformName:        vehicle.platformName,
-            updatedAt:           vehicle.updatedAt ?? '',
-            routeType:           vehicle.routeType,
-            predictedArrivalTime: vehicle.predictedArrivalTime,
-            scheduledArrivalTime: vehicle.scheduledArrivalTime,
-            delaySeconds:        vehicle.delaySeconds,
-            tripName:            vehicle.tripName,
-            formattedStatus:     vehicle.formattedStatus,
-            delayStatus:         vehicle.delayStatus
-          }))
-        ),
+        parseArrayWith(VehicleSchema, `GET /route/${routeId}/vehicles`),
         catchError((error: HttpErrorResponse) => {
           console.error('ApiService: Error fetching vehicles for route:', routeId, error);
-          return of([]);
+          return of([] as Vehicle[]);
         })
       );
   }
 
-  getRealTimeVehiclesByRoute(routeId: string, intervalMs: number = 10000): Observable<Vehicle[]> {
+  getRealTimeVehiclesByRoute(routeId: string, intervalMs: number = VEHICLE_POLL_MS): Observable<Vehicle[]> {
     return interval(intervalMs)
       .pipe(
         startWith(0),
@@ -73,29 +51,60 @@ export class ApiService {
   }
 
   getRouteShapes(routeId: string): Observable<Shape[]> {
-    return this.http.get<Shape[]>(`${this.baseUrl}/route/${routeId}/shapes`);
-  }
-
-  getRouteStops(routeId: string): Observable<Station[]> {
-    return this.http.get<Station[]>(`${this.baseUrl}/route/${routeId}/stops`);
-  }
-
-  getAlertsForRoute(routeId: string): Observable<Alert[]> {
-    return this.http.get<Alert[]>(`${this.baseUrl}/route/${routeId}/alerts`)
+    return this.http.get<unknown>(`${this.baseUrl}/route/${routeId}/shapes`)
       .pipe(
+        parseArrayWith(ShapeSchema, `GET /route/${routeId}/shapes`),
         catchError((error: HttpErrorResponse) => {
-          console.error('ApiService: Error fetching alerts for route:', routeId, error);
-          return of([]);
+          console.error('ApiService: Error fetching shapes for route:', routeId, error);
+          return of([] as Shape[]);
         })
       );
   }
 
-  getAlertsGlobal(): Observable<Alert[]> {
-    return this.http.get<Alert[]>(`${this.baseUrl}/alerts`)
+  getRouteStops(routeId: string): Observable<Station[]> {
+    return this.http.get<unknown>(`${this.baseUrl}/route/${routeId}/stops`)
       .pipe(
+        parseArrayWith(StationSchema, `GET /route/${routeId}/stops`),
+        catchError((error: HttpErrorResponse) => {
+          console.error('ApiService: Error fetching stops for route:', routeId, error);
+          return of([] as Station[]);
+        })
+      );
+  }
+
+  getAlertsForRoute(routeId: string): Observable<Alert[]> {
+    return this.http.get<unknown>(`${this.baseUrl}/route/${routeId}/alerts`)
+      .pipe(
+        parseArrayWith(AlertSchema, `GET /route/${routeId}/alerts`),
+        catchError((error: HttpErrorResponse) => {
+          console.error('ApiService: Error fetching alerts for route:', routeId, error);
+          return of([] as Alert[]);
+        })
+      );
+  }
+
+  getRouteBoardData(routeId: string, intervalMs: number = BOARD_POLL_MS): Observable<RouteBoardData | null> {
+    return interval(intervalMs).pipe(
+      startWith(0),
+      switchMap(() =>
+        this.http.get<unknown>(`${this.baseUrl}/route/${routeId}/board`).pipe(
+          parseWith(RouteBoardDataSchema, `GET /route/${routeId}/board`),
+          catchError((error: HttpErrorResponse) => {
+            console.error('ApiService: Error fetching board data for route:', routeId, error);
+            return of(null);
+          })
+        )
+      )
+    );
+  }
+
+  getAlertsGlobal(): Observable<Alert[]> {
+    return this.http.get<unknown>(`${this.baseUrl}/alerts`)
+      .pipe(
+        parseArrayWith(AlertSchema, 'GET /alerts'),
         catchError((error: HttpErrorResponse) => {
           console.error('ApiService: Error fetching global alerts:', error);
-          return of([]);
+          return of([] as Alert[]);
         })
       );
   }

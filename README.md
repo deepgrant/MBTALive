@@ -5,8 +5,9 @@ Real-time vehicle tracking for the MBTA network. Select a route in the sidebar a
 **Live:** https://mbta.critmind.com/
 
 <table><tr>
-<td><img height="350" alt="Screenshot 2026-05-20 at 8 18 29 PM" src="https://github.com/user-attachments/assets/e528cea6-18cd-4808-b04f-f961cc1a8e24" /></td>
-<td><img height="350" alt="iPhone17 Safari" src="https://github.com/user-attachments/assets/9a4abbe6-0573-41b8-a104-2ddcd56075c0" /></td>
+<td><img height="350" alt="Desktop map view" src="documents/map-desktop.png" /></td>
+<td><img height="350" alt="iPhone17 Safari" src="documents/map-iphone.png" /></td>
+<td><img height="350" alt="Train departure board for the Orange Line at Wellington, showing per-stop arrival predictions, HERE markers, and delay chips" src="documents/board-screen.png" /></td>
 </tr></table>
 
 ## What it does
@@ -15,8 +16,9 @@ Real-time vehicle tracking for the MBTA network. Select a route in the sidebar a
 - Route shapes driven by MBTA route patterns (`typicality=1`) for authoritative shape selection
 - Stop markers with MBTA T-logo icons drawn when you select a route
 - Per-vehicle arrival predictions and delay status pulled from the MBTA predictions API
+- Train departure board: pick a boarding station and direction to see the next arrivals and a per-stop prediction grid for every approaching train, with HERE markers and delay chips (refreshed every 15 seconds; the default view on mobile, with a one-tap toggle to the map)
 - System-wide and per-route alert banners with a scrolling ticker for active disruptions
-- Persists your last selected route and map position in a cookie
+- Persists your last selected route, boarding station, and map position in a cookie
 
 ## Running locally
 
@@ -63,7 +65,7 @@ source/scala/       Scala backend
 
 frontend/src/app/
   services/         VehicleService (state), ApiService (HTTP), MapService (MapLibre GL)
-  components/       Map, Routes sidebar, Vehicle list, Alert banner/ticker
+  components/       Map, Routes sidebar, Train board, Vehicle list, Alert banner/ticker
 ```
 
 ## Backend API
@@ -74,6 +76,7 @@ GET /api/routes?type=<0-4>
 GET /api/route/:id/vehicles?sortBy=vehicleId&sortOrder=asc
 GET /api/route/:id/shapes
 GET /api/route/:id/stops
+GET /api/route/:id/board
 GET /api/route/:id/alerts
 GET /api/alerts
 ```

@@ -7,6 +7,7 @@ import { Alert } from '../../models/alert.model';
 import { VehicleService } from '../../services/vehicle.service';
 import { MapService } from '../../services/map.service';
 import { AlertTickerComponent } from '../alert-ticker/alert-ticker.component';
+import { MAP_FRAME_DELAY_MS, MAP_INIT_DELAY_MS } from '../../shared/timing.constants';
 
 @Component({
     selector: 'app-map',
@@ -21,6 +22,8 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   private currentRouteId: string | null = null;
   private routeFramed: boolean = false;
   private isInitialRouteLoad: boolean = true;
+  private lastShapes: Shape[] | null = null;
+  private lastStations: Station[] | null = null;
   alerts: Alert[] = [];
 
   constructor(
@@ -63,12 +66,21 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
       try {
         this.mapService.initializeMap('map');
         this.mapInitialized = true;
-        // Wait for map style load + bounds restoration before restoring route
-        setTimeout(() => { this.vehicleService.restoreRouteFromCookie(); }, 800);
+        // Re-apply any data that arrived before the map was ready (fast responses
+        // on mobile may have targeted the previous map instance which was removed).
+        if (this.lastShapes && this.lastShapes.length > 0 && this.currentRoute) {
+          this.mapService.addRouteLayer(this.currentRoute, this.lastShapes);
+        }
+        if (this.lastStations && this.lastStations.length > 0) {
+          this.mapService.updateStationMarkers(this.lastStations);
+        }
+        if ((this.lastShapes?.length ?? 0) > 0 || (this.lastStations?.length ?? 0) > 0) {
+          this.fitBoundsToRouteAndStations();
+        }
       } catch (error) {
         console.error('MapComponent: Error initializing map:', error);
       }
-    }, 300);
+    }, MAP_INIT_DELAY_MS);
   }
 
   ngOnDestroy(): void {
@@ -82,6 +94,8 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
   private handleRouteSelection(routeId: string | null): void {
     const isRouteChange = this.currentRouteId !== null && this.currentRouteId !== routeId;
 
+    this.lastShapes = null;
+    this.lastStations = null;
     this.mapService.clearRouteLayers();
     this.mapService.clearStationMarkers();
     this.routeFramed = false;
@@ -92,18 +106,19 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    this.vehicleService.getRouteById(routeId).subscribe(route => {
-      if (route) {
+    this.subscriptions.push(
+      this.vehicleService.getRouteById(routeId).subscribe(route => {
         this.currentRoute = route;
         if (isRouteChange) {
           this.isInitialRouteLoad = false;
         }
-      }
-    });
+      })
+    );
   }
 
   private updateMapWithStations(stations: Station[]): void {
     if (stations.length > 0) {
+      this.lastStations = stations;
       this.mapService.updateStationMarkers(stations);
       this.fitBoundsToRouteAndStations();
     }
@@ -111,6 +126,7 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private updateMapWithShapes(shapes: Shape[]): void {
     if (shapes.length > 0 && this.currentRoute) {
+      this.lastShapes = shapes;
       this.mapService.addRouteLayer(this.currentRoute, shapes);
       this.fitBoundsToRouteAndStations();
     }
@@ -118,18 +134,25 @@ export class MapComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private fitBoundsToRouteAndStations(): void {
     if (!this.routeFramed && this.mapInitialized) {
-      const shouldSkipFraming = this.isInitialRouteLoad && this.mapService.wereBoundsRestored();
+      // Skip auto-framing only on the very first route load of the session when
+      // the map already has saved bounds — this preserves the user's last position
+      // on desktop. Once the session is initialized (any map view has completed),
+      // always re-frame so route changes on mobile get proper centering.
+      const shouldSkipFraming = !this.mapService.isSessionInitialized()
+        && this.isInitialRouteLoad
+        && this.mapService.wereBoundsRestored();
 
       if (!shouldSkipFraming) {
-        // Delay to ensure shapes and stations are rendered before fitting bounds
         setTimeout(() => {
           this.mapService.fitBoundsToRoute();
           this.routeFramed = true;
           this.isInitialRouteLoad = false;
-        }, 200);
+          this.mapService.markSessionInitialized();
+        }, MAP_FRAME_DELAY_MS);
       } else {
         this.routeFramed = true;
         this.isInitialRouteLoad = false;
+        this.mapService.markSessionInitialized();
       }
     }
   }
