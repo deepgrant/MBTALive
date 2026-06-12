@@ -442,14 +442,12 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
       .map(_.reduce(_ merge _))
 
   // Pure assembly: builds one train's board row from the already-fetched batch.
-  // Returns None when the row would be a ghost column — no predictions AND no
-  // resolvable current stop contributes nothing the frontend can render.
   private def buildTrainBoardData(
     v:           VehicleData,
     tripId:      String,
     raw:         BoardPredictionsRaw,
     stopsForDir: Vector[BoardStopInfo],
-  ): Option[TrainBoardData] = {
+  ): TrainBoardData = {
     val stopSeqMap  = stopsForDir.map(s => s.id -> s.sequence).toMap
     val stopNameMap = stopsForDir.map(s => s.id -> s.name).toMap
 
@@ -480,27 +478,31 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
       stopSeqMap.get(parentId).map(seq => (parentId, seq))
     }
 
-    (preds, resolvedStop) match {
-      case (Vector(), None) => None
+    val (curStopId, curSeq) = (preds, resolvedStop) match {
+      case (_, Some((id, seq))) => (Some(id), seq)
+      case (ps, None) if ps.nonEmpty =>
+        val minSeq = ps.map(_.sequence).min
+        (stopsForDir.find(_.sequence == minSeq).map(_.id), minSeq)
       case _ =>
-        val (curStopId, curSeq) = resolvedStop.getOrElse {
-          val minSeq = preds.map(_.sequence).min
-          (stopsForDir.find(_.sequence == minSeq).map(_.id).getOrElse(""), minSeq)
-        }
-        Some(TrainBoardData(
-          vehicleId           = v.vehicleId.getOrElse(""),
-          tripId              = v.tripId,
-          tripName            = v.tripName,
-          directionId         = v.directionId,
-          direction           = v.direction,
-          destination         = v.destination,
-          currentStopId       = Some(curStopId).filter(_.nonEmpty),
-          currentStopSequence = curSeq,
-          delaySeconds        = v.delaySeconds,
-          delayStatus         = v.delayStatus,
-          predictions         = preds,
-        ))
+        // No predictions and no resolvable stop: park the train past every
+        // stop so the frontend's "approaching" filter (seq <= station.seq)
+        // never shows it as a ghost column of empty cells.
+        (None, Int.MaxValue)
     }
+
+    TrainBoardData(
+      vehicleId           = v.vehicleId.getOrElse(""),
+      tripId              = v.tripId,
+      tripName            = v.tripName,
+      directionId         = v.directionId,
+      direction           = v.direction,
+      destination         = v.destination,
+      currentStopId       = curStopId.filter(_.nonEmpty),
+      currentStopSequence = curSeq,
+      delaySeconds        = v.delaySeconds,
+      delayStatus         = v.delayStatus,
+      predictions         = preds,
+    )
   }
 
   private def fetchBoardDataFromMbta(routeId: String): Future[RouteBoardData] = {
@@ -517,7 +519,7 @@ class RequestFlow(access: MBTAAccess)(implicit system: ActorSystem, log: Logging
       withTrips      = vehicles.flatMap(v => v.tripId.map(v -> _))
       raw           <- fetchAllBoardPredictions(withTrips.map(_._2).distinct)
     } yield {
-      val trains = withTrips.flatMap { case (v, tripId) =>
+      val trains = withTrips.map { case (v, tripId) =>
         val stopsForDir = if (v.directionId.getOrElse(0) == 1) inboundStops else outboundStops
         buildTrainBoardData(v, tripId, raw, stopsForDir)
       }
