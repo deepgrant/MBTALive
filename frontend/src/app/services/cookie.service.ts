@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { AppSettings } from '../models/app-settings.model';
+import { AppSettings, AppSettingsSchema } from '../models/app-settings.model';
 
 @Injectable({
   providedIn: 'root'
@@ -40,11 +40,15 @@ export class CookieService {
     }
 
     try {
-      const settings = JSON.parse(cookieValue) as AppSettings;
-      // Validate structure
-      if (typeof settings === 'object' && settings !== null) {
-        return settings;
+      // Per-field .catch() in the schema salvages siblings of a corrupt
+      // field; this whole-object parse only fails for non-object roots.
+      // No dev-mode throw here — a stale cookie from an older app version
+      // is expected data, not contract drift.
+      const result = AppSettingsSchema.safeParse(JSON.parse(cookieValue));
+      if (result.success) {
+        return result.data;
       }
+      console.error('CookieService: Invalid settings cookie, ignoring:', result.error);
       return null;
     } catch (error) {
       console.error('CookieService: Error parsing settings cookie:', error);
