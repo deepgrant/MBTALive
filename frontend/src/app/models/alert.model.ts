@@ -1,15 +1,22 @@
-export interface Alert {
-  id: string;
-  header: string;
-  effect: string;
-  severity: number;
-  lifecycle: string;
-  updatedAt: string;
-  description?: string;
-  cause?: string;
-  routeIds?: string[];
-  stopIds?: string[];
-}
+import { z } from 'zod';
+import { orUndefined } from '../shared/validation';
+
+// The backend omits `description` when absent (verified live); other optional
+// fields are tolerant of omitted/null via orUndefined.
+export const AlertSchema = z.object({
+  id: z.string(),
+  header: z.string(),
+  effect: z.string(),
+  severity: z.number(),
+  lifecycle: z.string(),
+  updatedAt: z.string(),
+  description: orUndefined(z.string()),
+  cause: orUndefined(z.string()),
+  routeIds: orUndefined(z.array(z.string())),
+  stopIds: orUndefined(z.array(z.string())),
+});
+
+export type Alert = z.infer<typeof AlertSchema>;
 
 export type AlertSeverityLevel = 'critical' | 'warning' | 'info';
 
