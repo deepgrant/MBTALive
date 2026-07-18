@@ -35,6 +35,8 @@ const fullWire = {
   stopId: 'Forest Hills-02',
   tripId: '75565712',
   directionId: 1,
+  // Snapshot generation time is retained so stale position reuse is based on
+  // source age rather than the browser's observation time.
   timeStamp: 1781223125801,
 };
 
@@ -62,7 +64,7 @@ describe('VehicleSchema', () => {
     expect(v.delaySeconds).toBeUndefined();     // null → undefined (optional field)
     expect(v.tripName).toBe('');                // empty string preserved, stays falsy
     expect('stopId' in v).toBeFalse();          // unknown keys stripped
-    expect('timeStamp' in v).toBeFalse();
+    expect(v.timeStamp).toBe(1781223125801);
   });
 
   it('rejects a payload missing routeId', () => {

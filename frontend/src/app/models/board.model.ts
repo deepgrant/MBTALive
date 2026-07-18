@@ -49,6 +49,7 @@ export const RouteBoardDataSchema = z.object({
   inboundStops: z.array(BoardStopInfoSchema),
   outboundStops: z.array(BoardStopInfoSchema),
   trains: z.array(TrainBoardDataSchema),
+  generatedAt: z.string().nullish().transform(value => value ?? null),
 });
 
 export type RouteBoardData = z.infer<typeof RouteBoardDataSchema>;

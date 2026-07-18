@@ -9,6 +9,18 @@ export const BOARD_POLL_MS = 15_000;
 /** Alert poll cadence (both per-route and global). */
 export const ALERT_POLL_MS = 90_000;
 
+/** Renews the serverless hot-route lease while a selected route is visible. */
+export const ROUTE_ACTIVITY_HEARTBEAT_MS = 60_000;
+
+/** Maximum initial wait before an empty hot-route snapshot is treated as genuinely empty. */
+export const ROUTE_WARMUP_MS = 35_000;
+
+/** Snapshot health polling cadence. */
+export const STATUS_POLL_MS = 60_000;
+
+/** Last-known positions older than this are discarded instead of being rendered as stale. */
+export const POSITION_STALE_MAX_MS = 30_000;
+
 /** Lets the map initialize on desktop before the cookie-saved route is selected. */
 export const ROUTE_RESTORE_DELAY_MS = 800;
 

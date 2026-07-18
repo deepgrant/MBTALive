@@ -20,6 +20,7 @@ export const VehicleSchema = z.object({
   currentStatus:        withDefault(z.string(), 'Unknown'),
   stopName:             withDefault(z.string(), 'Unknown'),
   updatedAt:            withDefault(z.string(), ''),
+  timeStamp:            withDefault(z.number(), 0),
   positionValid:        z.boolean(),
   // Backend doesn't send this today; it's set in-app when reusing a cached
   // position. Was hardcoded false in the old mapping.

@@ -34,6 +34,10 @@
     </button>
   </mat-toolbar>
 
+  @if (degradedDataMessage) {
+    <div class="data-health-banner" role="status">{{ degradedDataMessage }}</div>
+  }
+
   <!-- Mobile alerts ticker: appears below the toolbar so Safari chrome can't cover it -->
   @if (isMobile()) {
     <app-alert-ticker [alerts]="routeAlerts"></app-alert-ticker>

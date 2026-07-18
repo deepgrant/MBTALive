@@ -1,0 +1,5 @@
+FROM public.ecr.aws/lambda/java:21
+
+COPY build/lambda/lib/*.jar ${LAMBDA_TASK_ROOT}/lib/
+
+CMD ["mbta.snapshot.MBTASnapshotLambda::handleRequest"]

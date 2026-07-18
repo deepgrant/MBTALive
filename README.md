@@ -1,101 +1,103 @@
 # MBTA Tracker
 
-Real-time vehicle tracking for the MBTA network. Select a route in the sidebar and watch buses, trains, and commuter rail cars move on the map. Click a vehicle to see its current stop, next arrival prediction, and how far off schedule it is.
+Real-time vehicle tracking for the MBTA network. Select a route in the sidebar and watch buses, trains, and commuter rail cars move on the map. Click a vehicle to see its current stop, next arrival prediction, and schedule status.
 
 **Live:** https://mbta.critmind.com/
 
 <table><tr>
 <td><img height="350" alt="Desktop map view" src="documents/map-desktop.png" /></td>
 <td><img height="350" alt="iPhone17 Safari" src="documents/map-iphone.png" /></td>
-<td><img height="350" alt="Train departure board for the Orange Line at Wellington, showing per-stop arrival predictions, HERE markers, and delay chips" src="documents/board-screen.png" /></td>
+<td><img height="350" alt="Train departure board for the Orange Line at Wellington" src="documents/board-screen.png" /></td>
 </tr></table>
 
-## What it does
+## Architecture
 
-- Live vehicle positions on a dark 3D MapLibre GL map, refreshed every 10 seconds
-- Route shapes driven by MBTA route patterns (`typicality=1`) for authoritative shape selection
-- Stop markers with MBTA T-logo icons drawn when you select a route
-- Per-vehicle arrival predictions and delay status pulled from the MBTA predictions API
-- Train departure board: pick a boarding station and direction to see the next arrivals and a per-stop prediction grid for every approaching train, with HERE markers and delay chips (refreshed every 15 seconds; the default view on mobile, with a one-tap toggle to the map)
-- System-wide and per-route alert banners with a scrolling ticker for active disruptions
-- Persists your last selected route, boarding station, and map position in a cookie
+The production application is serverless and snapshot-driven:
+
+```text
+Angular → CloudFront
+  ├─ /api/control/* → API Gateway → activity Lambda → DynamoDB
+  ├─ /api/*         → private snapshot S3 bucket
+  └─ /*             → private frontend S3 bucket
+
+EventBridge → Step Functions → scheduled refresh Lambdas
+Refresh Lambdas → DynamoDB rate permit → MBTA → complete S3 snapshots
+```
+
+Browser reads never invoke Lambda or call MBTA. Route activity heartbeats keep only recently selected routes hot, so adding clients does not increase upstream MBTA traffic for the same set of routes. A DynamoDB token bucket, conditional job locks, and fail-closed behavior enforce the application safety budget.
+
+| Layer | Tech |
+|---|---|
+| Publishers | Scala 3.3, Java 21 Lambda container, JDK `HttpClient`, Spray JSON |
+| Frontend | Angular 20, MapLibre GL JS 5, Angular Material, RxJS |
+| Storage/control | Private S3 snapshots, DynamoDB activity/rate/lock table, Secrets Manager |
+| Scheduling | EventBridge and Standard Step Functions |
+| Delivery | CloudFront, Origin Access Control, API Gateway heartbeat route, ACM, Route 53 |
+| Build | Gradle 9, Angular CLI, Docker buildx, OpenTofu |
 
 ## Running locally
 
-You need JDK 17+, Node.js 20+, and npm.
-
-```bash
-# Terminal 1 — backend on https://localhost:8443
-./gradlew run
-
-# Terminal 2 — frontend dev server on http://localhost:4200
-# Updates to frontend files are automatically recompiled and the UI updated.
-cd frontend
-ng serve --proxy-config proxy.conf.json --host=0.0.0.0
-```
-
-The backend generates a self-signed TLS certificate at startup using Bouncy Castle — no keystore file or external `keytool` step needed. The dev proxy (`frontend/proxy.conf.json`) forwards `/api/**` to `https://localhost:8443` with certificate validation disabled (`secure: false`), so no CORS config is needed locally.
-
-Grab a free API key from https://api-v3.mbta.com if you want the higher rate limit (1000 req/min vs 10). Set it before starting the backend:
+You need JDK 21, Node.js 20+, and npm. Set an MBTA API key for the authenticated limit:
 
 ```bash
 export MBTA_API_KEY=your_key_here
 ```
 
-## Stack
+Run the filesystem-backed snapshot publisher and Angular separately:
 
-The backend is a Scala 3 / Apache Pekko HTTP service that proxies the MBTA v3 REST API, enriches vehicle data with stop names and arrival predictions, and serves the compiled Angular app as static files. There's no separate frontend server in production — Pekko serves everything over HTTPS with a runtime-generated certificate.
+```bash
+# Terminal 1 — publisher/API on http://127.0.0.1:8080
+./gradlew snapshotDev
 
-| Layer | Tech |
-|---|---|
-| Backend | Scala 3.3 LTS, Pekko HTTP 1.3, Spray JSON, Bouncy Castle 1.80 |
-| Frontend | Angular 20, MapLibre GL JS 5, OpenFreeMap vector tiles, Angular Material, RxJS |
-| Build | Gradle 9, Angular CLI |
-| Infra | AWS ECS Fargate, ECR, API Gateway, ACM, Route 53 |
+# Terminal 2 — UI on http://localhost:4200, proxying /api/** to port 8080
+cd frontend && npm start
+```
+
+Local snapshots are atomically replaced under `build/local-snapshots`. The local control store uses the same active-route lifecycle with a conservative in-memory limiter.
 
 ## Project layout
 
-```
-source/scala/       Scala backend
-  MBTAService       HTTP routes + static file serving
-  MBTAAccess        Throttled HTTPS client to api-v3.mbta.com
-  RequestFlow       Vehicle enrichment pipeline (stops, predictions, alerts, shapes)
-  TLSConfig         Runtime self-signed cert generation via Bouncy Castle
-  MBTAModels        Domain types
-
-frontend/src/app/
-  services/         VehicleService (state), ApiService (HTTP), MapService (MapLibre GL)
-  components/       Map, Routes sidebar, Train board, Vehicle list, Alert banner/ticker
+```text
+source/scala/snapshot/     Lambda handler, models, transforms, publishers,
+                           AWS stores/client, limiter, and local server
+source/test/scala/snapshot Backend transformation, service, and limiter tests
+frontend/src/app/          Angular UI, services, schemas, and freshness behavior
+infra/                     Serverless production OpenTofu stack
+Dockerfile.lambda          Java 21/arm64 Lambda image
+deploy.gradle              Bootstrap, build, deploy, seed, and smoke workflows
 ```
 
-## Backend API
+## Public API
 
-```
-GET /health
-GET /api/routes?type=<0-4>
-GET /api/route/:id/vehicles?sortBy=vehicleId&sortOrder=asc
+```text
+GET /api/routes
+GET /api/alerts
+GET /api/status
+GET /api/route/:id/vehicles
 GET /api/route/:id/shapes
 GET /api/route/:id/stops
 GET /api/route/:id/board
 GET /api/route/:id/alerts
-GET /api/alerts
+PUT /api/control/routes/:id/activity
 ```
 
-Shapes are filtered server-side using the MBTA `/route_patterns` endpoint — only `typicality=1` (typical service) shapes are returned. If the route patterns call fails, all shapes are returned as a fallback.
+All GET responses are complete S3 objects served through CloudFront. The control route is the only public request path that invokes Lambda.
 
-## Linting
-
-The build enforces Scalafix rules (OrganizeImports, RemoveUnused, DisableSyntax). The `build` task will fail if there are violations.
+## Verification
 
 ```bash
-./gradlew checkScalafixMain   # check
-./gradlew scalafixMain        # fix
+./gradlew build
+cd frontend && npm test -- --watch=false --browsers=ChromeHeadless
+cd frontend && npm run build
+cd infra && ../build/tools/tofu fmt -check -recursive && ../build/tools/tofu validate
 ```
+
+The Scala build enforces `OrganizeImports`, `RemoveUnused`, and `DisableSyntax` through Scalafix.
 
 ## Deployment
 
-See [documents/deployment-guide.md](documents/deployment-guide.md) for the full AWS deployment walkthrough. The short version for updating a running deployment:
+See [documents/deployment-guide.md](documents/deployment-guide.md). After one-time bootstrap, the complete production rollout is:
 
 ```bash
-./gradlew --no-daemon buildAndPush tofuApply
+./gradlew --no-daemon deploy
 ```

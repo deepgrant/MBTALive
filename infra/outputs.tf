@@ -1,24 +1,34 @@
 output "app_url" {
   value       = "https://${var.domain}/"
-  description = "Public URL for the MBTA Tracker app"
+  description = "Production URL for the MBTA Tracker app"
 }
 
-output "api_gateway_domain" {
-  value       = aws_apigatewayv2_domain_name.main.domain_name_configuration[0].target_domain_name
-  description = "API Gateway regional domain name (aliased by Route 53)"
+output "cloudfront_domain" {
+  value       = aws_cloudfront_distribution.serverless.domain_name
+  description = "CloudFront distribution hostname"
 }
 
-output "alb_dns" {
-  value       = aws_lb.main.dns_name
-  description = "ALB DNS — receives traffic from API Gateway only; not publicly advertised"
+output "serverless_distribution_id" {
+  value       = aws_cloudfront_distribution.serverless.id
+  description = "CloudFront distribution ID for entry-point-only invalidations"
 }
 
-output "ecr_repository_url" {
-  value       = aws_ecr_repository.app.repository_url
-  description = "ECR repository URL for image pushes"
+output "snapshot_image_deployed" {
+  value       = var.snapshot_image_url
+  description = "Immutable Lambda image URL deployed in this run"
 }
 
-output "image_deployed" {
-  value       = var.image_url
-  description = "Container image URL deployed in this run"
+output "snapshot_bucket_name" {
+  value       = aws_s3_bucket.snapshots.bucket
+  description = "Private generated API snapshot bucket"
+}
+
+output "frontend_bucket_name" {
+  value       = aws_s3_bucket.serverless_frontend.bucket
+  description = "Private Angular frontend bucket"
+}
+
+output "snapshot_control_api" {
+  value       = aws_apigatewayv2_api.snapshot_control.api_endpoint
+  description = "API Gateway endpoint for route activity heartbeats"
 }

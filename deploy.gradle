@@ -1,4 +1,34 @@
-// ── AWS identity (local.properties or -P flags) ───────────────────────────────
+buildscript {
+  repositories { mavenCentral() }
+  dependencies {
+    classpath 'software.amazon.awssdk:dynamodb:2.32.16'
+    classpath 'software.amazon.awssdk:lambda:2.32.16'
+    classpath 'software.amazon.awssdk:secretsmanager:2.32.16'
+    classpath 'software.amazon.awssdk:s3:2.32.16'
+    classpath 'software.amazon.awssdk:apache-client:2.32.16'
+  }
+}
+
+import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider
+import software.amazon.awssdk.core.SdkBytes
+import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration
+import software.amazon.awssdk.http.apache.ApacheHttpClient
+import software.amazon.awssdk.regions.Region
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue
+import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest
+import software.amazon.awssdk.services.lambda.LambdaClient
+import software.amazon.awssdk.services.lambda.model.InvokeRequest
+import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.GetObjectRequest
+import software.amazon.awssdk.services.s3.model.S3Exception
+import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient
+import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest
+
+import java.time.Duration
+
+// ── AWS identity ──────────────────────────────────────────────────────────────
 
 def localProps = new Properties()
 def localPropsFile = rootProject.file('local.properties')
@@ -12,7 +42,7 @@ def awsProfile   = project.findProperty('aws.profile')?.toString()
 
 def requireAccountId = {
   if (!awsAccountId) throw new GradleException(
-    "aws.accountId required — set in local.properties or pass -Paws.accountId=123456789012")
+    "aws.accountId required — set it in local.properties or pass -Paws.accountId=123456789012")
   awsAccountId
 }
 
@@ -38,176 +68,169 @@ task downloadTofu(type: Exec) {
 
 task extractTofu(type: Exec) {
   group       = 'deploy-setup'
-  description = 'Extract OpenTofu binary into build/tools/'
+  description = 'Extract OpenTofu into build/tools/'
   dependsOn   downloadTofu
   onlyIf      { !tofuBin.exists() }
   commandLine 'unzip', '-o', tofuZip.absolutePath, '-d', tofuToolsDir.absolutePath
   doLast      { tofuBin.setExecutable(true) }
 }
 
-// ── Build tag ─────────────────────────────────────────────────────────────────
-// Computed once at script load so every task in this build run shares the same
-// tag. Epoch millis guarantees a unique, monotonically increasing value on every
-// build, which means tofuApply always sees a changed image_url and triggers an
-// ECS rolling deploy without requiring a git commit first.
-
+// One immutable image/version tag is shared by every task in a deploy run.
 def buildTag = System.currentTimeMillis().toString()
 
-// ── In-memory config helper ───────────────────────────────────────────────────
-// Fetches JSON from AWS Secrets Manager into a ByteArrayOutputStream (never
-// written to disk), parses it with Groovy's built-in JsonSlurper, and returns
-// a Map of OpenTofu variable names → String values.
+def profileCredentials = {
+  ProfileCredentialsProvider.builder().profileName(awsProfile).build()
+}
 
 def fetchVars = {
-  // Project.exec {} was removed in Gradle 9 — use ProcessBuilder directly.
-  def cmd = ['aws', 'secretsmanager', 'get-secret-value',
-    '--secret-id', 'mbta-deploy-config',
-    '--query', 'SecretString',
-    '--output', 'text',
-    '--profile', awsProfile,
-    '--region', 'us-east-1']
-  def proc = new ProcessBuilder(cmd).redirectErrorStream(false).start()
-  def out  = proc.inputStream.text
-  def err  = proc.errorStream.text
-  proc.waitFor()
-  if (proc.exitValue() != 0) throw new GradleException(
-    "Failed to fetch mbta-deploy-config from Secrets Manager:\n${err}")
+  def secrets = SecretsManagerClient.builder()
+    .region(Region.US_EAST_1)
+    .credentialsProvider(profileCredentials())
+    .build()
+  def out
+  try {
+    out = secrets.getSecretValue(GetSecretValueRequest.builder()
+      .secretId('mbta-deploy-config')
+      .build()).secretString()
+  } finally {
+    secrets.close()
+  }
+
   def cfg         = new groovy.json.JsonSlurper().parseText(out)
   def accountId   = requireAccountId()
   def region      = cfg['region']
   def repoName    = cfg['repo-name']
   def serviceName = cfg['service-name']
-  def imageUrl    = "${accountId}.dkr.ecr.${region}.amazonaws.com/${repoName}/${serviceName}:${buildTag}"
   [
-    aws_region:     region,
-    aws_profile:    awsProfile,
-    aws_account_id: accountId,
-    service_name:   serviceName,
-    repo_name:      repoName,
-    image_url:      imageUrl,
-    zone:           cfg['zone'],
-    domain:         cfg['domain'],
-    cpu:            cfg['cpu'].toString(),
-    memory:         cfg['memory'].toString(),
-    min_tasks:      cfg['min-tasks'].toString(),
-    max_tasks:      cfg['max-tasks'].toString(),
-    container_port: cfg['container-port'].toString(),
+    aws_region:         region,
+    aws_profile:        awsProfile,
+    aws_account_id:     accountId,
+    service_name:       serviceName,
+    repo_name:          repoName,
+    snapshot_image_url: "${accountId}.dkr.ecr.${region}.amazonaws.com/${repoName}/${serviceName}-snapshot:${buildTag}",
+    zone:               cfg['zone'],
+    domain:             cfg['domain'],
   ]
 }
 
-// Converts vars map to a flat list for tofu: ['-var', 'k=v', '-var', 'k=v', ...]
-def toVarArgs = { Map vars -> vars.collectMany { k, v -> ['-var', "${k}=${v}"] as List } }
+def toVarArgs = { Map vars -> vars.collectMany { key, value -> ['-var', "${key}=${value}"] as List } }
 
-// ── ECR authentication ────────────────────────────────────────────────────────
-
-task configureDockerAuth(type: Exec) {
-  group       = 'deploy-setup'
-  description = 'Authenticate Docker to ECR using AWS profile'
-  doFirst {
-    def vars = fetchVars()
-    commandLine 'bash', '-c',
-      "aws ecr get-login-password --profile ${awsProfile} --region ${vars.aws_region} | " +
-      "docker login --username AWS --password-stdin " +
-      "${vars.aws_account_id}.dkr.ecr.${vars.aws_region}.amazonaws.com"
+def invokeLambdaJson = { String region, String functionName, Map payload, Duration timeout ->
+  def client = LambdaClient.builder()
+    .region(Region.of(region))
+    .credentialsProvider(profileCredentials())
+    .httpClientBuilder(ApacheHttpClient.builder()
+      .connectionTimeout(Duration.ofSeconds(30))
+      .socketTimeout(timeout))
+    .overrideConfiguration(ClientOverrideConfiguration.builder()
+      .apiCallAttemptTimeout(timeout)
+      .apiCallTimeout(timeout.plusSeconds(5))
+      .build())
+    .build()
+  try {
+    def response = client.invoke(InvokeRequest.builder()
+      .functionName(functionName)
+      .payload(SdkBytes.fromUtf8String(groovy.json.JsonOutput.toJson(payload)))
+      .build())
+    def body = response.payload().asUtf8String()
+    if (response.statusCode() < 200 || response.statusCode() >= 300 || response.functionError()) {
+      throw new GradleException(
+        "Lambda ${functionName} failed (HTTP ${response.statusCode()}, ${response.functionError()}): ${body}")
+    }
+    new groovy.json.JsonSlurper().parseText(body)
+  } finally {
+    client.close()
   }
 }
 
-// ── Image build and push ──────────────────────────────────────────────────────
+def waitForReferenceSnapshots = { Map vars, Duration timeout ->
+  def client = S3Client.builder()
+    .region(Region.of(vars.aws_region))
+    .credentialsProvider(profileCredentials())
+    .build()
+  def bucket = "${vars.service_name}-${vars.aws_account_id}-snapshots"
+  def deadline = System.nanoTime() + timeout.toNanos()
+  def attempts = 0
+  try {
+    while (System.nanoTime() < deadline) {
+      attempts++
+      try {
+        def response = client.getObjectAsBytes(GetObjectRequest.builder()
+          .bucket(bucket)
+          .key('api/status')
+          .build())
+        def status = new groovy.json.JsonSlurper().parseText(response.asUtf8String())
+        if (status.referencesLastSuccess) return status
+      } catch (S3Exception error) {
+        if (error.statusCode() != 404) throw error
+      }
+      if (attempts == 1 || attempts % 6 == 0) {
+        println "Waiting for api/status in s3://${bucket} (${attempts * 10}s elapsed)..."
+      }
+      Thread.sleep(10_000L)
+    }
+  } finally {
+    client.close()
+  }
+  throw new GradleException(
+    "A reference refresh owns the current job slot, but referencesLastSuccess was not published within ${timeout.toMinutes()} minutes")
+}
 
-task tagImage(type: Exec) {
-  group       = 'deploy'
-  description = 'Tag local image for ECR with git SHA'
-  dependsOn   'docker'
-  doFirst {
-    def imageUrl = fetchVars().image_url
-    commandLine 'docker', 'tag', 'mbtalive:2.0', imageUrl
-    println "==> Tagged mbtalive:2.0 → ${imageUrl}"
+def recoverAbandonedReferenceLock = { Map vars ->
+  def client = DynamoDbClient.builder()
+    .region(Region.of(vars.aws_region))
+    .credentialsProvider(profileCredentials())
+    .build()
+  def table = "${vars.service_name}-snapshot-control"
+  def slot = java.time.Instant.now().epochSecond.intdiv(3600L)
+  def pk = "LOCK#references#${slot}"
+  def key = [pk: AttributeValue.builder().s(pk).build()]
+  try {
+    def item = client.getItem(GetItemRequest.builder()
+      .tableName(table)
+      .key(key)
+      .consistentRead(true)
+      .build()).item()
+    if (item == null || item.isEmpty()) {
+      println "No reference lock exists for current slot ${slot}."
+      return
+    }
+    client.deleteItem(DeleteItemRequest.builder().tableName(table).key(key).build())
+    println "Removed confirmed abandoned reference lock ${pk}."
+  } finally {
+    client.close()
   }
 }
 
-task pushImage(type: Exec) {
-  group       = 'deploy'
-  description = 'Push SHA-tagged image to ECR'
-  dependsOn   tagImage
-  doFirst {
-    commandLine 'docker', 'push', fetchVars().image_url
-  }
-}
-
-task pushLatest(type: Exec) {
-  group       = 'deploy'
-  description = 'Also push :latest alias to ECR'
-  dependsOn   pushImage
-  doFirst {
-    def imageUrl  = fetchVars().image_url
-    def latestUrl = imageUrl.replaceAll(/:[^:]+$/, ':latest')
-    commandLine 'bash', '-c',
-      "docker tag ${imageUrl} ${latestUrl} && docker push ${latestUrl}"
-  }
-}
-
-task buildAndPush {
-  group       = 'deploy'
-  description = 'Build image, tag with git SHA and :latest, push to ECR'
-  dependsOn   pushLatest, configureDockerAuth
-  pushLatest.mustRunAfter configureDockerAuth
-}
-
-// ── ECR bootstrap ─────────────────────────────────────────────────────────────
-// Creates just the ECR repository via a targeted tofu apply. Must run before
-// buildAndPush on a fresh deploy (teardown destroys the repo). Safe to re-run.
-
-task createEcrRepo(type: Exec) {
-  group       = 'deploy-setup'
-  description = 'Create ECR repository via targeted tofu apply (required before first image push)'
-  dependsOn   'tofuInit'
-  workingDir  = file('infra')
-  doFirst {
-    commandLine([tofuBin.absolutePath, 'apply', '-auto-approve',
-      '-target=aws_ecr_repository.app'] + toVarArgs(fetchVars()))
-  }
-}
-
-// ── Bootstrap tasks (once per account) ───────────────────────────────────────
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 task createStateBucket(type: Exec) {
   group       = 'deploy-setup'
-  description = 'Create S3 bucket for OpenTofu remote state (idempotent)'
+  description = 'Create the versioned OpenTofu state bucket (idempotent)'
   doFirst {
     def accountId = requireAccountId()
     commandLine 'bash', '-c', """
       aws s3api head-bucket --bucket ${accountId}-tofu-state --profile ${awsProfile} 2>/dev/null || \
-      aws s3api create-bucket \
-        --bucket ${accountId}-tofu-state \
-        --region us-east-1 \
-        --profile ${awsProfile}
-      aws s3api put-bucket-versioning \
-        --bucket ${accountId}-tofu-state \
-        --versioning-configuration Status=Enabled \
-        --profile ${awsProfile}
+      aws s3api create-bucket --bucket ${accountId}-tofu-state --region us-east-1 --profile ${awsProfile}
+      aws s3api put-bucket-versioning --bucket ${accountId}-tofu-state \
+        --versioning-configuration Status=Enabled --profile ${awsProfile}
     """.stripIndent()
   }
 }
 
 task uploadDeployConfig(type: Exec) {
   group       = 'deploy-setup'
-  description = 'Push deploy.json to AWS Secrets Manager as mbta-deploy-config (create or update)'
+  description = 'Create or update the mbta-deploy-config Secrets Manager value'
   doFirst {
     def confPath = rootProject.file('deploy.json').absolutePath
     commandLine 'bash', '-c', """
       if aws secretsmanager describe-secret --secret-id mbta-deploy-config \
           --profile ${awsProfile} --region us-east-1 &>/dev/null; then
-        aws secretsmanager put-secret-value \
-          --secret-id mbta-deploy-config \
-          --secret-string file://${confPath} \
-          --profile ${awsProfile} \
-          --region us-east-1
+        aws secretsmanager put-secret-value --secret-id mbta-deploy-config \
+          --secret-string file://${confPath} --profile ${awsProfile} --region us-east-1
       else
-        aws secretsmanager create-secret \
-          --name mbta-deploy-config \
-          --secret-string file://${confPath} \
-          --profile ${awsProfile} \
-          --region us-east-1
+        aws secretsmanager create-secret --name mbta-deploy-config \
+          --secret-string file://${confPath} --profile ${awsProfile} --region us-east-1
       fi
     """.stripIndent()
   }
@@ -215,7 +238,7 @@ task uploadDeployConfig(type: Exec) {
 
 task seedApiKey(type: Exec) {
   group       = 'deploy-setup'
-  description = 'Seed MBTA_API_KEY into Secrets Manager (skips if already exists). Set MBTA_API_KEY env var.'
+  description = 'Create mbta-api-key from MBTA_API_KEY if the secret does not already exist'
   doFirst {
     commandLine 'bash', '-c', """
       if aws secretsmanager describe-secret --secret-id mbta-api-key \
@@ -225,21 +248,30 @@ task seedApiKey(type: Exec) {
         if [ -z "\${MBTA_API_KEY:-}" ]; then
           echo "ERROR: export MBTA_API_KEY=<value> before running seedApiKey" >&2; exit 1
         fi
-        aws secretsmanager create-secret \
-          --name mbta-api-key \
-          --secret-string "\$MBTA_API_KEY" \
-          --profile ${awsProfile} \
-          --region us-east-1
+        aws secretsmanager create-secret --name mbta-api-key --secret-string "\$MBTA_API_KEY" \
+          --profile ${awsProfile} --region us-east-1
       fi
     """.stripIndent()
   }
 }
 
-// ── OpenTofu init / plan / apply / destroy ────────────────────────────────────
+task configureDockerAuth(type: Exec) {
+  group       = 'deploy-setup'
+  description = 'Authenticate Docker to ECR'
+  doFirst {
+    def vars = fetchVars()
+    commandLine 'bash', '-c',
+      "aws ecr get-login-password --profile ${awsProfile} --region ${vars.aws_region} | " +
+      "docker login --username AWS --password-stdin " +
+      "${vars.aws_account_id}.dkr.ecr.${vars.aws_region}.amazonaws.com"
+  }
+}
+
+// ── OpenTofu ──────────────────────────────────────────────────────────────────
 
 task tofuInit(type: Exec) {
   group       = 'deploy'
-  description = 'Initialize OpenTofu with S3 remote backend'
+  description = 'Initialize OpenTofu with the S3 backend'
   dependsOn   extractTofu, createStateBucket
   workingDir  = file('infra')
   doFirst {
@@ -253,93 +285,262 @@ task tofuInit(type: Exec) {
   }
 }
 
-task tofuPlan(type: Exec) {
-  group       = 'deploy'
-  description = 'Show OpenTofu execution plan (stdout only, nothing written to disk)'
+task createEcrRepo(type: Exec) {
+  group       = 'deploy-setup'
+  description = 'Create the immutable snapshot ECR repository before the first image push'
   dependsOn   tofuInit
   workingDir  = file('infra')
   doFirst {
-    commandLine([tofuBin.absolutePath, 'plan'] + toVarArgs(fetchVars()))
+    commandLine([tofuBin.absolutePath, 'apply', '-auto-approve',
+      '-target=aws_ecr_repository.snapshot'] + toVarArgs(fetchVars()))
   }
+}
+
+task tofuPlan(type: Exec) {
+  group       = 'deploy'
+  description = 'Preview the complete serverless infrastructure plan'
+  dependsOn   tofuInit
+  workingDir  = file('infra')
+  doFirst { commandLine([tofuBin.absolutePath, 'plan'] + toVarArgs(fetchVars())) }
 }
 
 task tofuApply(type: Exec) {
   group       = 'deploy'
-  description = 'Apply OpenTofu plan — creates/updates all AWS infrastructure'
+  description = 'Apply the production serverless stack with the image built in this run'
+  dependsOn   tofuInit
+  workingDir  = file('infra')
+  doFirst { commandLine([tofuBin.absolutePath, 'apply', '-auto-approve'] + toVarArgs(fetchVars())) }
+}
+
+task tofuApplyExistingImage(type: Exec) {
+  group       = 'deploy'
+  description = 'Apply infrastructure-only changes while preserving the deployed Lambda image'
   dependsOn   tofuInit
   workingDir  = file('infra')
   doFirst {
-    commandLine([tofuBin.absolutePath, 'apply', '-auto-approve'] + toVarArgs(fetchVars()))
+    def vars = fetchVars()
+    def proc = new ProcessBuilder(tofuBin.absolutePath, 'output', '-raw', 'snapshot_image_deployed')
+      .directory(file('infra')).redirectErrorStream(false).start()
+    def currentImage = proc.inputStream.text.trim()
+    def err = proc.errorStream.text
+    proc.waitFor()
+    if (proc.exitValue() != 0 || !currentImage) throw new GradleException(
+      "No deployed Lambda image exists in OpenTofu state. Run ./gradlew deploy first.\n${err}")
+    vars.snapshot_image_url = currentImage
+    commandLine([tofuBin.absolutePath, 'apply', '-auto-approve'] + toVarArgs(vars))
   }
 }
 
 task tofuDestroy(type: Exec) {
   group       = 'deploy'
-  description = 'Destroy all AWS infrastructure managed by OpenTofu'
+  description = 'Destroy all serverless application infrastructure'
   dependsOn   tofuInit
   workingDir  = file('infra')
-  doFirst {
-    commandLine([tofuBin.absolutePath, 'destroy', '-auto-approve'] + toVarArgs(fetchVars()))
-  }
+  doFirst { commandLine([tofuBin.absolutePath, 'destroy', '-auto-approve'] + toVarArgs(fetchVars())) }
 }
 
-// ── Frontend ──────────────────────────────────────────────────────────────────
+task tofuOutput(type: Exec) {
+  group       = 'deploy'
+  description = 'Show production CloudFront, bucket, API, and image outputs'
+  dependsOn   tofuInit
+  workingDir  = file('infra')
+  doFirst { commandLine tofuBin.absolutePath, 'output' }
+}
+
+// ── Lambda image ──────────────────────────────────────────────────────────────
+
+task buildSnapshotImage(type: Exec) {
+  group       = 'deploy'
+  description = 'Build the Java 21/arm64 snapshot Lambda image'
+  dependsOn   copyRuntimeDeps
+  commandLine 'docker', 'buildx', 'build',
+    '--platform', 'linux/arm64',
+    '--file', 'Dockerfile.lambda',
+    '--tag', 'mbta-snapshot:local',
+    '--load', '.'
+}
+
+task tagSnapshotImage(type: Exec) {
+  group       = 'deploy'
+  dependsOn   buildSnapshotImage
+  doFirst { commandLine 'docker', 'tag', 'mbta-snapshot:local', fetchVars().snapshot_image_url }
+}
+
+task pushSnapshotImage(type: Exec) {
+  group       = 'deploy'
+  dependsOn   tagSnapshotImage
+  doFirst { commandLine 'docker', 'push', fetchVars().snapshot_image_url }
+}
+
+task buildAndPushSnapshot {
+  group       = 'deploy'
+  description = 'Build and push the immutable snapshot Lambda image'
+  dependsOn   pushSnapshotImage, configureDockerAuth
+  pushSnapshotImage.mustRunAfter configureDockerAuth
+}
+
+// ── Angular frontend ──────────────────────────────────────────────────────────
 
 task buildFrontend(type: Exec) {
   group       = 'deploy'
-  description = 'Install deps and build Angular production bundle with /MBTA base-href'
+  description = 'Install dependencies and build the Angular production bundle'
   workingDir  = file('frontend')
   commandLine 'bash', '-c', 'npm ci && npm run build'
 }
 
-// Wire Angular build into Docker image preparation so `./gradlew docker` always
-// includes a fresh frontend build.
-tasks.named('dockerPrepare') {
-  dependsOn buildFrontend
-}
-
-// ── Composite targets ─────────────────────────────────────────────────────────
-
-task infra {
+task stampFrontend {
   group       = 'deploy'
-  description = 'Apply all AWS infrastructure via OpenTofu (no image build)'
-  dependsOn   tofuApply
+  description = 'Write the no-cache deployment version marker'
+  dependsOn   buildFrontend
+  doLast {
+    def outputDir = file("$projectDir/frontend/dist/mbta-tracker-frontend")
+    file("${outputDir}/version.json").text = groovy.json.JsonOutput.prettyPrint(
+      groovy.json.JsonOutput.toJson([name: 'MBTA Tracker', version: buildTag, status: 'frontend-build'])
+    ) + '\n'
+  }
 }
+
+task uploadFrontendAssets(type: Exec) {
+  group       = 'deploy'
+  description = 'Upload hashed Angular assets with immutable caching'
+  dependsOn   stampFrontend
+  doFirst {
+    def vars = fetchVars()
+    commandLine 'aws', 's3', 'sync',
+      file("$projectDir/frontend/dist/mbta-tracker-frontend").absolutePath,
+      "s3://${vars.service_name}-${vars.aws_account_id}-frontend/",
+      '--delete', '--exclude', 'index.html', '--exclude', 'version.json',
+      '--cache-control', 'public,max-age=31536000,immutable',
+      '--profile', awsProfile, '--region', vars.aws_region
+  }
+}
+
+task uploadFrontendIndex(type: Exec) {
+  group       = 'deploy'
+  description = 'Upload index.html without caching'
+  dependsOn   uploadFrontendAssets
+  doFirst {
+    def vars = fetchVars()
+    commandLine 'aws', 's3', 'cp',
+      file("$projectDir/frontend/dist/mbta-tracker-frontend/index.html").absolutePath,
+      "s3://${vars.service_name}-${vars.aws_account_id}-frontend/index.html",
+      '--cache-control', 'no-cache,no-store,must-revalidate', '--content-type', 'text/html',
+      '--profile', awsProfile, '--region', vars.aws_region
+  }
+}
+
+task uploadFrontendVersion(type: Exec) {
+  group       = 'deploy'
+  description = 'Upload version.json without caching'
+  dependsOn   uploadFrontendIndex
+  doFirst {
+    def vars = fetchVars()
+    commandLine 'aws', 's3', 'cp',
+      file("$projectDir/frontend/dist/mbta-tracker-frontend/version.json").absolutePath,
+      "s3://${vars.service_name}-${vars.aws_account_id}-frontend/version.json",
+      '--cache-control', 'no-cache,no-store,must-revalidate', '--content-type', 'application/json',
+      '--profile', awsProfile, '--region', vars.aws_region
+  }
+}
+
+task invalidateFrontendEntryPoints(type: Exec) {
+  group       = 'deploy'
+  description = 'Invalidate only /, index.html, and version.json in CloudFront'
+  dependsOn   tofuInit
+  workingDir  = file('infra')
+  doFirst {
+    def vars = fetchVars()
+    def proc = new ProcessBuilder(tofuBin.absolutePath, 'output', '-raw', 'serverless_distribution_id')
+      .directory(file('infra')).redirectErrorStream(false).start()
+    def distributionId = proc.inputStream.text.trim()
+    def err = proc.errorStream.text
+    proc.waitFor()
+    if (proc.exitValue() != 0 || !distributionId) throw new GradleException(
+      "Unable to read the CloudFront distribution ID from OpenTofu state:\n${err}")
+    commandLine 'aws', 'cloudfront', 'create-invalidation',
+      '--distribution-id', distributionId,
+      '--paths', '/', '/index.html', '/version.json',
+      '--profile', awsProfile, '--region', vars.aws_region
+  }
+}
+
+// ── Seed and validation ───────────────────────────────────────────────────────
+
+task recoverAbandonedReferenceSeed {
+  group       = 'deploy'
+  description = 'Remove the current reference lock after CloudWatch confirms its Lambda invocation has ended'
+  doLast {
+    if (project.findProperty('confirmAbandonedReferenceLock')?.toString() != 'true') {
+      throw new GradleException(
+        'Refusing to remove a possibly active lock. Re-run with -PconfirmAbandonedReferenceLock=true after confirming the Lambda invocation ended.')
+    }
+    recoverAbandonedReferenceLock(fetchVars())
+  }
+}
+
+task seedSnapshots {
+  group       = 'deploy'
+  description = 'Publish every route, stop, shape, and route-pattern reference snapshot'
+  doLast {
+    def vars = fetchVars()
+    println "Invoking ${vars.service_name}-reference-refresh; initial seeding may run for several minutes."
+    def result = invokeLambdaJson(
+      vars.aws_region,
+      "${vars.service_name}-reference-refresh",
+      [action: 'reference-refresh'],
+      Duration.ofMinutes(16),
+    )
+    if (result.status == 'duplicate') {
+      println "Another reference refresh owns this hourly slot; monitoring its S3 status snapshot."
+      def status = waitForReferenceSnapshots(vars, Duration.ofMinutes(16))
+      println "Reference snapshots already completed at ${status.referencesLastSuccess}."
+      return
+    }
+    if (result.status != 'ok') throw new GradleException(
+      "Reference snapshot seeding failed: ${groovy.json.JsonOutput.toJson(result)}")
+  }
+}
+
+task smokeSnapshots {
+  group       = 'deploy'
+  description = 'Validate the deployed snapshot stack after reference seeding'
+  dependsOn   seedSnapshots
+  doLast {
+    def vars = fetchVars()
+    def result = invokeLambdaJson(
+      vars.aws_region,
+      "${vars.service_name}-snapshot-smoke",
+      [action: 'snapshot-smoke'],
+      Duration.ofSeconds(30),
+    )
+    if (result.status != 'ok') throw new GradleException(
+      "Snapshot smoke validation failed: ${groovy.json.JsonOutput.toJson(result)}")
+  }
+}
+
+// ── Primary workflows ─────────────────────────────────────────────────────────
 
 task deploy {
   group       = 'deploy'
-  description = 'Full deploy: create ECR repo, build image, push, apply all infrastructure'
-  dependsOn   createEcrRepo, buildAndPush, tofuApply
-  buildAndPush.mustRunAfter createEcrRepo
-  tofuApply.mustRunAfter buildAndPush
+  description = 'Build and deploy the complete production serverless application'
+  dependsOn   createEcrRepo, buildAndPushSnapshot, tofuApply, uploadFrontendVersion,
+    invalidateFrontendEntryPoints, smokeSnapshots
+  buildAndPushSnapshot.mustRunAfter createEcrRepo
+  pushSnapshotImage.mustRunAfter createEcrRepo
+  tofuApply.mustRunAfter buildAndPushSnapshot
+  uploadFrontendAssets.mustRunAfter tofuApply
+  invalidateFrontendEntryPoints.mustRunAfter uploadFrontendVersion
+  seedSnapshots.mustRunAfter invalidateFrontendEntryPoints
+}
+
+task infra {
+  group       = 'deploy'
+  description = 'Apply infrastructure-only changes using the currently deployed Lambda image'
+  dependsOn   tofuApplyExistingImage
 }
 
 task teardown {
   group       = 'deploy'
-  description = 'Destroy all AWS infrastructure via OpenTofu'
+  description = 'Destroy the serverless application infrastructure'
   dependsOn   tofuDestroy
-}
-
-// ── Diagnostics ───────────────────────────────────────────────────────────────
-
-task tofuOutput(type: Exec) {
-  group       = 'deploy'
-  description = 'Show OpenTofu outputs (CloudFront domain, ALB DNS, ECS service, etc.)'
-  dependsOn   tofuInit
-  workingDir  = file('infra')
-  doFirst     { commandLine tofuBin.absolutePath, 'output' }
-}
-
-task ecsStatus(type: Exec) {
-  group       = 'deploy'
-  description = 'Show ECS service status and running task count'
-  doFirst {
-    def vars = fetchVars()
-    commandLine 'aws', 'ecs', 'describe-services',
-      '--cluster', vars.service_name,
-      '--services', vars.service_name,
-      '--profile', awsProfile,
-      '--region', vars.aws_region,
-      '--query', 'services[0].{Status:status,Running:runningCount,Desired:desiredCount,TaskDef:taskDefinition}'
-  }
 }

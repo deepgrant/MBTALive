@@ -13,7 +13,12 @@ import { CookieService } from './services/cookie.service';
 import { AlertTickerComponent } from './components/alert-ticker/alert-ticker.component';
 import { Alert } from './models/alert.model';
 import { MOBILE_BREAKPOINT_QUERY, ROUTE_RESTORE_DELAY_MS, SWIPE_DISMISS_PX } from './shared/timing.constants';
-import { Subscription } from 'rxjs';
+import { STATUS_POLL_MS } from './shared/timing.constants';
+import { Subscription, timer } from 'rxjs';
+import { switchMap } from 'rxjs/operators';
+import { ApiService } from './services/api.service';
+import { ApiStatus } from './models/status.model';
+import { degradedDataMessage } from './shared/freshness';
 
 @Component({
     selector: 'app-root',
@@ -39,17 +44,21 @@ export class AppComponent implements OnInit, OnDestroy {
   routeAlerts: Alert[] = [];
   isMobile = signal(false);
   viewMode: 'board' | 'map' = 'board';
+  degradedDataMessage: string | null = null;
 
   @ViewChild('routesDrawer') routesDrawer!: MatSidenav;
   @ViewChild('vehicleDrawer') vehicleDrawer!: MatSidenav;
 
   private subscriptions: Subscription[] = [];
   private swipeStartX = 0;
+  private latestStatus: ApiStatus | null = null;
+  private routeWarming = false;
 
   constructor(
     private vehicleService: VehicleService,
     private cookieService: CookieService,
-    private breakpointObserver: BreakpointObserver
+    private breakpointObserver: BreakpointObserver,
+    private apiService: ApiService,
   ) {
     // Set synchronously so the template renders with the correct mode on first
     // paint and avoids a flash of the desktop layout on mobile.
@@ -78,6 +87,7 @@ export class AppComponent implements OnInit, OnDestroy {
         next: (routeId) => {
           const prevRoute = this.selectedRoute;
           this.selectedRoute = routeId;
+          this.updateDegradedMessage();
           if (routeId && routeId !== prevRoute) this.viewMode = 'board';
           if (routeId !== prevRoute) {
             const saved = this.cookieService.getSettingsCookie();
@@ -101,7 +111,26 @@ export class AppComponent implements OnInit, OnDestroy {
 
       this.vehicleService.selectedRouteAlerts$.subscribe({
         next: (alerts) => { this.routeAlerts = alerts; }
-      })
+      }),
+
+      this.vehicleService.routeWarming$.subscribe(warming => {
+        this.routeWarming = warming;
+        this.updateDegradedMessage();
+      }),
+
+      timer(0, STATUS_POLL_MS).pipe(
+        switchMap(() => this.apiService.getStatus()),
+      ).subscribe(status => {
+        this.latestStatus = status;
+        this.updateDegradedMessage();
+      }),
+    );
+  }
+
+  private updateDegradedMessage(): void {
+    this.degradedDataMessage = degradedDataMessage(
+      this.latestStatus,
+      this.selectedRoute !== null && !this.routeWarming,
     );
   }
 

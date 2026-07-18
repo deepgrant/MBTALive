@@ -2,12 +2,6 @@
   "region":         "us-east-1",
   "service-name":   "mbta-tracker",
   "repo-name":      "mbta",
-  "image-name":     "mbtalive",
   "zone":           "critmind.com",
-  "domain":         "mbta.critmind.com",
-  "cpu":            "256",
-  "memory":         "512",
-  "min-tasks":      1,
-  "max-tasks":      2,
-  "container-port": 8443
+  "domain":         "mbta.critmind.com"
 }

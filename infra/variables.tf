@@ -20,9 +20,9 @@ variable "repo_name" {
   type = string
 }
 
-variable "image_url" {
+variable "snapshot_image_url" {
   type        = string
-  description = "Full ECR image URL including git-SHA tag"
+  description = "Full immutable ECR image URL for the snapshot Lambda functions"
 }
 
 variable "zone" {
@@ -32,32 +32,5 @@ variable "zone" {
 
 variable "domain" {
   type        = string
-  description = "Full domain for the app (e.g. mbta.critmind.com)"
-}
-
-variable "cpu" {
-  type        = string
-  default     = "256"
-  description = "ECS task CPU units (256 = 0.25 vCPU)"
-}
-
-variable "memory" {
-  type        = string
-  default     = "512"
-  description = "ECS task memory in MiB"
-}
-
-variable "min_tasks" {
-  type    = number
-  default = 1
-}
-
-variable "max_tasks" {
-  type    = number
-  default = 10
-}
-
-variable "container_port" {
-  type    = number
-  default = 8443
+  description = "Production application domain (for example mbta.critmind.com)"
 }

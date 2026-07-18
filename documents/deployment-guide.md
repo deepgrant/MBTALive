@@ -1,223 +1,201 @@
-# MBTA Tracker — AWS Deployment Guide
+# MBTA Tracker — Serverless AWS Deployment Guide
+
+This is a clean production deployment. There is no ECS/ALB service, migration cutover, or rollback environment.
 
 ## Prerequisites
 
-Ensure the following are installed and configured locally:
-
 | Tool | Purpose |
 |---|---|
-| AWS CLI v2 | All cloud operations |
-| Docker Desktop | Building and pushing images |
-| JDK 17+ | Gradle / Scala build |
-| Node.js 20+ / npm | Angular frontend build |
-| `unzip` | OpenTofu extraction (Gradle downloads tofu automatically) |
+| AWS CLI v1 or v2 | Bootstrap, ECR authentication, and frontend object uploads; Lambda invokes use the Java SDK |
+| Docker Desktop with buildx | Building the arm64 Lambda image |
+| JDK 21 | Scala and Lambda build |
+| Node.js 20+ and npm | Angular build and tests |
+| `unzip` | OpenTofu extraction; Gradle downloads OpenTofu automatically |
 
-Configure your AWS profile (substitute your preferred profile name):
+Configure and verify the AWS profile:
+
 ```bash
 aws configure --profile <your-profile>
-# Enter: Access Key ID, Secret Access Key, default region: us-east-1, output: json
-```
-
-Verify access:
-```bash
 aws sts get-caller-identity --profile <your-profile>
 ```
 
----
+## One-time bootstrap
 
-## One-Time Bootstrap
+### 1. Configure local AWS identity
 
-### 1. Configure local identity
-
-```bash
-cat >> local.properties <<'EOF'
+```properties
+# local.properties (gitignored)
 aws.accountId=<your-account-id>
 aws.profile=<your-profile>
-EOF
 ```
 
-> `local.properties` is gitignored — never commit it.
-
-### 2. Create OpenTofu remote state backend
+### 2. Create the remote state bucket
 
 ```bash
 ./gradlew createStateBucket
 ```
 
-Creates S3 bucket `<your-account-id>-tofu-state` with versioning enabled for OpenTofu state storage. Idempotent — safe to re-run.
+This creates the versioned `<account-id>-tofu-state` S3 bucket. It is safe to rerun.
 
-### 3. Upload deploy config to Secrets Manager
+### 3. Upload deployment configuration
+
+Review `deploy.json`, then run:
 
 ```bash
 ./gradlew uploadDeployConfig
 ```
 
-Pushes `deploy.json` to AWS Secrets Manager as `mbta-deploy-config`. All subsequent deploy tasks read config from here in-memory — nothing is written to disk.
+The configuration is stored as `mbta-deploy-config` in Secrets Manager and is read in memory by deployment tasks.
 
-### 4. Seed the MBTA API key
+### 4. Seed the MBTA key
 
 ```bash
-export MBTA_API_KEY=your-api-key-here
+export MBTA_API_KEY=<your-key>
 ./gradlew seedApiKey
 ```
 
-The key is stored in Secrets Manager as `mbta-api-key`. The ECS task pulls it at runtime; it never appears in OpenTofu state or logs.
+The value is stored as `mbta-api-key`. Only MBTA-calling refresh Lambdas can read it. It is sent in the `x-api-key` header and never enters OpenTofu state, query strings, or logs. The route-activity Lambda cannot read it.
 
-### 5. Provision infrastructure
+## Pre-deployment checks
 
-```bash
-./gradlew infra
-```
-
-This runs `tofu apply` and creates (in order):
-
-- ECR repository for Docker images
-- ECS cluster, task definition, and Fargate service
-- Application Load Balancer (HTTP, internal to API Gateway)
-- API Gateway HTTP API with custom domain
-- ACM TLS certificate (DNS-validated automatically via Route 53)
-- Route 53 A record → API Gateway regional endpoint
-
-> **Note:** ACM certificate validation takes 1–5 minutes. OpenTofu waits for it automatically before completing.
-
-### 6. Authenticate Docker to ECR
+Run these before the first rollout and before subsequent application releases:
 
 ```bash
-./gradlew configureDockerAuth
+./gradlew build
+cd frontend && npm test -- --watch=false --browsers=ChromeHeadless
+cd frontend && npm run build
+cd ../infra && ../build/tools/tofu fmt -check -recursive && ../build/tools/tofu validate
 ```
 
-Configures the Docker credential helper for the ECR registry. Must be run after `infra` (ECR repo must exist first). Re-run whenever credentials expire (~12 hours).
+Review the infrastructure plan:
 
-### 7. Full application deploy
+```bash
+./gradlew tofuPlan
+```
+
+The plan should contain only the serverless application: CloudFront, private frontend and snapshot buckets, Lambda functions, DynamoDB, Step Functions, EventBridge, the heartbeat API, ECR, IAM, logs, alarms, ACM, and Route 53.
+
+## Production rollout
 
 ```bash
 ./gradlew --no-daemon deploy
 ```
 
-This runs the full pipeline in the correct order:
-1. `createEcrRepo` — targeted tofu apply that creates just the ECR repository
-2. `npm ci && npm run build --base-href /MBTA/` — Angular production build
-3. Gradle Scala compile + `copyRuntimeDeps` — assembles JARs
-4. `docker` — builds `mbtalive:2.0` image with JARs and Angular assets at `/app/static/`
-5. `tagImage` / `pushImage` / `pushLatest` — tags with git SHA and pushes to ECR
-6. `tofuApply` — provisions all remaining infrastructure (ECS, ALB, API Gateway, etc.) with the correct image URL
+The workflow performs these operations in order:
 
-> **Note:** `createEcrRepo` runs as a targeted apply so the ECR repo exists before the image push. After a `teardown`, always use `deploy` rather than `infra` then `buildAndPush` separately.
+1. Creates the immutable snapshot ECR repository with a targeted OpenTofu apply.
+2. Compiles Scala and assembles the Lambda runtime dependencies.
+3. Builds and pushes a uniquely tagged Java 21/arm64 Lambda image.
+4. Builds Angular independently.
+5. Applies the complete OpenTofu stack, including the production CloudFront alias and Route 53 A/AAAA records.
+6. Uploads hashed frontend assets with one-year immutable caching.
+7. Uploads `index.html` and `version.json` with no-cache headers.
+8. Seeds every route, stop, shape, and route-pattern reference snapshot.
+9. Invokes the dedicated smoke Lambda and fails the deploy if seeding or smoke validation is not `ok`.
 
----
-
-## Verifying the Deployment
+If deployment reached the seeding step but the local invocation failed, resume against the already deployed stack without rebuilding or applying infrastructure:
 
 ```bash
-# Show all infrastructure outputs
+./gradlew smokeSnapshots
+```
+
+This reruns reference seeding and then smoke validation. These invocations use the AWS Java SDK directly and do not depend on the installed AWS CLI version.
+
+ACM certificate validation can add several minutes to the first deployment. The certificate is always created in `us-east-1`, as required by CloudFront.
+
+## Initial rollout validation
+
+Show the deployed endpoints:
+
+```bash
 ./gradlew tofuOutput
-
-# Check ECS service health
-./gradlew ecsStatus
-
-# Smoke test the health endpoint
-curl https://<your-domain>/MBTA/health
-
-# Test an API endpoint
-curl https://<your-domain>/MBTA/api/routes
 ```
 
-The app is accessible at:
-- **`https://<your-domain>/MBTA/`** — Angular frontend (served by Pekko from `/app/static/`)
-- **`https://<your-domain>/mbta/`** — lowercase alias (same backend)
-- **`https://<your-domain>/MBTA/api/*`** — backend API routes
-
-> The `/MBTA` prefix is stripped by the API Gateway custom domain mapping before requests reach the container, so Pekko sees clean paths (`/api/routes`, `/health`, `/`).
-
----
-
-## Normal Deploy Workflow
+Verify the public contract through the production domain:
 
 ```bash
-# Full deploy (most common — builds everything and redeploys)
-./gradlew deploy
+curl -fsS https://<your-domain>/api/routes
+curl -fsS https://<your-domain>/api/status
+curl -fsS -X PUT https://<your-domain>/api/control/routes/Red/activity
+curl -fsS https://<your-domain>/api/route/Red/vehicles
+curl -fsS https://<your-domain>/api/route/Red/board
+```
 
-# Infrastructure changes only (no image rebuild)
+Allow up to 15 seconds for newly activated vehicle data and 35 seconds for a newly activated board. Validate at least:
+
+- Red, Orange, and a Green Line branch.
+- One high-volume bus route.
+- One commuter-rail route.
+- A no-vehicle route and a disrupted-service route.
+
+Then load-test 500 simulated clients for at least 30 minutes. Confirm in the `MBTA/Snapshots` CloudWatch namespace that increasing browser count does not increase MBTA request volume for the same distinct active routes and that no rolling 60-second interval exceeds 800 permits.
+
+Required normal-operation targets:
+
+- Vehicle snapshot age p95 below 20 seconds.
+- Board snapshot age p95 below 45 seconds.
+- Alerts below 3 minutes old.
+- No MBTA `429` alarms.
+- No Lambda, Step Functions, S3 publication, or heartbeat API alarms.
+- `internal/*` snapshot objects remain inaccessible through CloudFront.
+
+## Normal updates
+
+For Lambda, frontend, or combined application changes, use the full immutable rollout:
+
+```bash
+./gradlew --no-daemon deploy
+```
+
+For infrastructure-only changes, preserve the image already recorded in OpenTofu state:
+
+```bash
 ./gradlew infra
-
-# Image rebuild only, then force new ECS deployment
-./gradlew buildAndPush tofuApply
-
-# Preview infrastructure changes before applying
-./gradlew tofuPlan
 ```
 
----
+Do not run `tofuApply` directly for an infrastructure-only update: it expects the uniquely tagged image built during the current `deploy` invocation.
 
-## Upgrading the Running Container
-
-To deploy new Scala or Angular code without changing infrastructure:
+Hashed assets do not need invalidation. If an entry point must be purged explicitly:
 
 ```bash
-./gradlew --no-daemon buildAndPush tofuApply
+./gradlew invalidateFrontendEntryPoints
 ```
 
-What this does:
-1. `buildAndPush` — builds the Angular frontend, compiles Scala, builds a new Docker image tagged with the current git SHA, and pushes it to ECR
-2. `tofuApply` — updates the ECS task definition with the new image URL, triggering a rolling replacement
+This invalidates only `/`, `/index.html`, and `/version.json`.
 
-ECS starts a new task with the updated image, waits for it to pass the `/health` check, then drains and terminates the old task. No downtime.
-
-To stage the image push separately from the infra update:
+## Local development
 
 ```bash
-# Build and push first
-./gradlew --no-daemon buildAndPush
+# Terminal 1
+export MBTA_API_KEY=<your-key>
+./gradlew snapshotDev
 
-# Apply when ready
-./gradlew --no-daemon tofuApply
-```
-
----
-
-## Local Development
-
-Local dev is unchanged — the `/MBTA` prefix only applies in production. The Angular dev server proxies `/api/**` directly to `localhost:8080`.
-
-```bash
-# Terminal 1 — backend
-./gradlew run
-
-# Terminal 2 — frontend (dev server at http://localhost:4200)
+# Terminal 2
 cd frontend && npm start
 ```
 
----
+The Angular dev server proxies `/api/**` to the filesystem-backed snapshot server on `127.0.0.1:8080`.
 
 ## Teardown
 
 ```bash
-# Destroy all AWS infrastructure
 ./gradlew teardown
 ```
 
-> **Warning:** This destroys the ECS service, ALB, API Gateway, ECR repository (including all images), ACM cert, and Route 53 records. The Secrets Manager secrets and S3 state bucket are **not** destroyed (intentional — protects state and credentials from accidental loss). Delete them manually if needed:
-> ```bash
-> aws secretsmanager delete-secret --secret-id mbta-api-key --profile <your-profile> --region us-east-1
-> aws secretsmanager delete-secret --secret-id mbta-deploy-config --profile <your-profile> --region us-east-1
-> aws s3 rb s3://<your-account-id>-tofu-state --force --profile <your-profile>
-> ```
+This destroys the application-managed CloudFront, S3, Lambda, DynamoDB, Step Functions, EventBridge, ECR, API Gateway, ACM, Route 53, IAM, logs, and alarms. The state bucket and Secrets Manager values are intentionally retained.
 
----
+## Task reference
 
-## Gradle Task Reference
-
-| Task | Group | Description |
-|---|---|---|
-| `./gradlew deploy` | deploy | Full pipeline: build → push → apply infra |
-| `./gradlew infra` | deploy | Infrastructure only (no image rebuild) |
-| `./gradlew buildAndPush` | deploy | Build and push image only |
-| `./gradlew tofuPlan` | deploy | Preview infrastructure changes |
-| `./gradlew tofuOutput` | deploy | Show all outputs (ALB DNS, ECR URL, etc.) |
-| `./gradlew ecsStatus` | deploy | Running task count and service health |
-| `./gradlew teardown` | deploy | Destroy all infrastructure |
-| `./gradlew createStateBucket` | deploy-setup | Create S3 state bucket (idempotent) |
-| `./gradlew createEcrRepo` | deploy-setup | Create ECR repository only (targeted tofu apply) |
-| `./gradlew uploadDeployConfig` | deploy-setup | Push `deploy.json` to Secrets Manager |
-| `./gradlew seedApiKey` | deploy-setup | Seed MBTA API key (skips if exists) |
-| `./gradlew configureDockerAuth` | deploy-setup | Authenticate Docker to ECR |
+| Task | Purpose |
+|---|---|
+| `./gradlew deploy` | Complete production build, apply, upload, seed, and smoke workflow |
+| `./gradlew infra` | Infrastructure-only apply using the currently deployed Lambda image |
+| `./gradlew buildAndPushSnapshot` | Build and push the immutable Lambda image |
+| `./gradlew tofuPlan` | Preview the complete infrastructure change |
+| `./gradlew tofuOutput` | Show production outputs |
+| `./gradlew invalidateFrontendEntryPoints` | Invalidate only non-immutable frontend entry points |
+| `./gradlew teardown` | Destroy application infrastructure |
+| `./gradlew createStateBucket` | Create the versioned remote state bucket |
+| `./gradlew createEcrRepo` | Bootstrap the snapshot ECR repository |
+| `./gradlew uploadDeployConfig` | Store `deploy.json` in Secrets Manager |
+| `./gradlew seedApiKey` | Create the MBTA API key secret if absent |

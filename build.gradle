@@ -1,18 +1,6 @@
-buildscript {
-  repositories { mavenCentral() }
-  dependencies {
-    classpath 'com.palantir.gradle.docker:gradle-docker:0.37.0'
-  }
-}
-
 plugins {
   id 'scala'
   id 'io.github.cosmicsilence.scalafix' version '0.2.6'
-}
-apply plugin: 'com.palantir.docker'
-
-configurations.all {
-  exclude group: 'org.bytedeco', module: 'javacpp-presets'
 }
 
 apply from: "$projectDir/gradle/dependencies.gradle"
@@ -24,26 +12,17 @@ repositories {
 dependencies {
   implementation(
     [ libs.scala
-    , libs.scalaParser
-    , libs.scalaXML
-    , libs.scalaCollectionsCompat
-    , libs.pekko_actor
-    , libs.pekko_cluster
-    , libs.pekko_http
-    , libs.pekko_http_xml
-    , libs.pekko_slf4j
-    , libs.pekko_stream
-    , libs.pekko_stream_json
-    , libs.slf4j
-    , libs.logback_classic
-    , libs.logback_core
-    , libs.pprint
-    , libs.apache_commons_io
     , libs.sprayJSON
-    , libs.bcprov
-    , libs.bcpkix
+    , libs.typesafe_config
+    , libs.aws_s3
+    , libs.aws_dynamodb
+    , libs.aws_secretsmanager
+    , libs.aws_lambda_core
     ]
   )
+  testImplementation libs.scalaTest
+  testRuntimeOnly 'co.helmethair:scalatest-junit-runner:0.2.0'
+  testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
 }
 
 tasks.withType(ScalaCompile) {
@@ -56,6 +35,15 @@ sourceSets {
     resources.srcDirs = files("source/resources")
     ext.set('allScala', scala)  // scalafix plugin expects allScala (Gradle 9 / Scala plugin compatibility)
   }
+  test {
+    scala.srcDir "source/test/scala"
+    resources.srcDirs = files("source/test/resources")
+    ext.set('allScala', scala)
+  }
+}
+
+test {
+  useJUnitPlatform()
 }
 
 compileScala {
@@ -76,10 +64,11 @@ jar {
   }
 }
 
-task copyRuntimeDeps(type: Copy, dependsOn: jar) {
-  description = 'Copy all runtime JARs (app + deps) into build/libs for Docker multi-stage builds'
+task copyRuntimeDeps(type: Sync, dependsOn: jar) {
+  description = 'Assemble the exact Lambda application and runtime JAR set'
   from configurations.runtimeClasspath
-  into "$buildDir/libs"
+  from jar.archiveFile
+  into "$buildDir/lambda/lib"
 }
 
 task cleanFrontend(type: Delete) {
@@ -96,23 +85,10 @@ task printClasspath {
   }
 }
 
-task run(type: JavaExec, dependsOn: classes) {
-  mainClass = 'mbta.actor.MBTAMain'
+task snapshotDev(type: JavaExec, dependsOn: classes) {
+  description = 'Run the local scheduled snapshot publisher and API server on http://localhost:8080'
+  mainClass = 'mbta.snapshot.SnapshotDevMain'
   classpath sourceSets.main.runtimeClasspath
-  classpath configurations.runtimeClasspath
-}
-
-docker {
-  name "mbtalive:2.0"
-  dockerfile file('Dockerfile')
-  files 'docker-run.sh'
-  copySpec.from("$buildDir/libs") { into 'libs' }
-  copySpec.from("frontend/dist/mbta-tracker-frontend") { into 'static' }
-  pull true
-}
-
-tasks.named('dockerPrepare') {
-  dependsOn copyRuntimeDeps
 }
 
 apply from: "$projectDir/deploy.gradle"

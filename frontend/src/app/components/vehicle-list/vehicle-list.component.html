@@ -119,7 +119,15 @@
     </div>
   }
 
-  @if (selectedRoute && vehicleViews.length === 0) {
+  @if (selectedRoute && vehicleViews.length === 0 && warming) {
+    <div class="vehicle-list-empty">
+      <mat-card class="empty-state-card">
+        <mat-card-content><div class="empty-state-content"><h3>Loading live vehicles…</h3></div></mat-card-content>
+      </mat-card>
+    </div>
+  }
+
+  @if (selectedRoute && vehicleViews.length === 0 && !warming) {
     <div class="vehicle-list-empty">
       <mat-card class="empty-state-card">
         <mat-card-content>

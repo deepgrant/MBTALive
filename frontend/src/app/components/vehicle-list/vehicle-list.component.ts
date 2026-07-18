@@ -40,6 +40,7 @@ export class VehicleListComponent implements OnInit, OnDestroy {
   vehicleViews: VehicleView[] = [];
   alerts: Alert[] = [];
   selectedRoute: string | null = null;
+  warming = false;
   private subscriptions: Subscription[] = [];
 
   constructor(
@@ -60,7 +61,8 @@ export class VehicleListComponent implements OnInit, OnDestroy {
       this.vehicleService.selectedRouteAlerts$.subscribe({
         next: (alerts) => { this.alerts = alerts; },
         error: (error) => { console.error('VehicleListComponent: Error receiving alerts:', error); }
-      })
+      }),
+      this.vehicleService.routeWarming$.subscribe(warming => { this.warming = warming; }),
     );
   }
 

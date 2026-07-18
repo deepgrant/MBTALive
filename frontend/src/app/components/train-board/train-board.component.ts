@@ -5,6 +5,7 @@ import { switchMap, catchError } from 'rxjs/operators';
 import { ApiService } from '../../services/api.service';
 import { RouteBoardData, BoardStopInfo, TrainBoardData } from '../../models/board.model';
 import { DelayCategory, delayCategory } from '../../shared/delay.utils';
+import { ROUTE_WARMUP_MS } from '../../shared/timing.constants';
 
 const MAX_COLS = 3;
 const SOON_MINS = 5;
@@ -81,6 +82,7 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
   selectedStation: string | null = null;
   selectedDirection: 'inbound' | 'outbound' = 'inbound';
   loading = false;
+  warming = false;
 
   stationList: string[] = [];
   inbound: DirectionBoard = emptyBoard('Inbound');
@@ -88,6 +90,7 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
 
   private routeId$ = new Subject<string | null>();
   private sub = new Subscription();
+  private warmupTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private api: ApiService) {}
 
@@ -97,11 +100,13 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
         switchMap(routeId => {
           if (!routeId) return of(null);
           this.loading = true;
+          this.beginWarmup();
           return this.api.getRouteBoardData(routeId).pipe(catchError(() => of(null)));
         })
       ).subscribe(data => {
         this.loading = false;
         this.boardData = data;
+        if (data && data.trains.length > 0) this.finishWarmup();
         if (data && this.selectedStation) {
           const still = data.inboundStops.some(s => s.name === this.selectedStation)
             || data.outboundStops.some(s => s.name === this.selectedStation);
@@ -130,7 +135,23 @@ export class TrainBoardComponent implements OnInit, OnDestroy, OnChanges {
 
   ngOnDestroy(): void {
     this.sub.unsubscribe();
+    this.finishWarmup();
     this.routeId$.complete();
+  }
+
+  private beginWarmup(): void {
+    this.finishWarmup();
+    this.warming = true;
+    this.warmupTimer = setTimeout(() => {
+      this.warming = false;
+      this.warmupTimer = null;
+    }, ROUTE_WARMUP_MS);
+  }
+
+  private finishWarmup(): void {
+    if (this.warmupTimer) clearTimeout(this.warmupTimer);
+    this.warmupTimer = null;
+    this.warming = false;
   }
 
   onStationChange(value: string): void {
