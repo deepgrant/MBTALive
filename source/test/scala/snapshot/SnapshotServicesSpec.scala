@@ -49,6 +49,27 @@ final class SnapshotServicesSpec extends AnyFunSuite {
     assert(store.get("api/route/Red/vehicles").exists(_.body == compact(Vector(vehicle))))
   }
 
+  test("activation publishes stop-scoped alerts for the selected route") {
+    val store = new MemorySnapshotStore(now)
+    val control = new TestControlStore
+    val routeId = "CR-Fitchburg"
+    store.put("api/routes", compact(Vector(RouteInfo(routeId, "Fitchburg Line", "", "80276C", "FFFFFF", 2))), "")
+    store.put(s"api/route/$routeId/stops", compact(Vector(
+      StopInfo("place-FR-0301", "Littleton/Route 495", 42.519236, -71.502643),
+    )), "")
+    store.put("api/alerts", compact(Vector(
+      AlertInfo("1000003", "Littleton station access", "STATION_ISSUE", 1, "ONGOING", "",
+        stopIds = Vector("place-FR-0301")),
+    )), "")
+
+    val mbta = new RateLimitedMbtaClient(HttpClient.newHttpClient(), control, () => "", () => now)
+    val services = new SnapshotServices(testConfig, store, control, mbta, () => now)
+
+    assert(services.activate(routeId).isRight)
+    val alerts = store.get(s"api/route/$routeId/alerts").get.body.parseJson.convertTo[Vector[AlertInfo]]
+    assert(alerts.map(_.id) == Vector("1000003"))
+  }
+
   private val testConfig = SnapshotConfig(
     snapshotBucket = "test",
     controlTable = "test",

@@ -67,4 +67,22 @@ final class SnapshotTransformsSpec extends AnyFunSuite {
     assert(board.trains.head.delaySeconds.contains(120))
     assert(board.generatedAt.contains(now.toString))
   }
+
+  test("route alerts include stop-scoped alerts for stops served by the route") {
+    val routeAlert = AlertInfo("route", "Route alert", "DELAY", 5, "ONGOING", "", routeIds = Vector("Red"))
+    val stopAlert = AlertInfo("stop", "Station alert", "STATION_ISSUE", 1, "ONGOING", "",
+      stopIds = Vector("FR-0301-02", "place-FR-0301", "FR-0301-01"))
+    val sharedStopAlert = AlertInfo("shared", "Another line", "DELAY", 4, "ONGOING", "",
+      stopIds = Vector("place-north", "place-NHRML-0218"))
+    val unrelated = AlertInfo("other", "Other alert", "DELAY", 5, "ONGOING", "",
+      stopIds = Vector("place-other"))
+
+    val result = SnapshotTransforms.alertsForRoute(
+      Vector(routeAlert, stopAlert, sharedStopAlert, unrelated),
+      "CR-Fitchburg",
+      Set("place-FR-0301", "place-north"),
+    )
+
+    assert(result.map(_.id) == Vector("stop"))
+  }
 }

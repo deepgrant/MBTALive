@@ -32,4 +32,15 @@ describe('degradedDataMessage', () => {
     expect(degradedDataMessage(status, false, now)).toBeNull();
     expect(degradedDataMessage(status, true, now)).toContain('board');
   });
+
+  it('does not call pre-selection status delayed during the activation grace period', () => {
+    const status = { ...base, vehiclesLastSuccess: '2026-07-15T18:39:00Z' };
+    expect(degradedDataMessage(status, true, now, now - 20_000)).toBeNull();
+    expect(degradedDataMessage(status, true, now, now - 31_000)).toContain('vehicle');
+  });
+
+  it('accepts a vehicle refresh that completed after route selection', () => {
+    const status = { ...base, vehiclesLastSuccess: '2026-07-15T18:39:50Z' };
+    expect(degradedDataMessage(status, true, now, now - 60_000)).toBeNull();
+  });
 });

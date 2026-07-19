@@ -115,7 +115,7 @@ final class SnapshotServices(
         active.foreach { routeId =>
           publish(
             s"api/route/$routeId/alerts",
-            compact(alerts.filter(_.routeIds.contains(routeId))),
+            compact(alertsForRoute(routeId, alerts)),
             SnapshotCacheControl.Alerts,
           )
         }
@@ -233,8 +233,16 @@ final class SnapshotServices(
       publish(s"api/route/$routeId/board", compact(empty), SnapshotCacheControl.Boards)
     }
     read[Vector[AlertInfo]]("api/alerts").foreach { alerts =>
-      publish(s"api/route/$routeId/alerts", compact(alerts.filter(_.routeIds.contains(routeId))), SnapshotCacheControl.Alerts)
+      publish(s"api/route/$routeId/alerts", compact(alertsForRoute(routeId, alerts)), SnapshotCacheControl.Alerts)
     }
+  }
+
+  private def alertsForRoute(routeId: String, alerts: Vector[AlertInfo]): Vector[AlertInfo] = {
+    val routeStopIds = read[Vector[StopInfo]](s"api/route/$routeId/stops")
+      .getOrElse(Vector.empty)
+      .map(_.id)
+      .toSet
+    SnapshotTransforms.alertsForRoute(alerts, routeId, routeStopIds)
   }
 
   private def withJobLock(job: String, slotSeconds: Long)(f: => JsValue): JsValue = {

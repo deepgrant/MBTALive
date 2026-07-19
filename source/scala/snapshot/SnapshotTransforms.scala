@@ -210,6 +210,14 @@ object SnapshotTransforms {
     }
   }
 
+  def alertsForRoute(alerts: Vector[AlertInfo], routeId: String, routeStopIds: Set[String]): Vector[AlertInfo] =
+    alerts.filter { alert =>
+      val parentStops = alert.stopIds.filter(_.startsWith("place-"))
+      val scopedStops = if (parentStops.nonEmpty) parentStops else alert.stopIds
+      alert.routeIds.contains(routeId) ||
+        (scopedStops.nonEmpty && scopedStops.forall(routeStopIds.contains))
+    }
+
   def board(
     routeId: String,
     vehicles: Vector[VehicleData],

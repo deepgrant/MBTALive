@@ -12,10 +12,9 @@ import { VehicleService } from './services/vehicle.service';
 import { CookieService } from './services/cookie.service';
 import { AlertTickerComponent } from './components/alert-ticker/alert-ticker.component';
 import { Alert } from './models/alert.model';
-import { MOBILE_BREAKPOINT_QUERY, ROUTE_RESTORE_DELAY_MS, SWIPE_DISMISS_PX } from './shared/timing.constants';
-import { STATUS_POLL_MS } from './shared/timing.constants';
-import { Subscription, timer } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
+import { MOBILE_BREAKPOINT_QUERY, ROUTE_RESTORE_DELAY_MS, STATUS_POLL_MS, SWIPE_DISMISS_PX, VEHICLE_POLL_MS } from './shared/timing.constants';
+import { EMPTY, merge, Subscription, timer } from 'rxjs';
+import { exhaustMap, switchMap, take } from 'rxjs/operators';
 import { ApiService } from './services/api.service';
 import { ApiStatus } from './models/status.model';
 import { degradedDataMessage } from './shared/freshness';
@@ -53,6 +52,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private swipeStartX = 0;
   private latestStatus: ApiStatus | null = null;
   private routeWarming = false;
+  private routeSelectedAtMs: number | null = null;
 
   constructor(
     private vehicleService: VehicleService,
@@ -87,6 +87,7 @@ export class AppComponent implements OnInit, OnDestroy {
         next: (routeId) => {
           const prevRoute = this.selectedRoute;
           this.selectedRoute = routeId;
+          if (routeId !== prevRoute) this.routeSelectedAtMs = routeId ? Date.now() : null;
           this.updateDegradedMessage();
           if (routeId && routeId !== prevRoute) this.viewMode = 'board';
           if (routeId !== prevRoute) {
@@ -118,8 +119,13 @@ export class AppComponent implements OnInit, OnDestroy {
         this.updateDegradedMessage();
       }),
 
-      timer(0, STATUS_POLL_MS).pipe(
-        switchMap(() => this.apiService.getStatus()),
+      merge(
+        timer(0, STATUS_POLL_MS),
+        this.vehicleService.selectedRoute$.pipe(
+          switchMap(routeId => routeId ? timer(0, VEHICLE_POLL_MS).pipe(take(4)) : EMPTY),
+        ),
+      ).pipe(
+        exhaustMap(() => this.apiService.getStatus()),
       ).subscribe(status => {
         this.latestStatus = status;
         this.updateDegradedMessage();
@@ -131,6 +137,8 @@ export class AppComponent implements OnInit, OnDestroy {
     this.degradedDataMessage = degradedDataMessage(
       this.latestStatus,
       this.selectedRoute !== null && !this.routeWarming,
+      Date.now(),
+      this.routeSelectedAtMs,
     );
   }
 
